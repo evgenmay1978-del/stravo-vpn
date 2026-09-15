@@ -12,7 +12,7 @@
 
 ## Checkpoint
 
-Task 1 is the active implementation task. The repository currently contains the build skeleton, a minimal STRAVO launch surface, local project rules, and the GitHub Actions workflow. The concrete VPN engine and target subscription contract are not selected yet.
+Task 1 is complete at commit `61743df`. The repository contains the build skeleton, a minimal STRAVO launch surface, local project rules, the Gradle 9.3.1 wrapper, and the GitHub Actions workflow. Local static checks passed; the heavy Android assemble was not run on the owner’s weak computer. The concrete VPN engine and target subscription contract are not selected yet.
 
 ## Evidence boundary
 
@@ -20,4 +20,4 @@ The current launch surface proves only source structure and branding. It does no
 
 ## Next step
 
-Run the first debug build in GitHub Actions after the repository is connected, then continue with domain models and the capability policy.
+Connect the repository to GitHub and run the first debug build in GitHub Actions when the GitHub integration is available, then continue with domain models and the capability policy.
