@@ -12,12 +12,12 @@
 
 ## Checkpoint
 
-Task 1 is complete at commit `61743df`. The repository contains the build skeleton, a minimal STRAVO launch surface, local project rules, the Gradle 9.3.1 wrapper, and the GitHub Actions workflow. Local static checks passed; the heavy Android assemble was not run on the owner’s weak computer. The concrete VPN engine and target subscription contract are not selected yet.
+Task 1 is complete at commit `61743df`. Tasks 2–4 are complete at commits `e328451`, `c6571ea`, and `fdad92f`; Task 5 is complete at `79b9b4c`; Task 6 is complete at `7cd0c06`. The repository contains the Android build skeleton, pencil-canvas design system, universal phone/TV navigation, encrypted local profile storage, DataStore settings/subscriptions, and profile import/validation. Local static checks passed; the heavy Android assemble was not run on the owner’s weak computer. The concrete VPN engine and target subscription contract are not selected yet.
 
 ## Evidence boundary
 
-The current launch surface proves only source structure and branding. It does not prove profile import or real VPN connectivity.
+The current source proves structure, branding, domain policy, local persistence, and import validation by static inspection only. It does not prove a GitHub build, profile import on a device, or real VPN connectivity.
 
 ## Next step
 
-Connect the repository to GitHub and run the first debug build in GitHub Actions when the GitHub integration is available, then continue with domain models and the capability policy.
+Connect the repository to GitHub and run the first debug build in GitHub Actions when the GitHub integration is available. Before implementing the VPN engine, provide a redacted ordinary/white-list profile contract so the exact engine and version can be selected from primary documentation.
