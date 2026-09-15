@@ -8,6 +8,7 @@ import com.stravo.vpn.domain.model.ProtectedProfilePayload
 import com.stravo.vpn.domain.model.ServerEndpoint
 import com.stravo.vpn.domain.model.VpnMode
 import com.stravo.vpn.domain.model.VpnProfile
+import com.stravo.vpn.domain.policy.isAllowedOn
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import org.json.JSONArray

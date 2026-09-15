@@ -18,7 +18,7 @@ internal data class StoredProfileRecord(
     val protectedPayload: ByteArray,
 )
 
-class LocalProfileStore(context: Context) {
+internal class LocalProfileStore(context: Context) {
     private val file = AtomicFile(File(context.filesDir, "stravo-profiles.json"))
 
     @Synchronized

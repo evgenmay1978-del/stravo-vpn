@@ -2,8 +2,8 @@ package com.stravo.vpn.ui.components
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.DrawScope
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 
 fun DrawScope.drawTopographicLines(color: Color) {
