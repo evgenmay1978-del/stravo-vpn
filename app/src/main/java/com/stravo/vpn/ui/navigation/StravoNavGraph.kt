@@ -23,6 +23,7 @@ import com.stravo.vpn.domain.model.VpnConnectionState
 import com.stravo.vpn.ui.components.CompassMark
 import com.stravo.vpn.ui.components.PencilPowerButton
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.screens.home.HomeScreen
 import com.stravo.vpn.ui.theme.StravoColors
 import com.stravo.vpn.ui.theme.StravoTypography
 
@@ -45,7 +46,11 @@ fun StravoNavGraph(formFactor: FormFactor) {
     }
 
     val content: @Composable () -> Unit = {
-        RoutePlaceholder(route = currentRoute, formFactor = formFactor)
+        if (currentRoute == StravoRoute.Home) {
+            HomeScreen(formFactor = formFactor, onNavigate = ::navigate)
+        } else {
+            RoutePlaceholder(route = currentRoute, formFactor = formFactor)
+        }
     }
 
     when (formFactor) {

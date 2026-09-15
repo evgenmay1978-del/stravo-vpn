@@ -11,7 +11,9 @@
 
     <application
         android:name=".StravoApplication"
+        android:icon="@drawable/stravo_app_icon"
         android:label="STRAVO VPN"
+        android:roundIcon="@drawable/stravo_app_icon"
         android:theme="@style/Theme.Stravo">
         <activity
             android:name=".MainActivity"

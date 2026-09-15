@@ -60,7 +60,9 @@ fun TvShell(
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TvBrandHeader()
+                if (currentRoute != StravoRoute.Home) {
+                    TvBrandHeader()
+                }
                 Spacer(modifier = Modifier.weight(1f))
                 routes.forEach { route ->
                     TvNavItem(
