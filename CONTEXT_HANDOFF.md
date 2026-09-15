@@ -16,9 +16,9 @@ Task 1 is complete at commit `61743df`. Tasks 2–4 are complete at commits `e32
 
 The 2026-09-15 visual checkpoint adds a native vector recreation of the owner’s STRAVO launcher icon reference, wires it in the manifest, and replaces the Home placeholder with the paper/graphite/mint composition from the approved reference. Phone mode selection includes white lists; TV remains ordinary-only. Home connection status and metrics remain honest placeholders until the VPN engine is integrated.
 
-The 2026-09-15 UI completion checkpoint is on commit `c48b85c`. Servers, Import, WhiteList (phone only), Settings, and Help are wired into the navigation graph. Profile selection and settings are persisted locally; the Home screen reflects the selected profile and mode. No UI path claims a connected tunnel before the engine reports one.
+The 2026-09-15 UI completion checkpoint is on commit `948b4d2`. Servers, Import, WhiteList (phone only), Settings, and Help are wired into the navigation graph. Profile selection and settings are persisted locally; the Home screen reflects the selected profile and mode. No UI path claims a connected tunnel before the engine reports one. Import uses the same shared paper screen shell on phone and TV, with clipboard import limited to phone.
 
-GitHub Actions run `35019220838` on commit `c48b85c` completed `:app:assembleDebug` successfully. Its APK upload was rejected by the account artifact-storage quota, so no downloadable artifact is currently available. GitHub reports that quota usage is recalculated every 6–12 hours.
+GitHub Actions run `35020383183` on commit `948b4d2` completed `:app:assembleDebug` successfully. Its APK upload was rejected by the account artifact-storage quota, so no downloadable artifact is currently available. GitHub reports that quota usage is recalculated every 6–12 hours.
 
 ## Evidence boundary
 
