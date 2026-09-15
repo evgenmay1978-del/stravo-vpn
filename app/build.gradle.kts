@@ -49,4 +49,5 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material)
     implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.datastore.preferences)
 }
