@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
@@ -23,10 +22,9 @@ import androidx.compose.ui.unit.sp
 import com.stravo.vpn.domain.importing.ImportResult
 import com.stravo.vpn.domain.importing.ProfileImportSource
 import com.stravo.vpn.domain.model.FormFactor
-import com.stravo.vpn.ui.components.PaperCanvas
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.screens.common.StravoScreen
 import com.stravo.vpn.ui.theme.StravoColors
-import com.stravo.vpn.ui.theme.StravoTypography
 
 @Composable
 fun ImportScreen(
@@ -38,23 +36,17 @@ fun ImportScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    PaperCanvas(modifier = modifier) {
-        StravoCard(modifier = Modifier.padding(24.dp)) {
+    StravoScreen(
+        modifier = modifier,
+        title = "Добавить маршрут",
+        subtitle = if (formFactor == FormFactor.Tv) {
+            "Введите ссылку с помощью пульта"
+        } else {
+            "Вставьте URL, ссылку или текст QR-кода"
+        },
+    ) {
+        StravoCard {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = "Добавить маршрут",
-                    style = StravoTypography.ScreenTitle,
-                    color = StravoColors.Graphite,
-                )
-                Text(
-                    text = if (formFactor == FormFactor.Tv) {
-                        "Введите ссылку с помощью пульта"
-                    } else {
-                        "Вставьте URL, ссылку или текст QR-кода"
-                    },
-                    style = StravoTypography.Body,
-                    color = StravoColors.GraphiteMuted,
-                )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = state.input,
@@ -74,17 +66,19 @@ fun ImportScreen(
                             viewModel.importProfile(ProfileImportSource.Url(state.input), scope)
                         },
                     ) { Text("ИМПОРТИРОВАТЬ") }
-                    Button(
-                        modifier = Modifier.weight(1f),
-                        enabled = !state.isBusy,
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            val clip: ClipData? = clipboard.primaryClip
-                            val value = clip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                            viewModel.setInput(value)
-                            viewModel.importProfile(ProfileImportSource.Clipboard(value), scope)
-                        },
-                    ) { Text("БУФЕР") }
+                    if (formFactor == FormFactor.Phone) {
+                        Button(
+                            modifier = Modifier.weight(1f),
+                            enabled = !state.isBusy,
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip: ClipData? = clipboard.primaryClip
+                                val value = clip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                                viewModel.setInput(value)
+                                viewModel.importProfile(ProfileImportSource.Clipboard(value), scope)
+                            },
+                        ) { Text("БУФЕР") }
+                    }
                 }
                 if (state.result is ImportResult.Success) {
                     val summary = (state.result as ImportResult.Success).summary
