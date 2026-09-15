@@ -22,9 +22,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.RowScope
 import com.stravo.vpn.R
+import com.stravo.vpn.data.profile.ProfileRepository
+import com.stravo.vpn.data.settings.SettingsRepository
+import com.stravo.vpn.data.settings.StravoSettings
 import com.stravo.vpn.domain.model.FormFactor
 import com.stravo.vpn.domain.model.VpnMode
 import com.stravo.vpn.ui.components.CompassMark
@@ -46,13 +52,34 @@ import com.stravo.vpn.ui.navigation.StravoRoute
 import com.stravo.vpn.ui.theme.StravoColors
 import com.stravo.vpn.ui.theme.StravoShapes
 import com.stravo.vpn.ui.theme.StravoTypography
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
     formFactor: FormFactor,
+    profileRepository: ProfileRepository,
+    settingsRepository: SettingsRepository,
     onNavigate: (StravoRoute) -> Unit,
 ) {
     var selectedMode by remember { mutableStateOf(VpnMode.Ordinary) }
+    var selectedProfileName by remember { mutableStateOf<String?>(null) }
+    val settings by settingsRepository.settings.collectAsState(initial = StravoSettings())
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(profileRepository, settings.selectedProfileId, formFactor) {
+        val profiles = profileRepository.listProfiles().filter { profile ->
+            formFactor == FormFactor.Phone || profile.mode == VpnMode.Ordinary
+        }
+        selectedProfileName = profiles.firstOrNull { it.id.value == settings.selectedProfileId }?.displayName
+    }
+
+    LaunchedEffect(settings.selectedModeWireName, formFactor) {
+        selectedMode = if (formFactor == FormFactor.Phone && settings.selectedModeWireName == VpnMode.WhiteList.wireName) {
+            VpnMode.WhiteList
+        } else {
+            VpnMode.Ordinary
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -65,14 +92,23 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(14.dp))
         HomePowerControl()
         Spacer(modifier = Modifier.height(12.dp))
-        HomeStatusCard()
+        HomeStatusCard(hasProfile = selectedProfileName != null)
         Spacer(modifier = Modifier.height(10.dp))
-        HomeServerCard(onClick = { onNavigate(StravoRoute.Servers) })
+        HomeServerCard(
+            profileName = selectedProfileName,
+            onClick = { onNavigate(StravoRoute.Servers) },
+        )
         Spacer(modifier = Modifier.height(10.dp))
         HomeModePicker(
             formFactor = formFactor,
             selectedMode = selectedMode,
-            onModeSelected = { selectedMode = it },
+            onModeSelected = { mode ->
+                selectedMode = mode
+                scope.launch {
+                    settingsRepository.update { it.copy(firstRunComplete = true, selectedModeWireName = mode.wireName) }
+                }
+            },
+            onWhiteListOpen = { onNavigate(StravoRoute.WhiteList) },
         )
         Spacer(modifier = Modifier.height(10.dp))
         HomeMetrics()
@@ -178,7 +214,7 @@ private fun HomePowerControl() {
 }
 
 @Composable
-private fun HomeStatusCard() {
+private fun HomeStatusCard(hasProfile: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = StravoShapes.Card,
@@ -202,14 +238,14 @@ private fun HomeStatusCard() {
             }
             Column {
                 Text(
-                    text = "ОЖИДАЕТ ПОДКЛЮЧЕНИЯ",
+                    text = if (hasProfile) "ПРОФИЛЬ ГОТОВ" else "ОЖИДАЕТ ПОДКЛЮЧЕНИЯ",
                     color = StravoColors.Graphite,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
                 )
                 Text(
-                    text = "Выберите профиль и локацию",
+                    text = if (hasProfile) "Выберите запуск после настройки VPN-ядра" else "Выберите профиль и локацию",
                     color = StravoColors.GraphiteMuted,
                     fontSize = 12.sp,
                 )
@@ -219,7 +255,7 @@ private fun HomeStatusCard() {
 }
 
 @Composable
-private fun HomeServerCard(onClick: () -> Unit) {
+private fun HomeServerCard(profileName: String?, onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -237,12 +273,12 @@ private fun HomeServerCard(onClick: () -> Unit) {
             GlobeMark(modifier = Modifier.size(38.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Сервер не выбран",
+                    text = profileName ?: "Сервер не выбран",
                     style = StravoTypography.SectionTitle,
                     color = StravoColors.Graphite,
                 )
                 Text(
-                    text = "ВИРТУАЛЬНАЯ ЛОКАЦИЯ",
+                    text = if (profileName == null) "ВЫБЕРИТЕ ПРОФИЛЬ" else "ИМПОРТИРОВАННЫЙ ПРОФИЛЬ",
                     style = StravoTypography.Eyebrow,
                     color = StravoColors.GraphiteMuted,
                 )
@@ -262,6 +298,7 @@ private fun HomeModePicker(
     formFactor: FormFactor,
     selectedMode: VpnMode,
     onModeSelected: (VpnMode) -> Unit,
+    onWhiteListOpen: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -278,7 +315,10 @@ private fun HomeModePicker(
                 modifier = Modifier.weight(1f),
                 mode = VpnMode.WhiteList,
                 selected = selectedMode == VpnMode.WhiteList,
-                onClick = { onModeSelected(VpnMode.WhiteList) },
+                onClick = {
+                    onModeSelected(VpnMode.WhiteList)
+                    onWhiteListOpen()
+                },
             )
         }
     }
