@@ -23,6 +23,7 @@
 - Do not add or run automated tests unless the owner explicitly authorizes them; use compilation, static checks, and narrowly scoped manual observation when authorized.
 - Never log or commit subscription URLs, UUIDs, keys, tokens, credentials, customer identifiers, or complete VPN configurations.
 - Use current compatible dependency and engine versions from primary official documentation at implementation time; do not invent a version from an unrelated client.
+- GitHub Actions is the canonical environment for Android builds and heavy validation because the owner’s computer is weak; do not run local Gradle assemble tasks unless the owner explicitly asks.
 
 ---
 
@@ -31,6 +32,8 @@
 The implementation uses focused files with one responsibility:
 
 - `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, `gradle.properties`: pinned Android build configuration.
+- `gradlew`, `gradlew.bat`, `gradle/wrapper/*`: reproducible Gradle entry points for GitHub Actions.
+- `.github/workflows/android.yml`: GitHub-hosted debug APK build and artifact upload.
 - `app/build.gradle.kts`, `app/proguard-rules.pro`, `app/src/main/AndroidManifest.xml`: application module, permissions, services, and release-safe packaging.
 - `app/src/main/java/com/stravo/vpn/domain/model/*`: form factor, modes, profiles, subscriptions, and connection state.
 - `app/src/main/java/com/stravo/vpn/domain/policy/CapabilityPolicy.kt`: single source of truth for phone/TV mode access.
@@ -53,11 +56,16 @@ The implementation uses focused files with one responsibility:
 - Create: `build.gradle.kts`
 - Create: `gradle/libs.versions.toml`
 - Create: `gradle.properties`
+- Create: `gradlew`
+- Create: `gradlew.bat`
+- Create: `gradle/wrapper/gradle-wrapper.properties`
+- Create: `gradle/wrapper/gradle-wrapper.jar`
 - Create: `app/build.gradle.kts`
 - Create: `app/proguard-rules.pro`
 - Create: `app/src/main/AndroidManifest.xml`
 - Create: `app/src/main/java/com/stravo/vpn/StravoApplication.kt`
 - Create: `app/src/main/java/com/stravo/vpn/MainActivity.kt`
+- Create: `.github/workflows/android.yml`
 - Create: `AGENTS.md`
 - Create: `CONTEXT_HANDOFF.md`
 
@@ -78,12 +86,14 @@ The implementation uses focused files with one responsibility:
 
 - [ ] **Step 6: Write local project operating rules.** `AGENTS.md` must state the universal APK rule, phone-only white lists, TV-only ordinary VPN, no secret logging, no production mutations, and the owner’s no-automated-tests-without-explicit-authorization rule. `CONTEXT_HANDOFF.md` must record the initial commit, current state, and the next implementation task.
 
-- [ ] **Step 7: Validate the bootstrap without test runs.** Compile the application variant with the project wrapper if available and inspect the manifest/package name. If the local toolchain cannot build, record the exact missing tool and stop at this task rather than repairing an unrelated system toolchain.
+- [ ] **Step 7: Configure the GitHub build.** Add `.github/workflows/android.yml` to run on `ubuntu-latest`, install Java 17, use the Gradle wrapper, run only `:app:assembleDebug`, and upload the debug APK as an artifact. Do not run the assemble task locally on the owner’s weak computer.
 
-- [ ] **Step 8: Commit the bootstrap.**
+- [ ] **Step 8: Validate the bootstrap locally without a heavy build.** Inspect the manifest/package name, wrapper properties, workflow YAML, and tracked file scope. The first compile is performed by GitHub Actions after the repository is connected.
+
+- [ ] **Step 9: Commit the bootstrap.**
 
 ```bash
-git add settings.gradle.kts build.gradle.kts gradle app AGENTS.md CONTEXT_HANDOFF.md
+git add settings.gradle.kts build.gradle.kts gradle gradlew gradlew.bat app .github/workflows/android.yml AGENTS.md CONTEXT_HANDOFF.md
 git commit -m "build: bootstrap STRAVO Android project"
 ```
 
@@ -547,7 +557,7 @@ git commit -m "feat: route STRAVO imports through safe entry points"
 
 - [ ] **Step 1: Inspect the final Git scope.** Confirm only STRAVO project files changed, `.superpowers/` remains ignored, and no secret-like values appear in tracked content.
 
-- [ ] **Step 2: Build a debug APK.** Use the project’s pinned wrapper and the exact debug assemble task. Do not sign or publish a release build without explicit authorization.
+- [ ] **Step 2: Build a debug APK in GitHub Actions.** Trigger the workflow on GitHub and inspect the uploaded debug artifact. Do not sign or publish a release build without explicit authorization and do not run the heavy assemble task locally.
 
 - [ ] **Step 3: Observe the launch result.** On an authorized Android phone and Android TV target, confirm package name, STRAVO branding, visual system, navigation, TV focus, and the absence of TV white lists.
 

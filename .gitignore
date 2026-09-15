@@ -1,5 +1,7 @@
 .superpowers/
 .worktrees/
+.maestro-state/
+.gradle/
 *.iml
 .idea/
 build/
