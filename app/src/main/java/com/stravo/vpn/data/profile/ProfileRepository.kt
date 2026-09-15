@@ -13,7 +13,7 @@ interface ProfileRepository {
     suspend fun get(id: ProfileId): VpnProfile?
 }
 
-class LocalProfileRepository(
+class LocalProfileRepository internal constructor(
     private val store: LocalProfileStore,
     private val secretStore: SecretStore,
 ) : ProfileRepository {
