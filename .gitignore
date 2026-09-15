@@ -1,4 +1,5 @@
 .superpowers/
+.worktrees/
 *.iml
 .idea/
 build/
