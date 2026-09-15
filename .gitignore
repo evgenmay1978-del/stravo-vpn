@@ -1,0 +1,8 @@
+.superpowers/
+*.iml
+.idea/
+build/
+out/
+*.keystore
+*.jks
+local.properties
