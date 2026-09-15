@@ -14,7 +14,9 @@
 
 Task 1 is complete at commit `61743df`. Tasks 2–4 are complete at commits `e328451`, `c6571ea`, and `fdad92f`; Task 5 is complete at `79b9b4c`; Task 6 is complete at `7cd0c06`. The repository contains the Android build skeleton, pencil-canvas design system, universal phone/TV navigation, encrypted local profile storage, DataStore settings/subscriptions, and profile import/validation. Local static checks passed; the heavy Android assemble was not run on the owner’s weak computer. The concrete VPN engine and target subscription contract are not selected yet.
 
-The 2026-09-15 visual checkpoint adds the owner-supplied STRAVO launcher icon, wires it in the manifest, and replaces the Home placeholder with the paper/graphite/mint composition from the approved reference. Phone mode selection includes white lists; TV remains ordinary-only. Home connection status and metrics remain honest placeholders until the VPN engine is integrated.
+The 2026-09-15 visual checkpoint adds a native vector recreation of the owner’s STRAVO launcher icon reference, wires it in the manifest, and replaces the Home placeholder with the paper/graphite/mint composition from the approved reference. Phone mode selection includes white lists; TV remains ordinary-only. Home connection status and metrics remain honest placeholders until the VPN engine is integrated.
+
+GitHub Actions run `35006576041` on commit `844be54` completed `assembleDebug` successfully. Its APK upload was rejected by the account artifact-storage quota, so no downloadable artifact is currently available.
 
 ## Evidence boundary
 
@@ -22,4 +24,4 @@ The current source proves structure, branding, domain policy, local persistence,
 
 ## Next step
 
-Publish the current feature branch to the private GitHub repository and run the first debug build in GitHub Actions after resolving the Git HTTPS workflow-scope limitation. Before implementing the VPN engine, provide a redacted ordinary/white-list profile contract so the exact engine and version can be selected from primary documentation.
+Clear the GitHub Actions artifact-storage quota before the next debug run if a downloadable APK is required. Before implementing the VPN engine, provide a redacted ordinary/white-list profile contract so the exact engine and version can be selected from primary documentation.
