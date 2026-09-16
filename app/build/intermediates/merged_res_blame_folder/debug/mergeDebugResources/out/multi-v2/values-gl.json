@@ -1,0 +1,77 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.stravo.vpn.app-mergeDebugResources-36:/values-gl/values-gl.xml",
+            "map": [
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/9816ea29b225771af2a0bd57ae13b548/transformed/ui/res/values-gl/values-gl.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "107,208,304,387,496,597,686,765,858,950,1038,1123,1213,1290,1375,1459,1539,1615,1697,1769",
+                        "endColumns": "100,95,82,108,100,88,78,92,91,87,84,89,76,84,83,79,75,81,71,125",
+                        "endOffsets": "203,299,382,491,592,681,760,853,945,1033,1118,1208,1285,1370,1454,1534,1610,1692,1764,1890"
+                    },
+                    "to": {
+                        "startLines": "3,11,12,13,14,15,16,17,19,20,21,22,23,24,25,26,27,29,30,31",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "214,1043,1139,1222,1331,1432,1521,1600,1782,1874,1962,2047,2137,2214,2299,2383,2463,2640,2722,2794",
+                        "endColumns": "100,95,82,108,100,88,78,92,91,87,84,89,76,84,83,79,75,81,71,121",
+                        "endOffsets": "310,1134,1217,1326,1427,1516,1595,1688,1869,1957,2042,2132,2209,2294,2378,2458,2534,2717,2789,2911"
+                    }
+                },
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/d0b987d5cdc740a4c54d97360a76fd50/transformed/core-1.18.0/res/values-gl/values-gl.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,154,256,356,454,561,667,783",
+                        "endColumns": "98,101,99,97,106,105,115,100",
+                        "endOffsets": "149,251,351,449,556,662,778,879"
+                    },
+                    "to": {
+                        "startLines": "4,5,6,7,8,9,10,28",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "315,414,516,616,714,821,927,2539",
+                        "endColumns": "98,101,99,97,106,105,115,100",
+                        "endOffsets": "409,511,611,709,816,922,1038,2635"
+                    }
+                },
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/f2c0659d03ae6c5e62bff962d4e52d50/transformed/foundation/res/values-gl/values-gl.xml",
+                    "from": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,164,263",
+                        "endColumns": "108,98,100",
+                        "endOffsets": "159,258,359"
+                    },
+                    "to": {
+                        "startLines": "2,32,33",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "105,2916,3015",
+                        "endColumns": "108,98,100",
+                        "endOffsets": "209,3010,3111"
+                    }
+                },
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/c38def215425f54f300bf3d08ba430d8/transformed/material/res/values-gl/values-gl.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "88",
+                        "endOffsets": "139"
+                    },
+                    "to": {
+                        "startLines": "18",
+                        "startColumns": "4",
+                        "startOffsets": "1693",
+                        "endColumns": "88",
+                        "endOffsets": "1777"
+                    }
+                }
+            ]
+        }
+    ]
+}

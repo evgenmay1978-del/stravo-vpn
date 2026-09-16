@@ -1,11 +1,38 @@
-.superpowers/
-.worktrees/
-.maestro-state/
+```gitignore
+# Gradle
 .gradle/
-*.iml
-.idea/
 build/
-out/
-*.keystore
-*.jks
+
+# APKs
+*.apk
+*.ap_.b64
+
+# Kotlin
+.kotlin/
+
+# Java class files
+*.class
+
+# DEX files
+*.dex
+
+# Native libraries
+*.so
+*.dll
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Local configuration
 local.properties
+
+# Environment
+.env
+.env.local
+*.env.*
+```

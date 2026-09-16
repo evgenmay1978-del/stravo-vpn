@@ -1,0 +1,7 @@
+com.stravo.vpn.app-pngs-0 /workspace/app/build/generated/res/pngs/debug
+com.stravo.vpn.app-updated_navigation_xml-1 /workspace/app/build/generated/updated_navigation_xml/debug
+com.stravo.vpn.app-packageDebugResources-2 /workspace/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.stravo.vpn.app-packageDebugResources-3 /workspace/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.stravo.vpn.app-debug-4 /workspace/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.stravo.vpn.app-debug-5 /workspace/app/src/debug/res
+com.stravo.vpn.app-main-6 /workspace/app/src/main/res

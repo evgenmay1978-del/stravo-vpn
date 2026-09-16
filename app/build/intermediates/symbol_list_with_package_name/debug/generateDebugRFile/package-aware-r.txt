@@ -1,0 +1,3 @@
+com.stravo.vpn
+drawable stravo_app_icon
+style Theme_Stravo

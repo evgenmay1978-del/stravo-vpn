@@ -1,0 +1,77 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.stravo.vpn.app-mergeDebugResources-36:/values-it/values-it.xml",
+            "map": [
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/f2c0659d03ae6c5e62bff962d4e52d50/transformed/foundation/res/values-it/values-it.xml",
+                    "from": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,174,272",
+                        "endColumns": "118,97,98",
+                        "endOffsets": "169,267,366"
+                    },
+                    "to": {
+                        "startLines": "2,32,33",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "105,2945,3043",
+                        "endColumns": "118,97,98",
+                        "endOffsets": "219,3038,3137"
+                    }
+                },
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/d0b987d5cdc740a4c54d97360a76fd50/transformed/core-1.18.0/res/values-it/values-it.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,153,255,354,456,565,672,802",
+                        "endColumns": "97,101,98,101,108,106,129,100",
+                        "endOffsets": "148,250,349,451,560,667,797,898"
+                    },
+                    "to": {
+                        "startLines": "4,5,6,7,8,9,10,28",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "335,433,535,634,736,845,952,2576",
+                        "endColumns": "97,101,98,101,108,106,129,100",
+                        "endOffsets": "428,530,629,731,840,947,1077,2672"
+                    }
+                },
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/9816ea29b225771af2a0bd57ae13b548/transformed/ui/res/values-it/values-it.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "107,218,318,405,503,603,690,769,875,968,1063,1147,1235,1320,1405,1481,1553,1623,1701,1770",
+                        "endColumns": "110,99,86,97,99,86,78,105,92,94,83,87,84,84,75,71,69,77,68,124",
+                        "endOffsets": "213,313,400,498,598,685,764,870,963,1058,1142,1230,1315,1400,1476,1548,1618,1696,1765,1890"
+                    },
+                    "to": {
+                        "startLines": "3,11,12,13,14,15,16,17,19,20,21,22,23,24,25,26,27,29,30,31",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "224,1082,1182,1269,1367,1467,1554,1633,1828,1921,2016,2100,2188,2273,2358,2434,2506,2677,2755,2824",
+                        "endColumns": "110,99,86,97,99,86,78,105,92,94,83,87,84,84,75,71,69,77,68,120",
+                        "endOffsets": "330,1177,1264,1362,1462,1549,1628,1734,1916,2011,2095,2183,2268,2353,2429,2501,2571,2750,2819,2940"
+                    }
+                },
+                {
+                    "source": "/root/.gradle/caches/9.3.1/transforms/c38def215425f54f300bf3d08ba430d8/transformed/material/res/values-it/values-it.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "88",
+                        "endOffsets": "139"
+                    },
+                    "to": {
+                        "startLines": "18",
+                        "startColumns": "4",
+                        "startOffsets": "1739",
+                        "endColumns": "88",
+                        "endOffsets": "1823"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "com.stravo.vpn.app-debug-38:/drawable_stravo_app_icon.xml.flat",
+        "source": "com.stravo.vpn.app-main-40:/drawable/stravo_app_icon.xml"
+    }
+]
