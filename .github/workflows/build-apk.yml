@@ -3,8 +3,6 @@ name: Build APK
 on:
   push:
     branches: [ feature/stravo-vpn-mvp, main, develop ]
-    tags:
-      - 'v*'
   pull_request:
     branches: [ feature/stravo-vpn-mvp, main ]
   workflow_dispatch:
@@ -33,31 +31,9 @@ jobs:
     - name: Build Release APK
       run: ./gradlew assembleRelease
 
-    - name: List build outputs
-      run: ls -la app/build/outputs/apk/*/
-
-    - name: Upload to Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          app/build/outputs/apk/debug/app-debug.apk
-          app/build/outputs/apk/release/app-release.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload Debug APK as artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 7
-
-    - name: Upload Release APK as artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-release-apk
-        path: app/build/outputs/apk/release/app-release.apk
-        retention-days: 7
+    - name: Show APK location
+      run: |
+        echo "✅ Build completed successfully!"
+        echo "Debug APK: app/build/outputs/apk/debug/app-debug.apk"
+        echo "Release APK: app/build/outputs/apk/release/app-release.apk"
+        ls -lh app/build/outputs/apk/*/
