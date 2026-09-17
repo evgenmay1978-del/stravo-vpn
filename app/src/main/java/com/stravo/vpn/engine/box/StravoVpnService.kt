@@ -124,6 +124,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
         currentNodeId = nodeId
         val container = (application as StravoApplication).container
         val link = container.subscriptionImporter.configFor(nodeId)
+        // Журнал прошлого запуска ядра: он объясняет, почему трафик не пошёл.
+        container.coreLogReader.publish()
         if (link == null) {
             publishError(KEY_MISSING_REASON, locationId)
             return
@@ -184,6 +186,9 @@ class StravoVpnService : VpnService(), PlatformInterface {
                     ", свой интерфейс: " + (myInterface ?: "неизвестен"),
             )
             setState(ConnectionState.Connected, locationId, System.currentTimeMillis())
+            // Даём ядру записать первые строки журнала и складываем их в след.
+            Thread.sleep(LOG_SETTLE_MS)
+            (application as StravoApplication).container.coreLogReader.publish("ядро старт")
         } catch (error: Throwable) {
             // В сообщении нет ни конфига, ни ключей: только текст ошибки ядра.
             val reason = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
@@ -725,38 +730,54 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
         private fun update(network: Network) = report(network)
 
+        /**
+         * Сообщаем ядру сеть по умолчанию. Свойственных Android задержек две: свойства
+         * сети могут быть ещё не готовы, а интерфейс — не виден java.net. Поэтому
+         * несколько попыток, и только потом честное «сети нет».
+         */
         private fun report(network: Network?) {
             val manager = connectivity
             if (network == null || manager == null) {
                 listener.updateDefaultInterface("", -1, false, false)
                 return
             }
-            val name = try {
-                manager.getLinkProperties(network)?.interfaceName
-            } catch (_: Exception) {
-                null
+            for (attempt in 0 until REPORT_ATTEMPTS) {
+                val name = try {
+                    manager.getLinkProperties(network)?.interfaceName
+                } catch (_: Exception) {
+                    null
+                }
+                if (!name.isNullOrBlank() && name != myInterface) {
+                    val index = try {
+                        java.net.NetworkInterface.getByName(name)?.index ?: -1
+                    } catch (_: Exception) {
+                        -1
+                    }
+                    if (index > 0) {
+                        val capabilities = try {
+                            manager.getNetworkCapabilities(network)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        val expensive = capabilities != null &&
+                            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                        val constrained = capabilities != null &&
+                            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED).not()
+                        trace.record("сеть по умолчанию: " + name + " (#" + index + ")")
+                        listener.updateDefaultInterface(name, index, expensive, constrained)
+                        return
+                    }
+                }
+                try {
+                    Thread.sleep(REPORT_RETRY_MS)
+                } catch (_: InterruptedException) {
+                    return
+                }
             }
-            if (name.isNullOrBlank() || name == myInterface) {
-                listener.updateDefaultInterface("", -1, false, false)
-                return
-            }
-            val index = try {
-                java.net.NetworkInterface.getByName(name)?.index ?: -1
-            } catch (_: Exception) {
-                -1
-            }
-            val capabilities = try {
-                manager.getNetworkCapabilities(network)
-            } catch (_: Exception) {
-                null
-            }
-            val expensive = capabilities != null &&
-                !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-            val constrained = capabilities != null &&
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED).not()
-            trace.record("сеть по умолчанию: " + name + " (#" + index + ")")
-            listener.updateDefaultInterface(name, index, expensive, constrained)
+            trace.record("сеть по умолчанию не определилась")
+            listener.updateDefaultInterface("", -1, false, false)
         }
+
     }
 
     // --- Списки для gomobile ----------------------------------------------
@@ -788,6 +809,9 @@ class StravoVpnService : VpnService(), PlatformInterface {
         private const val SESSION_NAME = "STRAVO VPN"
         private const val FALLBACK_DNS = "1.1.1.1"
         private const val DEFAULT_MTU = 9000
+        private const val LOG_SETTLE_MS = 1200L
+        private const val REPORT_ATTEMPTS = 8
+        private const val REPORT_RETRY_MS = 120L
         private const val CHANNEL_ID = "stravo.vpn.status"
         private const val NOTIFICATION_ID = 1001
         // Константы Linux (IFF_*): ядро переводит их в net.Flags через link_flags_unix.go.
