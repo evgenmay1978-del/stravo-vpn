@@ -17,6 +17,8 @@ data class StravoPalette(
     val onAccent: Color,
     val medallion: Color,
     val medallionDeep: Color,
+    /** Светлая краска для значка на графитовом диске медальона. */
+    val onMedallion: Color,
     val isDark: Boolean,
 ) {
     companion object {
@@ -33,6 +35,7 @@ data class StravoPalette(
             onAccent = StravoColors.Paper,
             medallion = Color(0xFF2A3A40),
             medallionDeep = Color(0xFF101A1D),
+            onMedallion = StravoColors.Paper,
             isDark = false,
         )
 
@@ -49,6 +52,7 @@ data class StravoPalette(
             onAccent = Color(0xFF0E1618),
             medallion = Color(0xFF16211F),
             medallionDeep = Color(0xFF070D0D),
+            onMedallion = StravoColors.TvInk,
             isDark = true,
         )
     }

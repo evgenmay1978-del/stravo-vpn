@@ -65,8 +65,8 @@ fun PowerMedallion(
     }
     val glyphColor = when {
         active || connecting -> palette.accent
-        failed -> palette.accent.copy(alpha = 0.75f)
-        else -> palette.textPrimary.copy(alpha = 0.85f)
+        failed -> palette.accent.copy(alpha = 0.85f)
+        else -> palette.onMedallion.copy(alpha = 0.92f)
     }
 
     val interaction = remember { MutableInteractionSource() }

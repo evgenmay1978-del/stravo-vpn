@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stravo.vpn.R
@@ -75,10 +76,10 @@ fun HomeScreen(
 
         HomeHeader(onOpenSettings = onOpenSettings)
 
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val medallion = minOf(maxWidth * 0.62f, 240.dp)
+            val medallion = minOf(maxWidth * 0.56f, 214.dp)
             PowerMedallion(
                 state = state.connection,
                 size = medallion,
@@ -88,7 +89,7 @@ fun HomeScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
 
         Text(
             text = statusLabel(state.connection),
@@ -104,7 +105,7 @@ fun HomeScreen(
             modifier = Modifier.padding(top = StravoTokens.SpaceSm, start = StravoTokens.SpaceLg, end = StravoTokens.SpaceLg),
         )
 
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -172,7 +173,7 @@ fun HomeScreen(
             StravoStatRow(stats = state.stats)
         }
 
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
         PencilButton(
             text = stringResource(id = R.string.cta_quick_connect),
@@ -285,15 +286,19 @@ private fun SummaryCard(
             style = StravoType.Caption,
             color = palette.textSecondary,
             maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
 /** «Авто · Автоматический сервер» без висящего разделителя у пустого города. */
-private fun locationSummary(state: HomeUiState): String =
-    listOf(state.location.country, state.location.city)
+private fun locationSummary(state: HomeUiState): String {
+    val location = state.location
+    if (location.id == "auto") return location.city
+    return listOf(location.country, location.city)
         .filter { it.isNotBlank() }
         .joinToString(" · ")
+}
 
 @Composable
 private fun statusLabel(connection: ConnectionState): String = when (connection) {

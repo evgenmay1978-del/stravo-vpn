@@ -60,6 +60,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
     private var defaultMonitor: DefaultInterfaceMonitor? = null
     private var myInterface: String? = null
     private var currentNodeId: String? = null
+    @Volatile
+    private var foregroundStarted = false
 
     override fun onCreate() {
         super.onCreate()
@@ -166,6 +168,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         defaultMonitor?.close()
         defaultMonitor = null
         setState(ConnectionState.Disconnected, null, null)
+        foregroundStarted = false
         stopForegroundCompat()
     }
 
@@ -173,12 +176,16 @@ class StravoVpnService : VpnService(), PlatformInterface {
         StravoVpnService.publish(
             VpnConnectionSnapshot(state = state, locationId = locationId, connectedSince = since),
         )
+        if (state is ConnectionState.Connected) {
+            updateNotification(getString(R.string.status_connected))
+        }
     }
 
     private fun publishError(reason: String, locationId: String?) {
         StravoVpnService.publish(
             VpnConnectionSnapshot(state = ConnectionState.Error(reason), locationId = locationId),
         )
+        updateNotification(getString(R.string.status_error))
     }
 
     private val handler = object : CommandServerHandler {
@@ -405,7 +412,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
     }
 
     private fun startInForeground() {
-        val notification = buildNotification()
+        foregroundStarted = true
+        val notification = buildNotification(getString(R.string.status_connecting))
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
@@ -413,7 +421,16 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
     }
 
-    private fun buildNotification(): android.app.Notification {
+    private fun updateNotification(text: String) {
+        if (!foregroundStarted) return
+        try {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            manager.notify(NOTIFICATION_ID, buildNotification(text))
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun buildNotification(text: String): android.app.Notification {
         val pending = PendingIntent.getActivity(
             this,
             0,
@@ -423,7 +440,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_vpn)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.status_connecting))
+            .setContentText(text)
             .setOngoing(true)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -482,6 +499,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
             val manager = connectivity ?: return
             val properties = manager.getLinkProperties(network) ?: return
             val name = properties.interfaceName ?: return
+            if (name == myInterface || name.startsWith(TUN_PREFIX)) return
             val index = try {
                 java.net.NetworkInterface.getByName(name)?.index ?: 0
             } catch (_: Exception) {
@@ -521,6 +539,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         const val EXTRA_LOCATION_ID = "com.stravo.vpn.extra.LOCATION_ID"
 
         private const val SESSION_NAME = "STRAVO VPN"
+        private const val TUN_PREFIX = "tun"
         private const val DEFAULT_MTU = 9000
         private const val CHANNEL_ID = "stravo.vpn.status"
         private const val NOTIFICATION_ID = 1001
