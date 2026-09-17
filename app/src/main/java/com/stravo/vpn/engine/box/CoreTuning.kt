@@ -10,9 +10,10 @@ import android.content.Context
  * значение хранится в настройках и читается сервисом при следующем подключении.
  */
 enum class CoreVariant(val label: String, val hint: String) {
-    BASE("1/3 · как есть", "hijack DNS и стек mixed"),
-    SYSTEM_STACK("2/3 · системный стек", "stack system: другой путь обработки пакетов TUN"),
-    DIRECT_RESOLVER("3/3 · DNS напрямую", "DNS уходит в сеть оператора, а не в узел"),
+    BASE("1/4 · как есть", "hijack DNS и стек mixed"),
+    SYSTEM_STACK("2/4 · системный стек", "stack system: другой путь обработки пакетов TUN"),
+    DIRECT_RESOLVER("3/4 · DNS напрямую", "DNS уходит в сеть оператора, а не в узел"),
+    LOCAL_PROXY("4/4 · локальный прокси", "SOCKS на 127.0.0.1:10808, без TUN: проверка узла"),
 }
 
 /** Хранилище выбранного варианта: секретов здесь нет. */
