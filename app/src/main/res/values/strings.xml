@@ -61,6 +61,7 @@
     <string name="connect_tv_step_2">Выберите «Подключить телефон» и покажите QR</string>
     <string name="connect_tv_step_3">Отсканируйте код камерой телефона</string>
     <string name="connect_tv_step_4">Подтвердите перенос в Telegram-боте</string>
+    <string name="connect_tv_scan">Сканировать QR</string>
     <string name="connect_tv_open_bot">Открыть Telegram-бот</string>
     <string name="connect_tv_how">Как это работает?</string>
     <string name="connect_tv_help_body">Телевизор создаёт одноразовый код на 5 минут. В QR лежит только токен переноса — ни ссылки подписки, ни ключей. После подтверждения в боте подписка приходит на телевизор сама.</string>
@@ -98,4 +99,9 @@
     <string name="notice_core_missing">Ядро туннеля ещё не подключено к сборке</string>
     <string name="notice_pairing_backend_missing">Перенос подписки ждёт pairing-API на стороне сервиса</string>
     <string name="notice_profile_missing">Раздел включится вместе с серверной частью подписки</string>
+    <string name="notice_scan_invalid">Это не код STRAVO: отсканируйте QR с экрана телевизора</string>
+    <string name="scan_title">Сканировать QR</string>
+    <string name="scan_sub">Наведите камеру на код в приложении на телевизоре</string>
+    <string name="scan_hint">Код одноразовый и живёт 5 минут. Ссылка откроется в Telegram — подтвердите перенос.</string>
+    <string name="scan_permission">Нужен доступ к камере. Разрешите его, чтобы отсканировать код с телевизора.</string>
 </resources>

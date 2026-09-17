@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.clickable
@@ -42,6 +43,7 @@ import com.stravo.vpn.ui.theme.StravoType
 fun ConnectTvScreen(
     pairing: PairingState,
     onRefresh: () -> Unit,
+    onScan: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -109,7 +111,18 @@ fun ConnectTvScreen(
         }
 
         PencilButton(
+            text = stringResource(id = R.string.connect_tv_scan),
+            onClick = onScan,
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = painterResource(id = R.drawable.ic_scan),
+            iconTint = palette.accent,
+        )
+
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
+
+        PencilButton(
             text = stringResource(id = R.string.connect_tv_open_bot),
+            style = com.stravo.vpn.ui.components.PencilButtonStyle.Secondary,
             onClick = {
                 BotLinkLauncher.openUrl(
                     context = context,

@@ -31,6 +31,7 @@ enum class Notice {
     CORE_MISSING,
     PAIRING_BACKEND_MISSING,
     PROFILE_MISSING,
+    SCAN_INVALID,
 }
 
 /** Все побочные эффекты идут событиями — Compose не дёргает сервисы напрямую. */

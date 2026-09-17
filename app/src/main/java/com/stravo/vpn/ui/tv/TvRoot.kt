@@ -103,6 +103,14 @@ fun TvRoot(
                         Destination.SETTINGS -> TvSettingsScreen(
                             viewModel = viewModel,
                         )
+
+                        // На TV сканера нет: камера и «Свободный интернет» — только телефон.
+                        Destination.SCANNER -> TvHomeScreen(
+                            state = state,
+                            onNavigate = { destination -> navigator.select(destination) },
+                            onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
+                            onEvent = viewModel::onEvent,
+                        )
                     }
                 }
             }

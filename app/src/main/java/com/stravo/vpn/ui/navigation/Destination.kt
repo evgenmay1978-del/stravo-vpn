@@ -14,6 +14,7 @@ enum class Destination(
     PROFILE("profile", R.string.nav_profile, R.drawable.ic_profile),
     CONNECT_TV("connect_tv", R.string.nav_connect_phone, R.drawable.ic_tv),
     SETTINGS("settings", R.string.nav_settings, R.drawable.ic_settings),
+    SCANNER("scanner", R.string.scan_title, R.drawable.ic_scan),
     ;
 
     companion object {

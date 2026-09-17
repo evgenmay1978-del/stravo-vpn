@@ -3,6 +3,9 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Свой keystore подставляется переменными окружения (в CI — из GitHub Secrets).
+val releaseKeystorePath: String? = System.getenv("STRAVO_KEYSTORE_FILE")
+
 android {
     namespace = "com.stravo.vpn"
     compileSdk = 37
@@ -15,6 +18,17 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        if (releaseKeystorePath != null && file(releaseKeystorePath).exists()) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("STRAVO_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("STRAVO_KEY_ALIAS")
+                keyPassword = System.getenv("STRAVO_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -22,6 +36,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Если владелец не задал собственный keystore — подписываем debug-ключом,
+            // чтобы релизный APK устанавливался на устройство.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -47,6 +64,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -55,4 +73,11 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.zxing.core)
+
+    // Сканер QR на телефоне (на TV не используется).
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning)
 }

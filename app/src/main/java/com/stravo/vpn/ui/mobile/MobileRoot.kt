@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,6 +31,8 @@ import com.stravo.vpn.ui.navigation.StravoBottomNav
 import com.stravo.vpn.ui.navigation.StravoNavigator
 import com.stravo.vpn.ui.state.HomeEvent
 import com.stravo.vpn.ui.state.Notice
+import com.stravo.vpn.telegram.BotLaunchResult
+import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.ui.state.StravoViewModel
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
@@ -42,6 +45,7 @@ fun MobileRoot(
     modifier: Modifier = Modifier,
 ) {
     val navigator = rememberSaveable(saver = StravoNavigator.saver()) { StravoNavigator() }
+    val context = LocalContext.current
     val state by viewModel.home.collectAsStateWithLifecycle()
     val pairing by viewModel.pairing.collectAsStateWithLifecycle()
     val palette = LocalStravoPalette.current
@@ -79,6 +83,15 @@ fun MobileRoot(
                     Destination.CONNECT_TV -> ConnectTvScreen(
                         pairing = pairing,
                         onRefresh = { viewModel.refreshPairingExpiry() },
+                        onScan = { navigator.push(Destination.SCANNER) },
+                        onBack = { navigator.back() },
+                    )
+
+                    Destination.SCANNER -> QrScannerScreen(
+                        onCode = { value ->
+                            navigator.back()
+                            openScannedCode(context, value, viewModel)
+                        },
                         onBack = { navigator.back() },
                     )
 
@@ -115,7 +128,31 @@ private fun noticeText(notice: Notice?): String = when (notice) {
     Notice.CORE_MISSING -> stringResource(id = R.string.notice_core_missing)
     Notice.PAIRING_BACKEND_MISSING -> stringResource(id = R.string.notice_pairing_backend_missing)
     Notice.PROFILE_MISSING -> stringResource(id = R.string.notice_profile_missing)
+    Notice.SCAN_INVALID -> stringResource(id = R.string.notice_scan_invalid)
     null -> ""
+}
+
+/** Открывает ссылку из отсканированного QR: Telegram → браузер → подсказка. */
+private fun openScannedCode(
+    context: android.content.Context,
+    value: String,
+    viewModel: StravoViewModel,
+) {
+    val isTelegramLink = value.startsWith("https://t.me/") ||
+        value.startsWith("http://t.me/") ||
+        value.startsWith("tg://")
+    if (!isTelegramLink) {
+        viewModel.onEvent(HomeEvent.NoticeShown(Notice.SCAN_INVALID))
+        return
+    }
+    when (BotLinkLauncher.openUrl(context, value, value)) {
+        is BotLaunchResult.ManualCopy -> {
+            BotLinkLauncher.copyToClipboard(context, value)
+            viewModel.onEvent(HomeEvent.NoticeShown(Notice.LINK_COPIED))
+        }
+
+        else -> Unit
+    }
 }
 
 @Composable
