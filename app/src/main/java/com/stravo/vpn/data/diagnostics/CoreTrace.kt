@@ -24,8 +24,15 @@ class CoreTrace(context: Context) {
     fun interruptedStep(): String? =
         prefs.getString(KEY_STEP, null)?.takeIf { it != STEP_IDLE }
 
+    /** Последнее сообщение ядра (уже без адресов и ключей). */
+    fun recordCoreMessage(message: String) {
+        prefs.edit().putString(KEY_MESSAGE, message).apply()
+    }
+
+    fun lastCoreMessage(): String? = prefs.getString(KEY_MESSAGE, null)
+
     fun clear() {
-        prefs.edit().remove(KEY_STEP).remove(KEY_TIME).apply()
+        prefs.edit().remove(KEY_STEP).remove(KEY_TIME).remove(KEY_MESSAGE).apply()
     }
 
     companion object {
@@ -43,6 +50,7 @@ class CoreTrace(context: Context) {
         private const val PREFS = "stravo.core.trace"
         private const val KEY_STEP = "step"
         private const val KEY_TIME = "time"
+        private const val KEY_MESSAGE = "message"
     }
 }
 

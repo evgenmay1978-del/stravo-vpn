@@ -192,6 +192,13 @@ class StravoVpnService : VpnService(), PlatformInterface {
         return options
     }
 
+    /** Убираем из сообщения ядра адреса и длинные идентификаторы. */
+    private fun redact(message: String): String = message
+        .replace(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"), "<id>")
+        .replace(Regex("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b"), "<ip>")
+        .replace(Regex("\\b[0-9a-fA-F]{16,}\\b"), "<key>")
+        .take(160)
+
     private fun stopTunnel() {
         val server = commandServer
         commandServer = null
@@ -238,7 +245,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
 
         override fun writeDebugMessage(message: String?) {
-            // Сообщения ядра не пишем в логи: в них может быть адрес узла.
+            // Держим только последнее сообщение и без адресов/ключей: по нему видно,
+            // почему туннель не повёз трафик.
+            val text = message?.trim().orEmpty()
+            if (text.isNotEmpty()) trace.recordCoreMessage(redact(text))
         }
 
         override fun connectSSHAgent(): Int = -1
@@ -267,7 +277,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
         addAddresses(builder, options.getInet4Address())
         addAddresses(builder, options.getInet6Address())
-        for (address in options.getDNSServerAddress().toList()) {
+        // Ядро подменяет DNS своим адресом (hijack); если адресов нет — без DNS на TUN
+        // Android пойдёт в DNS оператора, который через туннель недоступен.
+        val dnsServers = options.getDNSServerAddress().toList().ifEmpty { listOf(FALLBACK_DNS) }
+        for (address in dnsServers) {
             try {
                 builder.addDnsServer(address)
             } catch (_: IllegalArgumentException) {
@@ -598,6 +611,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
         private const val SESSION_NAME = "STRAVO VPN"
         private const val TUN_PREFIX = "tun"
+        private const val FALLBACK_DNS = "1.1.1.1"
         private const val DEFAULT_MTU = 9000
         private const val CHANNEL_ID = "stravo.vpn.status"
         private const val NOTIFICATION_ID = 1001

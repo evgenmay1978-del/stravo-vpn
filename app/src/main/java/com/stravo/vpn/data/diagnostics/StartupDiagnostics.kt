@@ -27,12 +27,19 @@ class StartupDiagnostics(context: Context) {
 
         val trace = CoreTrace(context)
         val step = trace.interruptedStep()
+        val coreMessage = trace.lastCoreMessage()
         trace.clear()
 
-        return when {
+        val reason = when {
             fresh && step != null -> exit!!.second + " · последний шаг: " + step
             fresh -> exit!!.second
             step != null -> "Прошлый запуск ядра прервался на шаге: " + step
+            else -> null
+        }
+        return when {
+            reason != null && coreMessage != null -> reason + " · ядро: " + coreMessage
+            reason != null -> reason
+            coreMessage != null -> "Последнее сообщение ядра: " + coreMessage
             else -> null
         }
     }
