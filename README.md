@@ -52,6 +52,8 @@
 - ссылка-обёртка клиента: happ://add/…, incy://…, sub://…, v2rayng://…, clash://…, sing-box://… —
   вложенный адрес достаётся и из строки, и из base64;
 - адрес без схемы (голый домен sub.example.com/x) и тело подписки списком;
+- форматы панелей: base64-список ссылок, JSON-массив конфигов Xray (?format=xray),
+  JSON-конфиг Clash/mihomo (?format=mihomo) — из них достаются vless/trojan/shadowsocks-узлы;
 - тот же ключ из QR-кода (Профиль → Добавить подписку → Сканировать QR).
 
 Каталог протоколов — domain/model/VpnProtocol.kt: VLESS (TCP, WebSocket, HTTP Upgrade,

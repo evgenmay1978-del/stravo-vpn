@@ -39,6 +39,8 @@ interface VpnEngine {
 Клиент умеет добавлять подписку сам: Профиль → Добавить подписку. Принимаются ссылка
 подписки (https), одиночный ключ (vless://, anytls://, hysteria2://, trojan://, ss://) и QR.
 
+Форматы входа: список ссылок, base64 от него, JSON-массив конфигов Xray (?format=xray) и JSON-конфиг
+Clash/mihomo (?format=mihomo) — последние приводятся к обычным share-ссылкам, дальше путь один.
 Что уже разбирается: протокол, транспорт (TCP, WebSocket, HTTP Upgrade, **XHTTP**, gRPC, QUIC),
 защита (TLS / Reality), порт, IPv6-хост; тело подписки — строки или base64; из заголовков
 читаются subscription-userinfo (дата окончания) и profile-title (название плана).

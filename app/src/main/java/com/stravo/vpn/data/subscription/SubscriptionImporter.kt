@@ -59,12 +59,12 @@ class SubscriptionImporter(private val secrets: SecretStore) {
 
             is ParsedLink.SubscriptionUrl -> {
                 val remote = fetch(parsed.url) ?: return@withContext ImportOutcome.Failure(ImportError.NETWORK)
-                Source(SubscriptionPayload.split(remote.body), remote.planName, remote.activeUntil)
+                Source(linksFrom(remote.body), remote.planName, remote.activeUntil)
             }
 
             is ParsedLink.Unknown -> {
-                // Вставили тело подписки целиком: строк или base64 со списком ссылок.
-                val lines = SubscriptionPayload.split(value)
+                // Вставили тело подписки целиком: строки, base64 или JSON-конфиг Xray.
+                val lines = linksFrom(value)
                 if (lines.size > 1) {
                     Source(lines, null, null)
                 } else {
@@ -101,6 +101,19 @@ class SubscriptionImporter(private val secrets: SecretStore) {
             activeUntil = source.activeUntil,
             nodes = nodes,
         )
+    }
+
+    /**
+     * Тело подписки → список ссылок. Панели отдают три формата: список ссылок,
+     * base64 от него, JSON-конфиги Xray (?format=xray) и Clash/mihomo (?format=mihomo) —
+     * последние декодируются в обычные share-ссылки, дальше путь один и тот же.
+     */
+    private fun linksFrom(body: String): List<String> {
+        if (PanelSubscription.looksLikeJson(body)) {
+            val links = PanelSubscription.toLinks(body)
+            if (links.isNotEmpty()) return links
+        }
+        return SubscriptionPayload.split(body)
     }
 
     /** Конфиг узла для ядра туннеля. В UI и в логи это значение не попадает. */

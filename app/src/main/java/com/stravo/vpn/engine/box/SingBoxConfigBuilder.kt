@@ -1,5 +1,6 @@
 package com.stravo.vpn.engine.box
 
+import com.stravo.vpn.domain.subscription.Base64Codec
 import com.stravo.vpn.domain.subscription.SubscriptionLinkParser
 import org.json.JSONArray
 import org.json.JSONObject
@@ -125,7 +126,12 @@ object SingBoxConfigBuilder {
 
     private fun shadowsocks(link: Link): JSONObject? {
         if (link.host.isEmpty()) return null
-        val credentials = if (link.userInfo.contains(':')) link.userInfo else decode(link.userInfo)
+        // SIP002: учётные данные могут быть как method:password, так и base64 от них.
+        val credentials = if (link.userInfo.contains(':')) {
+            link.userInfo
+        } else {
+            Base64Codec.decodeOrNull(link.userInfo)?.trim() ?: decode(link.userInfo)
+        }
         val method = credentials.substringBefore(':').lowercase()
         val password = credentials.substringAfter(':', "")
         if (method.isEmpty() || password.isEmpty()) return null
