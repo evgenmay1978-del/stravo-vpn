@@ -50,6 +50,10 @@ class UnavailableVpnEngine(
         const val MISSING_CORE_REASON: String =
             "Ядро туннеля не подключено в этой сборке: нужен VpnService и контракт подписки"
 
+        /** Нативная часть ядра есть в сборке, но не загрузилась на этом устройстве. */
+        const val NATIVE_FAILED_REASON: String =
+            "Ядро туннеля не загрузилось на этом устройстве: проверьте разрядность сборки (arm64/arm)"
+
         const val CONFIG_READY_REASON: String =
             "Ядро туннеля не подключено в этой сборке: ключ узла разобран и лежит в защищённом хранилище"
     }

@@ -4,11 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -138,15 +140,20 @@ private fun LocationRow(
         .fillMaxWidth()
         .clip(shape)
         .clickable(role = Role.RadioButton, onClick = onClick)
-        .padding(vertical = StravoTokens.SpaceSm),
+        .padding(vertical = StravoTokens.SpaceSm, horizontal = StravoTokens.SpaceSm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceMd),
     ) {
-        Text(
-            text = location.flag,
-            style = StravoType.BodyStrong,
-            modifier = Modifier.padding(start = StravoTokens.SpaceLg, top = StravoTokens.SpaceMd, bottom = StravoTokens.SpaceMd),
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(palette.panelSoft)
+                .border(1.dp, palette.outline.copy(alpha = 0.25f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = location.flag, style = StravoType.BodyStrong)
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(text = location.country, style = StravoType.BodyStrong, color = palette.textPrimary)
             Text(text = location.city, style = StravoType.Caption, color = palette.textSecondary)

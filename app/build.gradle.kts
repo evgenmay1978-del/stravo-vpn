@@ -63,7 +63,18 @@ android {
     }
 }
 
+// Ядро туннеля: libbox.aar собирается в CI (workflow libbox.yml) и подтягивается
+// в app/libs перед сборкой. В git бинарник не попадает.
+val libboxAar = file("libs/libbox-legacy.aar")
+if (!libboxAar.exists()) {
+    throw GradleException(
+        "Не найден app/libs/libbox-legacy.aar — ядро sing-box. " +
+            "Он собирается workflow libbox.yml и подтягивается в CI автоматически.",
+    )
+}
+
 dependencies {
+    implementation(files(libboxAar))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

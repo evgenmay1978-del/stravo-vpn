@@ -7,7 +7,8 @@
 
 ## 1. Ядро туннеля
 
-Интерфейс (реализация пока `UnavailableVpnEngine`):
+Интерфейс (две реализации: `SingBoxVpnEngine` — рабочее ядро, `UnavailableVpnEngine` — честный
+ответ, если нативная часть не загрузилась):
 
 ```kotlin
 interface VpnEngine {
@@ -53,7 +54,7 @@ interface VpnEngine {
 
 ---
 
-## 1b. Ядро туннеля: что ставим и как (в работе)
+## 1b. Ядро туннеля: что ставим и как (сделано)
 
 Ядро — **sing-box (libbox)**: только он закрывает весь заявленный набор — VLESS с транспортом
 **XHTTP**, **AnyTLS**, Hysteria2, Trojan, Shadowsocks. У Xray нет AnyTLS, поэтому он не подходит.
@@ -62,16 +63,21 @@ interface VpnEngine {
 workflow libbox.yml тянет закреплённую версию SagerNet/sing-box, собирает libbox.aar через
 gomobile и кэширует результат по версии (иначе каждый прогон — 15–20 минут).
 
-Дальше в приложении:
+Сделано в приложении:
 
-1. app/libs/libbox.aar + implementation(files("libs/libbox.aar")).
-2. StravoVpnService : VpnService(), PlatformInterface — отдаёт ядру TUN через Builder.establish().
-3. SingBoxVpnEngine : VpnEngine — старт/стоп сервиса и настоящее состояние в observeState().
-4. SingBoxConfigBuilder — из ссылки узла (берётся из SecretStore) в JSON sing-box.
-5. Манифест: foreground service, FOREGROUND_SERVICE_DATA_SYNC, POST_NOTIFICATIONS.
+1. `app/libs/libbox-legacy.aar` (minSdk 23) + `implementation(files(libs/libbox-legacy.aar))`;
+   AAR в git не лежит, его кладёт CI: job `core` в android.yml → переиспользуемый libbox.yml.
+2. `engine/box/StravoVpnService` : VpnService(), PlatformInterface — отдаёт ядру TUN через
+   `Builder.establish()`, реализует `openTun`, `autoDetectInterfaceControl` (protect),
+   `getInterfaces`, монитор сети по умолчанию; остальные методы честные no-op.
+3. `engine/box/SingBoxVpnEngine` : VpnEngine — старт/стоп сервиса, состояние ядра в observeState().
+4. `engine/box/SingBoxConfigBuilder` — из ссылки узла (берётся из SecretStore) в JSON sing-box.
+5. `engine/box/TunnelCore` — проверка, что нативные .so загрузились; иначе `UnavailableVpnEngine`.
+6. Манифест: foreground service типа dataSync, FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC,
+   POST_NOTIFICATIONS, BIND_VPN_SERVICE. MainActivity один раз спрашивает системное разрешение VPN.
 
 Правило остаётся: пока ядро не поднялось, приложение показывает честную ошибку и не рисует
-«подключено».
+«подключено». Ошибки ядра отдаются текстом, конфиг и ключи в состояние и логи не попадают.
 
 ---
 
@@ -100,7 +106,7 @@ gomobile и кэширует результат по версии (иначе к
 
 ---
 
-## 1d. Ядро собрано: факты для интеграции
+## 1d. Ядро собрано и подключено: факты интеграции
 
 libbox.aar собран в CI из sing-box v1.14.1 (workflow libbox.yml, прогон зелёный,
 две независимые сборки дали битово идентичный файл). ABI: arm64-v8a и armeabi-v7a.
@@ -127,6 +133,25 @@ API (пакет io.nekohasekai.libbox, класс BoxService в этой вер�
 Решение по minSdk: остаёмся на 23 и берём libbox-legacy.aar (в основном AAR minSdkVersion 24,
 manifest merger упал бы). Legacy отличается только отсутствием naive outbound — для наших
 протоколов это не важно.
+
+Что именно использует приложение из этого API:
+
+- `Libbox.setup(SetupOptions)` — basePath/workingPath/tempPath, logMaxLines 200, appVersion;
+- `Libbox.newCommandServer(handler, platform)` → `start()` → `startOrReloadService(json, null)`;
+  остановка — `closeService()` + `close()`;
+- `PlatformInterface.openTun(TunOptions)` — адреса, DNS, маршруты, MTU, exclude/includepackage,
+  `establish()` и `detachFd()`;
+- `PlatformInterface.startDefaultInterfaceMonitor` — минимальный монитор на
+  `ConnectivityManager.registerDefaultNetworkCallback`;
+- `CommandServerHandler` — `serviceStop` останавливает туннель, остальное no-op.
+
+Ограничения, которые остаются честными:
+
+- транспорт **XHTTP** ядру не отдаётся: `SingBoxConfigBuilder` возвращает Unsupported,
+  UI показывает «транспорт не поддерживается ядром этой сборки»;
+- в AAR только arm64-v8a и armeabi-v7a: на x86 APK установится, но туннель не поднимется —
+  `TunnelCore` вернёт false и приложение честно скажет об этом;
+- ABI-splits не делаем: один APK для телефона и TV, поэтому размер растёт на ~47 МиБ.
 
 Размер: APK вырастет примерно на 70–80 МиБ, если класть оба ABI. Варианты — оставить
 arm64 + arm (нужен v7a для ТВ-боксов) либо сделать splits по ABI.

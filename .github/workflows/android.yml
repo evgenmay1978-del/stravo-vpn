@@ -10,12 +10,25 @@ permissions:
   contents: read
 
 jobs:
+  # Ядро туннеля: AAR собирается в переиспользуемом workflow libbox.yml
+  # (сначала кэш Actions, при промахе — сборка gomobile).
+  core:
+    name: libbox.aar
+    uses: ./.github/workflows/libbox.yml
+
   build:
     name: assemble debug + release
+    needs: core
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Разложить ядро в app/libs
+        uses: actions/download-artifact@v4
+        with:
+          name: libbox-aar
+          path: app/libs
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -52,3 +65,4 @@ jobs:
           name: stravo-vpn-release
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+

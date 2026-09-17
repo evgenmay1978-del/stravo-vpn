@@ -19,6 +19,30 @@ data class SubscriptionNode(
     val securityLabel: String? get() = security.displayName.takeIf { security != VpnSecurity.NONE }
 }
 
+/** Почему строка не распознана. Готовый текст для пользователя собирается в UI. */
+enum class Unrecognized {
+    /** Пустая строка. */
+    EMPTY,
+
+    /** Строка длиннее разумного предела. */
+    TOO_LONG,
+
+    /** В строке пробелы или переносы: это не одна ссылка. */
+    NOT_A_SINGLE_LINK,
+
+    /** Схемы нет и на голый домен это не похоже. */
+    NO_SCHEME,
+
+    /** Схема есть, но приложение её не знает. */
+    UNKNOWN_SCHEME,
+
+    /** Схема протокола верная, а сам ключ разобрать не удалось. */
+    BROKEN_KEY,
+
+    /** Ссылка-обёртка клиента без вложенного адреса подписки. */
+    BROKEN_IMPORT_LINK,
+}
+
 /** Что получилось из введённой строки. */
 sealed interface ParsedLink {
 
@@ -34,8 +58,11 @@ sealed interface ParsedLink {
     /** Ссылка на подписку: её содержимое нужно скачать. */
     data class SubscriptionUrl(val url: String) : ParsedLink
 
-    /** Строка не распознана. */
-    data object Unknown : ParsedLink
+    /**
+     * Строка не распознана. [reason] объясняет причину, [token] — что именно
+     * не распознано (обычно схема), чтобы ошибка была предметной.
+     */
+    data class Unknown(val reason: Unrecognized, val token: String? = null) : ParsedLink
 }
 
 /** Результат импорта: безопасные метаданные плюс узлы. */
@@ -44,4 +71,3 @@ data class ImportedSubscription(
     val activeUntil: String?,
     val nodes: List<SubscriptionNode>,
 )
-

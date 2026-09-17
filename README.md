@@ -31,12 +31,12 @@
 | **Подписка**: импорт по ссылке, ключу (VLESS, AnyTLS, Hysteria2, Trojan, Shadowsocks) и QR | готово |
 | Разбор узлов подписки: протокол, транспорт (включая **XHTTP**), Reality/TLS — без хостов и ключей в UI | готово |
 | Хранение секретов: AES-256-GCM, ключ в Android Keystore, без бэкапа и логов | готово |
-| **Ядро туннеля (VpnService / протоколы)** | **отсутствует** — `VpnEngine` объявлен, реализация честно возвращает ошибку |
+| **Ядро туннеля (VpnService / протоколы)** | **подключено**: sing-box (libbox) — `StravoVpnService` + TUN, VLESS/AnyTLS/Hysteria2/Trojan/Shadowsocks. Транспорт XHTTP ядро этой сборки не умеет и честно об этом сообщает |
 | **Pairing-API на стороне сервиса** | **отсутствует** — `PairingBackend` объявлен, заглушка возвращает «не настроено» |
 
-Подключение **не имитируется таймером**: пока ядро не подключено, нажатие на медальон даёт понятную
-ошибку, а статус остаётся «ГОТОВО К ПОДКЛЮЧЕНИЮ». Перенос подписки не показывает фальшивый успех:
-QR создаётся локально и ведёт в бота, но статус подтверждения обязан прийти с сервера.
+Подключение **не имитируется таймером**: состояние приходит только от ядра (libbox), а если
+ядро не поднялось — на экране понятная причина, а не «подключено». Перенос подписки не показывает
+фальшивый успех: QR создаётся локально и ведёт в бота, но статус подтверждения обязан прийти с сервера.
 
 Контракты описаны в [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
 
@@ -49,11 +49,16 @@ QR создаётся локально и ведёт в бота, но стат�
 - ссылка подписки https://… (тело — список ссылок или base64; заголовок subscription-userinfo
   даёт дату окончания, profile-title — название плана);
 - одиночный ключ vless://, anytls://, hysteria2://, trojan://, ss://;
+- ссылка-обёртка клиента: happ://add/…, incy://…, sub://…, v2rayng://…, clash://…, sing-box://… —
+  вложенный адрес достаётся и из строки, и из base64;
+- адрес без схемы (голый домен sub.example.com/x) и тело подписки списком;
 - тот же ключ из QR-кода (Профиль → Добавить подписку → Сканировать QR).
 
 Каталог протоколов — domain/model/VpnProtocol.kt: VLESS (TCP, WebSocket, HTTP Upgrade,
 **XHTTP**, gRPC, QUIC), AnyTLS, Hysteria2, Trojan, Shadowsocks и служебный WebRTC.
 Транспорт и защита (TLS/Reality) берутся из параметров ключа, а не угадываются.
+Ядро — sing-box v1.14.1 (libbox): XHTTP в нём нет (см. docs/IMPLEMENTATION.md, раздел 1c),
+поэтому узел с этим транспортом даёт честную ошибку «транспорт не поддерживается ядром».
 
 Границы безопасности:
 
@@ -68,8 +73,10 @@ QR создаётся локально и ведёт в бота, но стат�
 
 Каноничная среда сборки — **GitHub Actions** (машина владельца слабая, локальные тяжёлые сборки не запускаем).
 
-- Workflow: `.github/workflows/android.yml` → `./gradlew :app:assembleDebug`
-- Артефакт: **Actions → Android build → stravo-vpn-debug** (`app/build/outputs/apk/debug/app-debug.apk`)
+- Workflow: `.github/workflows/android.yml` → job `core` (переиспользуемый `libbox.yml`) собирает
+  или достаёт из кэша `libbox.aar`, затем `./gradlew :app:assembleDebug`;
+- Артефакт: **Actions → Android build → stravo-vpn-debug** (`app/build/outputs/apk/debug/app-debug.apk`).
+- `app/libs/*.aar` в git не хранится: AAR подтягивается из кэша Actions, при промахе — пересобирается.
 
 Локально (если действительно нужно):
 
@@ -89,7 +96,9 @@ app/src/main/java/com/stravo/vpn/
   core/            StravoConfig — единственное место с username бота и deep-link параметрами
   domain/model/    состояние подключения, локации, режимы, статистика, подписка, профиль
   domain/policy/   CapabilityPolicy — fail-closed: что доступно на телефоне, а что на TV
-  domain/engine/   VpnEngine + честная заглушка отсутствующего ядра
+  domain/engine/   VpnEngine + контракт конфига и честная заглушка на случай чужого ABI
+  engine/box/      ядро sing-box: StravoVpnService (PlatformInterface), SingBoxVpnEngine,
+                   SingBoxConfigBuilder (ссылка узла → JSON), TunnelCore
   data/            настройки, профили, подписка, AppContainer (ручная DI)
   telegram/        BotLinks (чистый построитель ссылок) + BotLinkLauncher (tg:// → https → копия)
   pairing/         PairingSession/PairingState, PairingRepository, PairingQrEncoder, PairingBackend

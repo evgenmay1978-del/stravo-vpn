@@ -36,6 +36,33 @@ on:
         required: false
         default: "2"
         type: string
+  # Вызывается из android.yml и release.yml: любой сборке приложения нужно ядро.
+  workflow_call:
+    inputs:
+      singbox_repo:
+        required: false
+        default: "SagerNet/sing-box"
+        type: string
+      singbox_ref:
+        required: false
+        default: "v1.14.1"
+        type: string
+      go_version:
+        required: false
+        default: "1.26.8"
+        type: string
+      gomobile_version:
+        required: false
+        default: "v0.1.13"
+        type: string
+      abi_target:
+        required: false
+        default: "android/arm64,android/arm"
+        type: string
+      cache_version:
+        required: false
+        default: "2"
+        type: string
   push:
     paths:
       - ".github/workflows/libbox.yml"

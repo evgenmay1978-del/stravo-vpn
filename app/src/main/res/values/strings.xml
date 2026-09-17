@@ -94,6 +94,9 @@
     <string name="tv_success_action">Перейти на главный экран</string>
     <string name="tv_footer_note">Один APK для телефона и телевизора</string>
 
+    <string name="service_channel_name">STRAVO VPN</string>
+    <string name="service_channel_description">Состояние VPN-подключения</string>
+
     <string name="notice_link_copied">Ссылка скопирована — откройте её в Telegram</string>
     <string name="notice_bot_unavailable">Не удалось открыть Telegram: ссылка скопирована</string>
     <string name="notice_core_missing">Ядро туннеля ещё не подключено к сборке</string>
@@ -112,7 +115,7 @@
     <string name="add_sub_action_add">Добавить</string>
     <string name="add_sub_action_paste">Вставить из буфера</string>
     <string name="add_sub_action_scan">Сканировать QR</string>
-    <string name="add_sub_help">Вставьте ссылку подписки из бота или одиночный ключ: VLESS, VLESS + XHTTP, AnyTLS, Hysteria2, Trojan, Shadowsocks. Ключи уходят в защищённое хранилище Android и на экране не показываются.</string>
+    <string name="add_sub_help">Вставьте ссылку подписки из бота, ключ (VLESS, VLESS + XHTTP, AnyTLS, Hysteria2, Trojan, Shadowsocks) или ссылку клиента happ://, incy://, sub://, v2rayng://, clash://, sing-box://. Можно вставить и тело подписки списком. Ключи уходят в защищённое хранилище Android и на экране не показываются.</string>
     <string name="add_sub_login_note">Вход по логину включится, когда сервис опубликует API подписки: пока работают ссылка и ключ.</string>
     <string name="add_sub_current">Текущая подписка</string>
     <string name="add_sub_nodes">Серверов в подписке: %1$d</string>
@@ -122,6 +125,10 @@
     <string name="add_sub_done_sub">Серверы уже в разделе «Локации»</string>
     <string name="add_sub_error_empty">Введите ссылку подписки или ключ</string>
     <string name="add_sub_error_unknown">Это не похоже на ссылку подписки или ключ STRAVO</string>
+    <string name="add_sub_error_unknown_scheme">Схема «%1$s» не распознана: это не ссылка подписки и не ключ STRAVO</string>
+    <string name="add_sub_error_no_scheme">В строке нет схемы: укажите адрес вида https://… или вставьте ключ vless://…</string>
+    <string name="add_sub_error_broken_import">В ссылке «%1$s» нет адреса подписки: скопируйте её целиком</string>
+    <string name="add_sub_error_broken_key">Ключ «%1$s» не разобран: в нём нет хоста или порта</string>
     <string name="add_sub_error_network">Не удалось скачать подписку: проверьте ссылку и сеть</string>
     <string name="add_sub_error_empty_payload">Подписка пришла пустой</string>
     <string name="add_sub_error_no_nodes">В подписке не нашлось ни одного поддерживаемого сервера</string>

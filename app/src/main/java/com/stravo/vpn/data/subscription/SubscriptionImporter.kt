@@ -6,6 +6,7 @@ import com.stravo.vpn.domain.subscription.ParsedLink
 import com.stravo.vpn.domain.subscription.SubscriptionLinkParser
 import com.stravo.vpn.domain.subscription.SubscriptionNode
 import com.stravo.vpn.domain.subscription.SubscriptionPayload
+import com.stravo.vpn.domain.subscription.Unrecognized
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -32,7 +33,12 @@ sealed interface ImportOutcome {
         val nodes: List<SubscriptionNode>,
     ) : ImportOutcome
 
-    data class Failure(val error: ImportError) : ImportOutcome
+    /** [reason] и [token] уточняют ошибку: что именно не распознано (обычно схема). */
+    data class Failure(
+        val error: ImportError,
+        val reason: Unrecognized? = null,
+        val token: String? = null,
+    ) : ImportOutcome
 }
 
 /**
@@ -56,7 +62,19 @@ class SubscriptionImporter(private val secrets: SecretStore) {
                 Source(SubscriptionPayload.split(remote.body), remote.planName, remote.activeUntil)
             }
 
-            ParsedLink.Unknown -> return@withContext ImportOutcome.Failure(ImportError.UNKNOWN_LINK)
+            is ParsedLink.Unknown -> {
+                // Вставили тело подписки целиком: строк или base64 со списком ссылок.
+                val lines = SubscriptionPayload.split(value)
+                if (lines.size > 1) {
+                    Source(lines, null, null)
+                } else {
+                    return@withContext ImportOutcome.Failure(
+                        error = ImportError.UNKNOWN_LINK,
+                        reason = parsed.reason,
+                        token = parsed.token,
+                    )
+                }
+            }
         }
 
         if (source.links.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.EMPTY_PAYLOAD)

@@ -34,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.stravo.vpn.R
 import com.stravo.vpn.data.subscription.ImportError
+import com.stravo.vpn.domain.subscription.Unrecognized
 import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PencilButtonStyle
 import com.stravo.vpn.ui.components.StravoCard
@@ -237,18 +238,33 @@ private fun importMessage(state: SubscriptionImportState): String? = when (state
     SubscriptionImportState.Loading -> stringResource(id = R.string.add_sub_loading)
     is SubscriptionImportState.Done -> stringResource(id = R.string.add_sub_done) +
         ". " + stringResource(id = R.string.add_sub_done_sub)
-    is SubscriptionImportState.Failed -> importErrorText(state.error)
+    is SubscriptionImportState.Failed -> importErrorText(state)
 }
 
+/** Ошибка объясняет, ЧТО именно не распознано, а не только «не похоже на ссылку». */
 @Composable
-private fun importErrorText(error: ImportError): String = when (error) {
+private fun importErrorText(state: SubscriptionImportState.Failed): String = when (state.error) {
     ImportError.EMPTY -> stringResource(id = R.string.add_sub_error_empty)
-    ImportError.UNKNOWN_LINK -> stringResource(id = R.string.add_sub_error_unknown)
     ImportError.NETWORK -> stringResource(id = R.string.add_sub_error_network)
     ImportError.EMPTY_PAYLOAD -> stringResource(id = R.string.add_sub_error_empty_payload)
     ImportError.NO_NODES -> stringResource(id = R.string.add_sub_error_no_nodes)
     ImportError.TOO_MANY_NODES -> stringResource(id = R.string.add_sub_error_too_many)
     ImportError.SECRET_STORE -> stringResource(id = R.string.add_sub_error_secret_store)
+    ImportError.UNKNOWN_LINK -> when (state.reason) {
+        Unrecognized.UNKNOWN_SCHEME ->
+            stringResource(id = R.string.add_sub_error_unknown_scheme, state.token.orEmpty())
+
+        Unrecognized.BROKEN_IMPORT_LINK ->
+            stringResource(id = R.string.add_sub_error_broken_import, state.token.orEmpty())
+
+        Unrecognized.BROKEN_KEY ->
+            stringResource(id = R.string.add_sub_error_broken_key, state.token.orEmpty())
+
+        Unrecognized.NO_SCHEME, Unrecognized.NOT_A_SINGLE_LINK ->
+            stringResource(id = R.string.add_sub_error_no_scheme)
+
+        else -> stringResource(id = R.string.add_sub_error_unknown)
+    }
 }
 
 private fun readClipboard(context: Context): String? {

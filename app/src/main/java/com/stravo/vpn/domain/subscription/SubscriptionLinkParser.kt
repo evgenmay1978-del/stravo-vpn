@@ -7,8 +7,14 @@ import com.stravo.vpn.domain.model.VpnTransport
 import java.security.MessageDigest
 
 /**
- * Разбор ссылок подписки: vless://, anytls://, hysteria2://, trojan://, ss:// и https-ссылки
- * на подписку. Разбор полностью офлайновый и никуда не ходит.
+ * Разбор ссылок подписки. Полностью офлайновый, никуда не ходит.
+ *
+ * Понимает три вида строк:
+ *  1. ссылка подписки — http(s), в том числе без схемы (голый домен sub.example.com/x);
+ *  2. одиночный ключ — vless://, anytls://, hysteria2://, hy2://, trojan://, ss://;
+ *  3. ссылка-обёртка клиента — happ://add/…, incy://…, sub://…, v2rayng://install-sub?url=…,
+ *     clash://install-config?url=…, sing-box://import-remote-profile?url=… и другие:
+ *     из неё достаётся вложенный http(s)-адрес или ключ, в том числе из base64.
  *
  * Секреты (UUID, пароли, ключи Reality) остаются внутри [ParsedLink.Node.secretConfig]
  * и наружу не отдаются.
@@ -17,16 +23,45 @@ object SubscriptionLinkParser {
 
     private const val MAX_LINK_LENGTH = 8192
 
+    /** Схемы клиентов-обёрток: сами по себе они контейнер, а не адрес подписки. */
+    private val wrapperSchemes: Set<String> = setOf(
+        "happ", "incy", "sub", "v2rayng", "v2raytun", "clash", "clashmeta",
+        "sing-box", "singbox", "streisand", "shadowrocket", "karing",
+        "hiddify", "nekobox", "nekoray", "foxray", "stash", "quantumult",
+        "loon", "surge", "sn",
+    )
+
+    private val schemePattern = Regex("^([A-Za-z][A-Za-z0-9+.\\-]*)://")
+    private val hostPattern = Regex("^[A-Za-z0-9]([A-Za-z0-9\\-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9\\-]*[A-Za-z0-9])?)+$")
+
     fun parse(raw: String): ParsedLink {
         val value = raw.trim()
-        if (value.isEmpty() || value.length > MAX_LINK_LENGTH) return ParsedLink.Unknown
-        if (!value.contains("://")) return ParsedLink.Unknown
+        if (value.isEmpty()) return ParsedLink.Unknown(Unrecognized.EMPTY)
+        if (value.length > MAX_LINK_LENGTH) return ParsedLink.Unknown(Unrecognized.TOO_LONG)
+        if (value.any { it == ' ' || it == '\t' || it == '\n' || it == '\r' }) {
+            return ParsedLink.Unknown(Unrecognized.NOT_A_SINGLE_LINK)
+        }
 
-        val scheme = value.substringBefore("://").lowercase()
+        val scheme = schemeOf(value)
+        if (scheme == null) {
+            val asDomain = bareDomain(value)
+            return if (asDomain != null) {
+                ParsedLink.SubscriptionUrl(asDomain)
+            } else {
+                ParsedLink.Unknown(Unrecognized.NO_SCHEME)
+            }
+        }
+
         if (scheme == "http" || scheme == "https") return ParsedLink.SubscriptionUrl(value)
 
-        val protocol = ProtocolCatalog.byScheme(scheme) ?: return ParsedLink.Unknown
-        return parseNode(value, protocol) ?: ParsedLink.Unknown
+        val protocol = ProtocolCatalog.byScheme(scheme)
+        if (protocol != null) {
+            return parseNode(value, protocol) ?: ParsedLink.Unknown(Unrecognized.BROKEN_KEY, scheme)
+        }
+
+        if (scheme in wrapperSchemes) return unwrap(value, scheme)
+
+        return ParsedLink.Unknown(Unrecognized.UNKNOWN_SCHEME, scheme)
     }
 
     /** Разбирает строку целиком; если это не ссылка — возвращает null. */
@@ -74,6 +109,71 @@ object SubscriptionLinkParser {
         }
         return builder.toString()
     }
+
+    // --- Ссылки-обёртки ---------------------------------------------------
+
+    private fun unwrap(value: String, scheme: String): ParsedLink {
+        val body = value.substringAfter("://", "").trim()
+        if (body.isEmpty()) return ParsedLink.Unknown(Unrecognized.BROKEN_IMPORT_LINK, scheme)
+
+        val query = body.substringAfter('?', "")
+        if (query.isNotEmpty()) {
+            val url = parseQuery(query)["url"]
+            if (!url.isNullOrBlank()) return embedded(url, scheme)
+        }
+
+        findHttpUrl(body)?.let { return embedded(it, scheme) }
+
+        // Хвост строки может быть base64 от адреса: happ://add/aHR0cHM6Ly8…
+        val candidates = listOf(body, body.substringAfterLast('/'))
+        for (candidate in candidates) {
+            val decoded = Base64Codec.decodeOrNull(candidate)?.trim() ?: continue
+            findHttpUrl(decoded)?.let { return embedded(it, scheme) }
+        }
+
+        return ParsedLink.Unknown(Unrecognized.BROKEN_IMPORT_LINK, scheme)
+    }
+
+    /** Вложенная ссылка внутри обёртки: http(s)-адрес или ключ протокола. */
+    private fun embedded(inner: String, wrapper: String): ParsedLink {
+        val value = inner.trim()
+        val scheme = schemeOf(value) ?: return ParsedLink.Unknown(Unrecognized.BROKEN_IMPORT_LINK, wrapper)
+        if (scheme == "http" || scheme == "https") return ParsedLink.SubscriptionUrl(value)
+        val protocol = ProtocolCatalog.byScheme(scheme)
+            ?: return ParsedLink.Unknown(Unrecognized.BROKEN_IMPORT_LINK, wrapper)
+        return parseNode(value, protocol) ?: ParsedLink.Unknown(Unrecognized.BROKEN_KEY, scheme)
+    }
+
+    private fun findHttpUrl(text: String): String? {
+        val lower = text.lowercase()
+        val https = lower.indexOf("https://")
+        val http = lower.indexOf("http://")
+        val start = when {
+            https < 0 -> http
+            http < 0 -> https
+            else -> minOf(https, http)
+        }
+        if (start < 0) return null
+        val tail = text.substring(start)
+        val cut = tail.indexOfAny(charArrayOf('&', '#', ' ', '\t', '\n', '\r', '"', '\''))
+        val candidate = (if (cut > 0) tail.substring(0, cut) else tail).trimEnd()
+        return candidate.takeIf { it.length > HTTP_PREFIX_MIN }
+    }
+
+    private fun schemeOf(value: String): String? =
+        schemePattern.find(value)?.groupValues?.get(1)?.lowercase()
+
+    /** Голый домен без схемы: sub.example.com/path → https://sub.example.com/path. */
+    private fun bareDomain(value: String): String? {
+        val head = value.substringBefore('/').substringBefore('?').substringBefore('#')
+        if (head.isEmpty()) return null
+        val hostPort = if (head.contains('@')) head.substringAfterLast('@') else head
+        val host = hostPort.substringBefore(':')
+        if (!hostPattern.matches(host)) return null
+        return "https://$value"
+    }
+
+    // --- Протокол узла ----------------------------------------------------
 
     private fun defaultName(
         protocol: VpnProtocol,
@@ -166,7 +266,7 @@ object SubscriptionLinkParser {
         while (index < value.length) {
             val char = value[index]
             when {
-                char == '%' && index + 2 < value.length + 1 && index + 2 <= value.length - 1 -> {
+                char == '%' && index + 2 <= value.length - 1 -> {
                     val code = value.substring(index + 1, index + 3).toIntOrNull(16)
                     if (code == null) {
                         bytes.write(char.code)
@@ -192,5 +292,5 @@ object SubscriptionLinkParser {
     }
 
     private const val HEX = "0123456789abcdef"
+    private const val HTTP_PREFIX_MIN = 8
 }
-

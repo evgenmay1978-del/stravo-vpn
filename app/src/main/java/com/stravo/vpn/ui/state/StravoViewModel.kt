@@ -162,7 +162,13 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                 }
 
                 is ImportOutcome.Failure -> _home.update {
-                    it.copy(importState = SubscriptionImportState.Failed(outcome.error))
+                    it.copy(
+                        importState = SubscriptionImportState.Failed(
+                            error = outcome.error,
+                            reason = outcome.reason,
+                            token = outcome.token,
+                        ),
+                    )
                 }
             }
         }

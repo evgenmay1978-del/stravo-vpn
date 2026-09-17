@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -39,6 +40,7 @@ import com.stravo.vpn.ui.state.StravoViewModel
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
+import kotlinx.coroutines.delay
 
 /** Корень мобильного приложения: один NavHost-стек и нижняя навигация. */
 @Composable
@@ -54,6 +56,14 @@ fun MobileRoot(
     val palette = LocalStravoPalette.current
 
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
+
+    // Плашка не живёт вечно и не перекрывает главную кнопку.
+    LaunchedEffect(state.notice) {
+        if (state.notice != null) {
+            delay(NOTICE_VISIBLE_MS)
+            viewModel.onEvent(HomeEvent.NoticeConsumed)
+        }
+    }
 
     PaperCanvas(modifier = modifier.fillMaxSize()) {
         Column(
@@ -201,3 +211,5 @@ private fun NoticeBar(text: String, modifier: Modifier = Modifier) {
         Text(text = text, style = StravoType.Caption, color = palette.onAccent)
     }
 }
+
+private const val NOTICE_VISIBLE_MS = 4000L

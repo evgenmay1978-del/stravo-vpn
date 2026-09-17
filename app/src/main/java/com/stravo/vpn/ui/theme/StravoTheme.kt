@@ -1,6 +1,5 @@
 package com.stravo.vpn.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -13,10 +12,11 @@ fun StravoTheme(
     formFactor: FormFactor,
     content: @Composable () -> Unit,
 ) {
-    // На TV всегда графитовая панель, на телефоне — бумага, независимо от системной темы.
+    // Телефон — всегда бумага: макет STRAVO светлый, системная тёмная тема его не меняет.
+    // TV — всегда графитовая панель.
     val palette = when (formFactor) {
         FormFactor.TV -> StravoPalette.Dark
-        FormFactor.PHONE -> if (isSystemInDarkTheme()) StravoPalette.Dark else StravoPalette.Light
+        FormFactor.PHONE -> StravoPalette.Light
     }
     val scheme = if (palette.isDark) {
         darkColorScheme(

@@ -12,12 +12,17 @@ import com.stravo.vpn.domain.model.VpnStats
 import com.stravo.vpn.domain.policy.CapabilityPolicy
 import com.stravo.vpn.domain.subscription.SubscriptionLocations
 import com.stravo.vpn.domain.subscription.SubscriptionNode
+import com.stravo.vpn.domain.subscription.Unrecognized
 
 /** Состояние добавления подписки. */
 sealed interface SubscriptionImportState {
     data object Idle : SubscriptionImportState
     data object Loading : SubscriptionImportState
-    data class Failed(val error: ImportError) : SubscriptionImportState
+    data class Failed(
+        val error: ImportError,
+        val reason: Unrecognized? = null,
+        val token: String? = null,
+    ) : SubscriptionImportState
     data class Done(val nodeCount: Int) : SubscriptionImportState
 }
 
