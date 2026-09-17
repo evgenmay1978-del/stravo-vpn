@@ -37,6 +37,7 @@ import com.stravo.vpn.telegram.BotLaunchResult
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.BrandMark
+import com.stravo.vpn.ui.components.CoreLogCard
 import com.stravo.vpn.ui.components.IconAction
 import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PencilButtonStyle
@@ -185,6 +186,28 @@ fun HomeScreen(
 
         StravoCard(modifier = Modifier.fillMaxWidth()) {
             StravoStatRow(stats = state.stats)
+        }
+
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
+
+        // Журнал ядра: пока туннель не возит трафик, это единственный способ
+        // увидеть, что именно сказало ядро (системный лог чужому uid недоступен).
+        CoreLogCard(
+            title = stringResource(id = R.string.diag_core_log),
+            lines = state.coreLog,
+        )
+        if (state.coreLog.isNotEmpty()) {
+            PencilButton(
+                text = stringResource(
+                    id = if (state.probing) R.string.diag_probe_running else R.string.diag_probe,
+                ),
+                onClick = { onEvent(HomeEvent.ProbeClick) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = StravoTokens.SpaceSm),
+                style = PencilButtonStyle.Secondary,
+                leadingIcon = painterResource(id = R.drawable.ic_network),
+            )
         }
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
