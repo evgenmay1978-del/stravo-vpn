@@ -124,6 +124,12 @@ object SubscriptionLinkParser {
 
         findHttpUrl(body)?.let { return embedded(it, scheme) }
 
+        // Адрес может быть процентно закодирован: happ://add/https%3A%2F%2F…
+        val decodedBody = decodeComponent(body)
+        if (decodedBody != body) {
+            findHttpUrl(decodedBody)?.let { return embedded(it, scheme) }
+        }
+
         // Хвост строки может быть base64 от адреса: happ://add/aHR0cHM6Ly8…
         val candidates = listOf(body, body.substringAfterLast('/'))
         for (candidate in candidates) {
