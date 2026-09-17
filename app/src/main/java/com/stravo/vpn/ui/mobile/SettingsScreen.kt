@@ -37,7 +37,7 @@ fun SettingsScreen(
     val palette = LocalStravoPalette.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
 
-    val protocols = listOf("Авто (рекомендуется)") + StravoConfig.PROTOCOLS.filter { it != "Авто" }
+    val protocols = StravoConfig.PROTOCOLS
     val languages = listOf("Русский", "English")
 
     Column(

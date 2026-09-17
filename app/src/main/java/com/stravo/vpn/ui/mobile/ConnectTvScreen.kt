@@ -37,6 +37,10 @@ import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 
 /** Экран телефона «Подключить ТВ»: пошаговая инструкция и переход в бота. */
 @Composable
@@ -166,11 +170,13 @@ fun ConnectTvScreen(
 @Composable
 internal fun StepBadge(number: Int) {
     val palette = LocalStravoPalette.current
-    Column(
-        modifier = Modifier.size(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .border(1.dp, palette.outline.copy(alpha = 0.45f), CircleShape),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(text = number.toString(), style = StravoType.BodyStrong, color = palette.accent)
+        Text(text = number.toString(), style = StravoType.Caption, color = palette.textPrimary)
     }
 }

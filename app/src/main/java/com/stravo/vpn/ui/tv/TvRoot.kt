@@ -51,6 +51,8 @@ import com.stravo.vpn.ui.state.StravoViewModel
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 
 /**
  * Корень Android TV: боковой рельс, контент и полоса протоколов.
@@ -203,11 +205,13 @@ private fun TvRailItem(
 private fun TvProtocolStrip(modifier: Modifier = Modifier) {
     val palette = LocalStravoPalette.current
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceMd),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StravoConfig.PROTOCOLS.forEachIndexed { index, protocol ->
+        StravoConfig.PROTOCOL_STRIP.forEachIndexed { index, protocol ->
             val active = index == 0
             Box(
                 modifier = Modifier

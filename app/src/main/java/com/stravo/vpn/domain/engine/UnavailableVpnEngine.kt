@@ -13,9 +13,13 @@ import kotlinx.coroutines.flow.update
  *
  * Приложение НЕ имитирует подключение таймером: попытка соединения сразу возвращает
  * понятную ошибку, а состояние «ГОТОВО К ПОДКЛЮЧЕНИЮ» остаётся исходным.
- * Что именно нужно от серверной стороны — описано в docs/IMPLEMENTATION.md.
+ *
+ * Если конфиг узла уже разобран и лежит в защищённом хранилище, текст ошибки это
+ * учитывает: ядру осталось только забрать ключ. Что именно нужно от ядра —
+ * описано в docs/IMPLEMENTATION.md.
  */
 class UnavailableVpnEngine(
+    private val configProvider: VpnConfigProvider? = null,
     private val reason: String = MISSING_CORE_REASON,
 ) : VpnEngine {
 
@@ -26,7 +30,7 @@ class UnavailableVpnEngine(
     override suspend fun connect(profile: VpnProfile?, location: VpnLocation) {
         state.update { current ->
             current.copy(
-                state = ConnectionState.Error(reason),
+                state = ConnectionState.Error(reasonFor(profile)),
                 locationId = location.id,
                 connectedSince = null,
             )
@@ -37,8 +41,17 @@ class UnavailableVpnEngine(
         state.update { VpnConnectionSnapshot() }
     }
 
+    private fun reasonFor(profile: VpnProfile?): String {
+        val hasConfig = profile != null && configProvider?.configFor(profile.id) != null
+        return if (hasConfig) CONFIG_READY_REASON else reason
+    }
+
     companion object {
         const val MISSING_CORE_REASON: String =
             "Ядро туннеля не подключено в этой сборке: нужен VpnService и контракт подписки"
+
+        const val CONFIG_READY_REASON: String =
+            "Ядро туннеля не подключено в этой сборке: ключ узла разобран и лежит в защищённом хранилище"
     }
 }
+

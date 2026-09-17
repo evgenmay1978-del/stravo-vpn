@@ -150,5 +150,18 @@ object ProtocolCatalog {
         add(ANYTLS.displayName)
         add(WEBRTC.displayName)
     }
+
+    /**
+     * Короткие подписи для полосы протоколов на TV: там мало места,
+     * длинные строки вроде «VLESS + XHTTP» не помещаются в чип.
+     */
+    val stripLabels: List<String> = listOf(
+        "Авто",
+        VLESS.displayName,
+        VpnTransport.XHTTP.displayName,
+        HYSTERIA2.displayName,
+        ANYTLS.displayName,
+        WEBRTC.displayName,
+    )
 }
 

@@ -7,6 +7,7 @@ import com.stravo.vpn.data.settings.SettingsRepository
 import com.stravo.vpn.data.subscription.SubscriptionImporter
 import com.stravo.vpn.data.subscription.SubscriptionRepository
 import com.stravo.vpn.domain.engine.UnavailableVpnEngine
+import com.stravo.vpn.domain.engine.VpnConfigProvider
 import com.stravo.vpn.domain.engine.VpnEngine
 import com.stravo.vpn.pairing.PairingRepository
 
@@ -26,7 +27,12 @@ class AppContainer(context: Context) {
 
     val pairing: PairingRepository = PairingRepository()
 
-    /** Настоящего ядра пока нет — см. docs/IMPLEMENTATION.md. */
-    val vpnEngine: VpnEngine = UnavailableVpnEngine()
+    /**
+     * Настоящего ядра пока нет — см. docs/IMPLEMENTATION.md. Контракт уже полный:
+     * ядро получает профиль и может забрать конфиг узла через [VpnConfigProvider].
+     */
+    val vpnEngine: VpnEngine = UnavailableVpnEngine(
+        configProvider = VpnConfigProvider { nodeId -> subscriptionImporter.configFor(nodeId) },
+    )
 }
 

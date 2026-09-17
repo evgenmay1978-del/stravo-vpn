@@ -21,6 +21,9 @@ object StravoConfig {
      */
     val PROTOCOLS: List<String> = ProtocolCatalog.settingsLabels
 
+    /** Полоса протоколов на TV: короткие подписи, без переносов. */
+    val PROTOCOL_STRIP: List<String> = ProtocolCatalog.stripLabels
+
     fun startParamFor(formFactor: FormFactor): String =
         if (formFactor == FormFactor.TV) START_PARAM_TV else START_PARAM_MOBILE
 }
