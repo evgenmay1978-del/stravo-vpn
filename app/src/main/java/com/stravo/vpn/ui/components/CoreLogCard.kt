@@ -54,5 +54,18 @@ fun CoreLogCard(
                 color = palette.textSecondary,
             )
         }
+        // Последние строки — отдельными строками: их видно целиком, даже если
+        // общий блок прокручивается.
+        if (lines.size > 1) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = StravoTokens.SpaceSm)) {
+                lines.takeLast(3).forEach { line ->
+                    Text(
+                        text = line,
+                        style = StravoType.Tiny.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
+                        color = palette.textSecondary,
+                    )
+                }
+            }
+        }
     }
 }
