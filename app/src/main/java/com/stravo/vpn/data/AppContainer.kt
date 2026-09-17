@@ -3,6 +3,7 @@ package com.stravo.vpn.data
 import android.content.Context
 import com.stravo.vpn.data.diagnostics.CoreTrace
 import com.stravo.vpn.data.diagnostics.StartupDiagnostics
+import com.stravo.vpn.data.diagnostics.TunnelProbe
 import com.stravo.vpn.data.profile.ProfileRepository
 import com.stravo.vpn.data.secret.SecretStore
 import com.stravo.vpn.data.settings.SettingsRepository
@@ -11,6 +12,7 @@ import com.stravo.vpn.data.subscription.SubscriptionRepository
 import com.stravo.vpn.domain.engine.UnavailableVpnEngine
 import com.stravo.vpn.domain.engine.VpnConfigProvider
 import com.stravo.vpn.domain.engine.VpnEngine
+import com.stravo.vpn.engine.box.CoreTuning
 import com.stravo.vpn.engine.box.SingBoxVpnEngine
 import com.stravo.vpn.engine.box.TunnelCore
 import com.stravo.vpn.pairing.PairingRepository
@@ -36,6 +38,12 @@ class AppContainer(context: Context) {
 
     /** Шаги запуска ядра: нужны, чтобы честно объяснить аварийное завершение. */
     val coreTrace: CoreTrace = CoreTrace(appContext)
+
+    /** Самопроверка туннеля: внешний адрес со стороны узла и контрольный запрос. */
+    val tunnelProbe: TunnelProbe = TunnelProbe(appContext, coreTrace)
+
+    /** Диагностический вариант сборки конфига ядра: переключается на живом устройстве. */
+    val coreTuning: CoreTuning = CoreTuning(appContext)
 
     /** Одна строка о прошлом запуске, если он завершился нештатно. Показывается один раз. */
     val startupDiagnostics: String? = StartupDiagnostics(appContext).message
