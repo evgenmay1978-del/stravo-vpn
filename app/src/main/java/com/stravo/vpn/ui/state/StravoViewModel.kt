@@ -46,6 +46,10 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         container.settings.update(transform)
     }
 
+    /** Сохраняет журнал ядра файлом в «Загрузки». Возвращает имя файла или null. */
+    fun saveCoreLog(): String? =
+        container.coreLogExporter.export(container.coreTrace.logLines())
+
     /** Текущий диагностический вариант ядра и его подпись для настроек. */
     fun coreVariant(): CoreVariant = container.coreTuning.variant()
 
