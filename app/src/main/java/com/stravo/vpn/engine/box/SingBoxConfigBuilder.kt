@@ -37,7 +37,18 @@ object SingBoxConfigBuilder {
     /** Транспорты, которых нет в этой сборке ядра (docs/IMPLEMENTATION.md, раздел 1c). */
     private val unsupportedTransports = setOf("xhttp", "splithttp")
 
-    fun build(link: String): CoreConfig {
+    /**
+     * [variant] выбирает диагностический вариант сборки: когда туннель поднимается,
+     * а трафик не идёт, причину ищут перебором (см. [CoreVariant]).
+     *
+     * [directMode] пускает трафик туннеля напрямую, без узла: так проверяют сам TUN,
+     * DNS и маршруты, когда узел под подозрением.
+     */
+    fun build(
+        link: String,
+        variant: CoreVariant = CoreVariant.BASE,
+        directMode: Boolean = false,
+    ): CoreConfig {
         val value = link.trim()
         val scheme = value.substringBefore("://", "").lowercase()
         if (scheme.isEmpty() || !value.contains("://")) return CoreConfig.Broken
@@ -57,7 +68,7 @@ object SingBoxConfigBuilder {
             else -> return CoreConfig.Broken
         }
 
-        return CoreConfig.Ready(assemble(outbound).toString())
+        return CoreConfig.Ready(assemble(outbound, variant, directMode).toString())
     }
 
     // --- Протоколы --------------------------------------------------------
@@ -207,7 +218,14 @@ object SingBoxConfigBuilder {
 
     // --- Каркас конфига ---------------------------------------------------
 
-    private fun assemble(outbound: JSONObject): JSONObject {
+    private fun assemble(
+        outbound: JSONObject,
+        variant: CoreVariant,
+        directMode: Boolean,
+    ): JSONObject {
+        // Вариант «DNS напрямую» оставляет резолвер в сети оператора: если с ним
+        // страницы открываются, значит трафик до узла не доходит из-за DNS-петли.
+        val directResolver = variant == CoreVariant.DIRECT_RESOLVER || directMode
         val dns = JSONObject()
             .put(
                 "servers",
@@ -218,7 +236,7 @@ object SingBoxConfigBuilder {
                             .put("type", "udp")
                             .put("tag", "dns-proxy")
                             .put("server", "1.1.1.1")
-                            .put("detour", TAG_PROXY),
+                            .put("detour", if (directResolver) TAG_DIRECT else TAG_PROXY),
                     ),
             )
             .put("final", "dns-proxy")
@@ -231,7 +249,10 @@ object SingBoxConfigBuilder {
             .put("mtu", 9000)
             .put("auto_route", true)
             .put("strict_route", false)
-            .put("stack", "mixed")
+            .put("stack", if (variant == CoreVariant.SYSTEM_STACK) "system" else "mixed")
+            // Разбор протокола нужен правилу hijack-dns: без него DNS-пакеты
+            // уходят в туннель как обычный UDP и остаются без ответа.
+            .put("sniff", variant != CoreVariant.NO_SNIFF)
 
         val route = JSONObject()
             .put(
@@ -240,12 +261,14 @@ object SingBoxConfigBuilder {
                     .put(JSONObject().put("action", "sniff"))
                     .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns")),
             )
-            .put("final", TAG_PROXY)
+            .put("final", if (directResolver) TAG_DIRECT else TAG_PROXY)
             .put("auto_detect_interface", true)
             .put("default_domain_resolver", JSONObject().put("server", "dns-direct"))
 
         return JSONObject()
-            .put("log", JSONObject().put("level", "warn"))
+            // debug: пока туннель не возит трафик, сообщения ядра — единственная
+            // диагностика. В интерфейс они попадают без адресов и ключей (CoreTrace).
+            .put("log", JSONObject().put("level", "debug"))
             .put("dns", dns)
             .put("inbounds", JSONArray().put(inbound))
             .put(
