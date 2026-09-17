@@ -13,6 +13,7 @@ import com.stravo.vpn.domain.model.NetworkMode
 import com.stravo.vpn.domain.model.VpnProfile
 import com.stravo.vpn.domain.model.VpnStats
 import com.stravo.vpn.domain.policy.CapabilityPolicy
+import com.stravo.vpn.engine.box.CoreVariant
 import com.stravo.vpn.pairing.PairingState
 import com.stravo.vpn.pairing.PairingStatus
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,12 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         container.settings.update(transform)
     }
 
+    /** Текущий диагностический вариант ядра и его подпись для настроек. */
+    fun coreVariant(): CoreVariant = container.coreTuning.variant()
+
+    /** Следующий вариант по кругу: применится при следующем подключении. */
+    fun nextCoreVariant(): CoreVariant = container.coreTuning.next()
+
     init {
         container.startupDiagnostics?.let { message ->
             _home.update { it.copy(diagnostics = message) }
@@ -52,7 +59,9 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         container.vpnEngine.observeState().let { engineState ->
             scope.launch {
                 engineState.collect { snapshot ->
-                    _home.update { it.copy(connection = snapshot.state) }
+                    _home.update {
+                        it.copy(connection = snapshot.state, coreLog = coreLogLines())
+                    }
                 }
             }
         }
@@ -96,6 +105,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         when (event) {
             HomeEvent.PowerClick -> toggleConnection()
             HomeEvent.Retry -> toggleConnection(forceConnect = true)
+            HomeEvent.ProbeClick -> runProbe()
             HomeEvent.QuickConnectClick -> Unit
             HomeEvent.NoticeConsumed -> _home.update { it.copy(notice = null) }
             is HomeEvent.NoticeShown -> _home.update { it.copy(notice = event.notice) }
@@ -138,6 +148,22 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    /** Самопроверка туннеля: строки пробы попадают в журнал ядра на главном экране. */
+    private fun runProbe() {
+        if (_home.value.probing) return
+        _home.update { it.copy(probing = true) }
+        scope.launch {
+            try {
+                container.tunnelProbe.run()
+            } finally {
+                _home.update { it.copy(probing = false, coreLog = coreLogLines()) }
+            }
+        }
+    }
+
+    private fun coreLogLines(): List<String> =
+        container.coreTrace.logLines().takeLast(CORE_LOG_LINES)
 
     // --- Подписка ---------------------------------------------------------
 
@@ -260,6 +286,9 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     companion object {
+        /** Сколько последних строк журнала ядра показываем на главном экране. */
+        const val CORE_LOG_LINES = 40
+
         const val STATS_PLACEHOLDER: String = VpnStats.PLACEHOLDER
         val CONNECTED_STATE: ConnectionState = ConnectionState.Connected
         val PAIRING_SUCCESS: PairingStatus = PairingStatus.SUCCESS
