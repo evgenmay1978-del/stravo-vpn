@@ -143,7 +143,7 @@ object ProtocolCatalog {
 
     /** Подписи для экрана настроек: «Авто», протоколы и отдельная строка для VLESS + XHTTP. */
     val settingsLabels: List<String> = buildList {
-        add("Авто")
+        add("Авто (рекомендуется)")
         add(VLESS.displayName)
         add(VLESS.displayName + " + " + VpnTransport.XHTTP.displayName)
         add(HYSTERIA2.displayName)
