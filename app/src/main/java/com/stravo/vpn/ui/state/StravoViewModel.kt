@@ -50,6 +50,13 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     fun saveCoreLog(): String? =
         container.coreLogExporter.export(container.coreTrace.logLines())
 
+    /** Копирует журнал ядра в буфер обмена: так его видно даже без файла. */
+    fun copyCoreLog(): Int {
+        val lines = container.coreTrace.logLines()
+        container.clipboard.copy(lines.joinToString("\n"))
+        return lines.size
+    }
+
     /** Текущий диагностический вариант ядра и его подпись для настроек. */
     fun coreVariant(): CoreVariant = container.coreTuning.variant()
 
