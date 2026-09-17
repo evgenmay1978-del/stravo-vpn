@@ -115,6 +115,11 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     private fun toggleConnection(forceConnect: Boolean = false) {
         val current = _home.value
         val shouldConnect = forceConnect || !current.connection.isActive
+        if (shouldConnect && current.formFactor.isPhone && !current.subscription.isActive && current.profile == null) {
+            // Подключать нечего: сначала подписка, потом ядро. Без выдуманного успеха.
+            _home.update { it.copy(notice = Notice.SUBSCRIPTION_REQUIRED) }
+            return
+        }
         scope.launch {
             if (shouldConnect) {
                 val node = current.nodeFor(current.location.id)

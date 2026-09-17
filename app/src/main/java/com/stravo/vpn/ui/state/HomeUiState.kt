@@ -61,6 +61,7 @@ enum class Notice {
     SCAN_INVALID,
     SUBSCRIPTION_ADDED,
     SUBSCRIPTION_REMOVED,
+    SUBSCRIPTION_REQUIRED,
 }
 
 /** Все побочные эффекты идут событиями — Compose не дёргает сервисы напрямую. */

@@ -160,6 +160,7 @@ private fun noticeText(notice: Notice?): String = when (notice) {
     Notice.SCAN_INVALID -> stringResource(id = R.string.notice_scan_invalid)
     Notice.SUBSCRIPTION_ADDED -> stringResource(id = R.string.notice_subscription_added)
     Notice.SUBSCRIPTION_REMOVED -> stringResource(id = R.string.notice_subscription_removed)
+    Notice.SUBSCRIPTION_REQUIRED -> stringResource(id = R.string.notice_subscription_required)
     null -> ""
 }
 
