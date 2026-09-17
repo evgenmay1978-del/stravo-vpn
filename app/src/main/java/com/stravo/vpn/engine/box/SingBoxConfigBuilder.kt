@@ -31,6 +31,9 @@ object SingBoxConfigBuilder {
 
     private const val TAG_PROXY = "proxy"
     private const val TAG_DIRECT = "direct"
+    private const val TAG_BLOCK = "block-quic"
+    private const val TAG_SOCKS = "socks-in"
+    private const val LOCAL_PROXY_PORT = 10808
     private const val TUN_MTU = 1500
     private const val TUN_IPV4 = "172.19.0.1/30"
     private const val TUN_IPV6 = "fdfe:dcba:9876::1/126"
@@ -260,23 +263,49 @@ object SingBoxConfigBuilder {
                 "rules",
                 JSONArray()
                     .put(JSONObject().put("action", "sniff"))
-                    .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns")),
+                    .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
+                    // QUIC в туннеле не поддержан: приложения должны уйти на TCP сразу,
+                    // а не висеть на UDP/443 (так же поступает рабочий клиент на этих узлах).
+                    .put(
+                        JSONObject()
+                            .put("network", "udp")
+                            .put("port", 443)
+                            .put("action", "route")
+                            .put("outbound", TAG_BLOCK),
+                    ),
             )
             .put("final", if (directResolver) TAG_DIRECT else TAG_PROXY)
             .put("auto_detect_interface", true)
             .put("default_domain_resolver", JSONObject().put("server", "dns-direct"))
+
+        val inbounds = JSONArray().put(inbound)
+        if (variant == CoreVariant.LOCAL_PROXY) {
+            // Диагностика без TUN и без маршрутов: локальный SOCKS/HTTP на телефоне.
+            // Если через него страницы открываются — ядро, узел и ключ рабочие,
+            // и причина в платформенном слое (TUN, маршруты, разрешения).
+            inbounds
+                .put(
+                    JSONObject()
+                        .put("type", "socks")
+                        .put("tag", TAG_SOCKS)
+                        .put("listen", "127.0.0.1")
+                        .put("listen_port", LOCAL_PROXY_PORT)
+                        .put("sniff", true),
+                )
+        }
 
         return JSONObject()
             // debug: пока туннель не возит трафик, сообщения ядра — единственная
             // диагностика. В интерфейс они попадают без адресов и ключей (CoreTrace).
             .put("log", JSONObject().put("level", "debug"))
             .put("dns", dns)
-            .put("inbounds", JSONArray().put(inbound))
+            .put("inbounds", inbounds)
             .put(
                 "outbounds",
                 JSONArray()
                     .put(outbound)
-                    .put(JSONObject().put("type", "direct").put("tag", TAG_DIRECT)),
+                    .put(JSONObject().put("type", "direct").put("tag", TAG_DIRECT))
+                    .put(JSONObject().put("type", "block").put("tag", TAG_BLOCK)),
             )
             .put("route", route)
     }
