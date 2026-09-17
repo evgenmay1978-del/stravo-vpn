@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +50,7 @@ fun MobileRoot(
     val context = LocalContext.current
     val state by viewModel.home.collectAsStateWithLifecycle()
     val pairing by viewModel.pairing.collectAsStateWithLifecycle()
+    var scanForSubscription by rememberSaveable { mutableStateOf(false) }
     val palette = LocalStravoPalette.current
 
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
@@ -77,22 +80,48 @@ fun MobileRoot(
                     Destination.PROFILE -> ProfileScreen(
                         state = state,
                         onConnectTv = { navigator.push(Destination.CONNECT_TV) },
+                        onAddSubscription = {
+                            viewModel.clearImportState()
+                            navigator.push(Destination.ADD_SUBSCRIPTION)
+                        },
+                        onBack = { navigator.back() },
+                    )
+
+                    Destination.ADD_SUBSCRIPTION -> AddSubscriptionScreen(
+                        state = state,
+                        onEvent = viewModel::onEvent,
+                        onScan = {
+                            scanForSubscription = true
+                            navigator.push(Destination.SCANNER)
+                        },
                         onBack = { navigator.back() },
                     )
 
                     Destination.CONNECT_TV -> ConnectTvScreen(
                         pairing = pairing,
                         onRefresh = { viewModel.refreshPairingExpiry() },
-                        onScan = { navigator.push(Destination.SCANNER) },
+                        onScan = {
+                            scanForSubscription = false
+                            navigator.push(Destination.SCANNER)
+                        },
                         onBack = { navigator.back() },
                     )
 
                     Destination.SCANNER -> QrScannerScreen(
                         onCode = { value ->
                             navigator.back()
-                            openScannedCode(context, value, viewModel)
+                            if (scanForSubscription) {
+                                viewModel.importSubscription(value)
+                            } else {
+                                openScannedCode(context, value, viewModel)
+                            }
                         },
                         onBack = { navigator.back() },
+                        subtitleRes = if (scanForSubscription) {
+                            R.string.scan_sub_subscription
+                        } else {
+                            R.string.scan_sub
+                        },
                     )
 
                     Destination.SETTINGS -> SettingsScreen(
@@ -129,6 +158,8 @@ private fun noticeText(notice: Notice?): String = when (notice) {
     Notice.PAIRING_BACKEND_MISSING -> stringResource(id = R.string.notice_pairing_backend_missing)
     Notice.PROFILE_MISSING -> stringResource(id = R.string.notice_profile_missing)
     Notice.SCAN_INVALID -> stringResource(id = R.string.notice_scan_invalid)
+    Notice.SUBSCRIPTION_ADDED -> stringResource(id = R.string.notice_subscription_added)
+    Notice.SUBSCRIPTION_REMOVED -> stringResource(id = R.string.notice_subscription_removed)
     null -> ""
 }
 

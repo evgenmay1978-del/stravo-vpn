@@ -1,6 +1,7 @@
 package com.stravo.vpn.core
 
 import com.stravo.vpn.domain.model.FormFactor
+import com.stravo.vpn.domain.model.ProtocolCatalog
 
 /**
  * Единственное место, где живёт конфигурация бота и версии.
@@ -14,8 +15,11 @@ object StravoConfig {
     const val START_PARAM_TV: String = "stravo_tv_quick_connect"
     const val START_PARAM_PAIR_PREFIX: String = "pair_"
 
-    /** Список протоколов показывается информационно, выбор делает сервер подписки. */
-    val PROTOCOLS: List<String> = listOf("Авто", "VLESS", "Hysteria2", "AnyTLS", "WebRTC")
+    /**
+     * Список протоколов информационный: транспорт выбирает конфиг узла из подписки.
+     * Значения берутся из каталога, чтобы настройки и разбор ссылок не разъезжались.
+     */
+    val PROTOCOLS: List<String> = ProtocolCatalog.settingsLabels
 
     fun startParamFor(formFactor: FormFactor): String =
         if (formFactor == FormFactor.TV) START_PARAM_TV else START_PARAM_MOBILE

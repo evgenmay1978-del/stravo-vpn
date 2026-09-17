@@ -104,4 +104,34 @@
     <string name="scan_sub">Наведите камеру на код в приложении на телевизоре</string>
     <string name="scan_hint">Код одноразовый и живёт 5 минут. Ссылка откроется в Telegram — подтвердите перенос.</string>
     <string name="scan_permission">Нужен доступ к камере. Разрешите его, чтобы отсканировать код с телевизора.</string>
+
+    <!-- Добавление подписки -->
+    <string name="add_sub_title">Добавить подписку</string>
+    <string name="add_sub_sub">Ссылка подписки или ключ доступа</string>
+    <string name="add_sub_field_hint">https://… , vless://… , anytls://…</string>
+    <string name="add_sub_action_add">Добавить</string>
+    <string name="add_sub_action_paste">Вставить из буфера</string>
+    <string name="add_sub_action_scan">Сканировать QR</string>
+    <string name="add_sub_help">Вставьте ссылку подписки из бота или одиночный ключ: VLESS, VLESS + XHTTP, AnyTLS, Hysteria2, Trojan, Shadowsocks. Ключи уходят в защищённое хранилище Android и на экране не показываются.</string>
+    <string name="add_sub_login_note">Вход по логину включится, когда сервис опубликует API подписки: пока работают ссылка и ключ.</string>
+    <string name="add_sub_current">Текущая подписка</string>
+    <string name="add_sub_nodes">Серверов в подписке: %1$d</string>
+    <string name="add_sub_remove">Удалить подписку</string>
+    <string name="add_sub_loading">Проверяем подписку…</string>
+    <string name="add_sub_done">Подписка добавлена</string>
+    <string name="add_sub_done_sub">Серверы уже в разделе «Локации»</string>
+    <string name="add_sub_error_empty">Введите ссылку подписки или ключ</string>
+    <string name="add_sub_error_unknown">Это не похоже на ссылку подписки или ключ STRAVO</string>
+    <string name="add_sub_error_network">Не удалось скачать подписку: проверьте ссылку и сеть</string>
+    <string name="add_sub_error_empty_payload">Подписка пришла пустой</string>
+    <string name="add_sub_error_no_nodes">В подписке не нашлось ни одного поддерживаемого сервера</string>
+    <string name="add_sub_error_too_many">В подписке слишком много серверов</string>
+    <string name="add_sub_error_secret_store">На устройстве недоступно защищённое хранилище ключей</string>
+    <string name="profile_add_subscription">Добавить подписку</string>
+    <string name="profile_add_subscription_sub">Ссылка подписки, ключ VLESS/AnyTLS или логин</string>
+    <string name="profile_manage_active">Подписка активна</string>
+    <string name="profile_manage_none">Подписка не подключена</string>
+    <string name="notice_subscription_added">Подписка добавлена</string>
+    <string name="notice_subscription_removed">Подписка удалена</string>
+    <string name="scan_sub_subscription">Наведите камеру на QR с ключом или ссылкой подписки</string>
 </resources>

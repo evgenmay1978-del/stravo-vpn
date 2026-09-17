@@ -18,9 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.stravo.vpn.R
-import com.stravo.vpn.domain.model.LocationsCatalog
 import com.stravo.vpn.ui.components.StravoCard
 import com.stravo.vpn.ui.state.HomeEvent
 import com.stravo.vpn.ui.state.HomeUiState
@@ -44,7 +42,7 @@ fun TvLocationsScreen(
             modifier = Modifier.padding(bottom = StravoTokens.SpaceLg),
         )
         LazyColumn(verticalArrangement = Arrangement.spacedBy(StravoTokens.SpaceSm)) {
-            items(items = LocationsCatalog.all, key = { it.id }) { location ->
+            items(items = state.locations, key = { it.id }) { location ->
                 var focused by remember { mutableStateOf(false) }
                 StravoCard(
                     modifier = Modifier
@@ -66,3 +64,4 @@ fun TvLocationsScreen(
         }
     }
 }
+

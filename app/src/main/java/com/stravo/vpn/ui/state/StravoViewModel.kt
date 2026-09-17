@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import com.stravo.vpn.StravoApplication
 import com.stravo.vpn.core.StravoConfig
+import com.stravo.vpn.data.subscription.ImportOutcome
 import com.stravo.vpn.data.settings.StravoSettings
 import com.stravo.vpn.domain.model.ConnectionState
 import com.stravo.vpn.domain.model.FormFactor
@@ -58,6 +59,11 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         scope.launch {
+            container.subscriptions.nodes.collect { nodes ->
+                _home.update { it.copy(subscriptionNodes = nodes) }
+            }
+        }
+        scope.launch {
             container.profiles.profiles.collect { profiles ->
                 _home.update { it.copy(profile = profiles.firstOrNull()) }
             }
@@ -90,14 +96,19 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             HomeEvent.QuickConnectClick -> Unit
             HomeEvent.NoticeConsumed -> _home.update { it.copy(notice = null) }
             is HomeEvent.NoticeShown -> _home.update { it.copy(notice = event.notice) }
+
             is HomeEvent.LocationSelected -> {
-                val location = LocationsCatalog.byId(event.locationId) ?: return
+                val location = _home.value.locations.firstOrNull { it.id == event.locationId } ?: return
                 _home.update { it.copy(location = location) }
             }
 
             is HomeEvent.ModeSelected -> _home.update {
                 it.copy(mode = CapabilityPolicy.normalizes(event.mode, it.formFactor))
             }
+
+            is HomeEvent.SubscriptionSubmitted -> importSubscription(event.raw)
+            HomeEvent.SubscriptionImportCleared -> clearImportState()
+            HomeEvent.SubscriptionRemoved -> removeSubscription()
         }
     }
 
@@ -106,10 +117,12 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         val shouldConnect = forceConnect || !current.connection.isActive
         scope.launch {
             if (shouldConnect) {
+                val node = current.nodeFor(current.location.id)
                 val profile = current.profile ?: VpnProfile(
-                    id = "default",
-                    title = current.subscription.planName,
-                    protocolHint = _profilesProtocolHint,
+                    id = node?.id ?: "default",
+                    title = node?.name ?: current.subscription.planName,
+                    protocolHint = node?.let { it.protocolLabel + " · " + it.transportLabel }
+                        ?: _profilesProtocolHint,
                 )
                 container.vpnEngine.connect(profile, current.location)
             } else {
@@ -117,6 +130,58 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    // --- Подписка ---------------------------------------------------------
+
+    /**
+     * Добавление подписки. Сырая ссылка живёт только внутри импортёра и защищённого
+     * хранилища: в состояние UI попадают лишь безопасные карточки узлов.
+     */
+    fun importSubscription(raw: String) {
+        if (_home.value.importState is SubscriptionImportState.Loading) return
+        _home.update { it.copy(importState = SubscriptionImportState.Loading) }
+        scope.launch {
+            when (val outcome = container.subscriptionImporter.import(raw)) {
+                is ImportOutcome.Success -> {
+                    container.subscriptions.applyImport(
+                        planName = outcome.planName,
+                        activeUntil = outcome.activeUntil,
+                        nodes = outcome.nodes,
+                    )
+                    _home.update {
+                        it.copy(
+                            importState = SubscriptionImportState.Done(outcome.nodes.size),
+                            notice = Notice.SUBSCRIPTION_ADDED,
+                        )
+                    }
+                }
+
+                is ImportOutcome.Failure -> _home.update {
+                    it.copy(importState = SubscriptionImportState.Failed(outcome.error))
+                }
+            }
+        }
+    }
+
+    fun clearImportState() {
+        _home.update { it.copy(importState = SubscriptionImportState.Idle) }
+    }
+
+    fun removeSubscription() {
+        container.subscriptions.nodes.value.forEach { node -> container.secretStore.remove(node.id) }
+        container.subscriptions.clear()
+        _home.update {
+            it.copy(
+                importState = SubscriptionImportState.Idle,
+                location = LocationsCatalog.AUTO,
+                notice = Notice.SUBSCRIPTION_REMOVED,
+            )
+        }
+    }
+
+    /** Конфиг выбранного узла для ядра туннеля. В UI это значение не выводится. */
+    fun secretConfigFor(locationId: String): String? =
+        container.subscriptionImporter.configFor(locationId)
 
     // --- Перенос подписки phone → TV -------------------------------------
 
@@ -188,3 +253,4 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         val NETWORK_MODE_FREE: NetworkMode = NetworkMode.FREE_INTERNET
     }
 }
+

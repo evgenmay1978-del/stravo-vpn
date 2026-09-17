@@ -36,6 +36,7 @@ import com.stravo.vpn.ui.theme.StravoType
 fun ProfileScreen(
     state: HomeUiState,
     onConnectTv: () -> Unit,
+    onAddSubscription: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -106,15 +107,19 @@ fun ProfileScreen(
             StravoSettingRow(
                 iconRes = R.drawable.ic_settings,
                 title = stringResource(id = R.string.profile_manage),
-                subtitle = notAvailable,
-                onClick = { },
+                subtitle = if (state.subscription.isActive) {
+                    stringResource(id = R.string.profile_manage_active)
+                } else {
+                    stringResource(id = R.string.profile_manage_none)
+                },
+                onClick = onAddSubscription,
             )
             Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
             StravoSettingRow(
                 iconRes = R.drawable.ic_profile,
-                title = stringResource(id = R.string.profile_login),
-                subtitle = notAvailable,
-                onClick = { },
+                title = stringResource(id = R.string.profile_add_subscription),
+                subtitle = stringResource(id = R.string.profile_add_subscription_sub),
+                onClick = onAddSubscription,
             )
             Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
             StravoSettingRow(

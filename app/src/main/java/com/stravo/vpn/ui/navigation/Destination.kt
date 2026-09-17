@@ -15,6 +15,7 @@ enum class Destination(
     CONNECT_TV("connect_tv", R.string.nav_connect_phone, R.drawable.ic_tv),
     SETTINGS("settings", R.string.nav_settings, R.drawable.ic_settings),
     SCANNER("scanner", R.string.scan_title, R.drawable.ic_scan),
+    ADD_SUBSCRIPTION("add_subscription", R.string.add_sub_title, R.drawable.ic_crown),
     ;
 
     companion object {
@@ -27,3 +28,4 @@ enum class Destination(
         fun byRoute(route: String?): Destination = entries.firstOrNull { it.route == route } ?: HOME
     }
 }
+

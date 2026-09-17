@@ -64,6 +64,7 @@ fun QrScannerScreen(
     onCode: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    @androidx.annotation.StringRes subtitleRes: Int = R.string.scan_sub,
 ) {
     val palette = LocalStravoPalette.current
     val context = LocalContext.current
@@ -90,7 +91,7 @@ fun QrScannerScreen(
     ) {
         StravoScreenHeader(
             title = stringResource(id = R.string.scan_title),
-            subtitle = stringResource(id = R.string.scan_sub),
+            subtitle = stringResource(id = subtitleRes),
             onBack = onBack,
             modifier = Modifier.padding(top = StravoTokens.SpaceMd),
         )

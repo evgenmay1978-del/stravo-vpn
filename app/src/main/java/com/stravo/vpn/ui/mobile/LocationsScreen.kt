@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,10 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.stravo.vpn.R
-import com.stravo.vpn.domain.model.LocationsCatalog
 import com.stravo.vpn.domain.model.VpnLocation
-import com.stravo.vpn.ui.components.PencilDivider
-import com.stravo.vpn.ui.components.StravoCard
 import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.components.StravoSearchField
 import com.stravo.vpn.ui.state.HomeEvent
@@ -38,7 +36,7 @@ import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
 
-/** Выбор локации: фильтр, поиск и список стран. */
+/** Выбор локации: фильтр, поиск и список стран из подписки. */
 @Composable
 fun LocationsScreen(
     state: HomeUiState,
@@ -50,8 +48,9 @@ fun LocationsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var recommendedOnly by rememberSaveable { mutableStateOf(true) }
 
-    val visible = remember(query, recommendedOnly) {
-        LocationsCatalog.all.filter { location ->
+    val locations = state.locations
+    val visible = remember(query, recommendedOnly, locations, state.location.id) {
+        locations.filter { location ->
             val matchesQuery = query.isBlank() ||
                 location.country.contains(query, ignoreCase = true) ||
                 location.city.contains(query, ignoreCase = true)
@@ -124,14 +123,15 @@ private fun LocationRow(
     onClick: () -> Unit,
 ) {
     val palette = LocalStravoPalette.current
+    val shape = RoundedCornerShape(StravoTokens.CardRadiusMobile)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(StravoTokens.CardRadiusMobile))
+            .clip(shape)
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = if (selected) palette.accent else palette.outline.copy(alpha = 0.20f),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(StravoTokens.CardRadiusMobile),
+                shape = shape,
             )
             .background(palette.panel)
             .clickable(role = Role.RadioButton, onClick = onClick),
@@ -181,3 +181,4 @@ private fun FilterChip(
         )
     }
 }
+
