@@ -7,10 +7,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
+import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.stravo.vpn.BuildConfig
@@ -47,7 +49,7 @@ import io.nekohasekai.libbox.Notification as CoreNotification
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.net.InetAddress
+import java.net.InetSocketAddress
 
 /**
  * Единственный VpnService приложения: поднимает TUN и отдаёт его ядру sing-box (libbox).
@@ -55,6 +57,12 @@ import java.net.InetAddress
  * Ядро живёт в этом же процессе: [PlatformInterface] реализован здесь, конфиг узла
  * берётся из защищённого хранилища по обезличенному идентификатору и никуда не логируется.
  * Состояние туннеля читает [SingBoxVpnEngine] через [state].
+ *
+ * Реализация PlatformInterface повторяет эталонный клиент sing-box-for-android
+ * (bg/VPNService.kt, bg/PlatformInterfaceWrapper.kt): список интерфейсов собирается из
+ * активных сетей ConnectivityManager с флагами IFF_UP|IFF_RUNNING, DNS, шлюзами и типом,
+ * а монитор сети по умолчанию сразу отдаёт ядру текущую сеть — без этого ядро не знает,
+ * через какой интерфейс выпускать пакеты.
  */
 class StravoVpnService : VpnService(), PlatformInterface {
 
@@ -65,6 +73,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
     private var myInterface: String? = null
     private var currentNodeId: String? = null
     private var failureStep: String? = null
+    private var interfaceCount = 0
 
     @Volatile
     private var foregroundStarted = false
@@ -113,12 +122,16 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
     private fun startTunnel(nodeId: String, locationId: String?) {
         currentNodeId = nodeId
-        val link = (application as StravoApplication).container.subscriptionImporter.configFor(nodeId)
+        val container = (application as StravoApplication).container
+        val link = container.subscriptionImporter.configFor(nodeId)
         if (link == null) {
             publishError(KEY_MISSING_REASON, locationId)
             return
         }
-        val config = when (val built = SingBoxConfigBuilder.build(link)) {
+        val variant = container.coreTuning.variant()
+        val directMode = container.settings.settings.value.coreDirectMode
+        trace.record("конфиг ядра: " + variant.label + (if (directMode) ", прямой режим" else ""))
+        val config = when (val built = SingBoxConfigBuilder.build(link, variant, directMode)) {
             is CoreConfig.Ready -> built.json
 
             is CoreConfig.Unsupported -> {
@@ -147,7 +160,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
             options.setBasePath(filesDir.absolutePath)
             options.setWorkingPath(filesDir.absolutePath)
             options.setTempPath(cacheDir.absolutePath)
-            options.setDebug(false)
+            // debug: без него ядро не зовёт writeDebugMessage и диагностика мертва.
+            options.setDebug(true)
             options.setLogMaxLines(200L)
             options.setAppVersion(BuildConfig.VERSION_NAME)
             options.setFixAndroidStack(true)
@@ -165,6 +179,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
             // OverrideOptions обязателен: ядро разыменовывает его без проверки на null.
             server.startOrReloadService(config, overrideOptions())
             trace.record(CoreTrace.STEP_STARTED)
+            trace.record(
+                "ядро запущено, интерфейсов отдано: " + interfaceCount +
+                    ", свой интерфейс: " + (myInterface ?: "неизвестен"),
+            )
             setState(ConnectionState.Connected, locationId, System.currentTimeMillis())
         } catch (error: Throwable) {
             // В сообщении нет ни конфига, ни ключей: только текст ошибки ядра.
@@ -192,13 +210,6 @@ class StravoVpnService : VpnService(), PlatformInterface {
         return options
     }
 
-    /** Убираем из сообщения ядра адреса и длинные идентификаторы. */
-    private fun redact(message: String): String = message
-        .replace(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"), "<id>")
-        .replace(Regex("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b"), "<ip>")
-        .replace(Regex("\\b[0-9a-fA-F]{16,}\\b"), "<key>")
-        .take(160)
-
     private fun stopTunnel() {
         val server = commandServer
         commandServer = null
@@ -213,6 +224,12 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
         defaultMonitor?.close()
         defaultMonitor = null
+        try {
+            tunDescriptor?.close()
+        } catch (_: Throwable) {
+        }
+        tunDescriptor = null
+        myInterface = null
         setState(ConnectionState.Disconnected, null, null)
         foregroundStarted = false
         stopForegroundCompat()
@@ -245,10 +262,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
 
         override fun writeDebugMessage(message: String?) {
-            // Держим только последнее сообщение и без адресов/ключей: по нему видно,
+            // Держим последние сообщения без адресов и ключей: по ним видно,
             // почему туннель не повёз трафик.
             val text = message?.trim().orEmpty()
-            if (text.isNotEmpty()) trace.recordCoreMessage(redact(text))
+            if (text.isNotEmpty()) trace.recordCoreMessage(text)
         }
 
         override fun connectSSHAgent(): Int = -1
@@ -267,73 +284,119 @@ class StravoVpnService : VpnService(), PlatformInterface {
             // Разрешение VPN не выдано: ядро получит честную ошибку, а не пустой TUN.
             return -1
         }
-        trace.record(CoreTrace.STEP_TUN)
+        val mtu = if (options.getMTU() > 0) options.getMTU() else DEFAULT_MTU
         val builder = Builder()
             .setSession(SESSION_NAME)
-            .setMtu(if (options.getMTU() > 0) options.getMTU() else DEFAULT_MTU)
-        try {
-            builder.setBlocking(options.getStrictRoute())
-        } catch (_: Exception) {
+            .setMtu(mtu)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.setMetered(false)
         }
-        addAddresses(builder, options.getInet4Address())
-        addAddresses(builder, options.getInet6Address())
-        // Ядро подменяет DNS своим адресом (hijack); если адресов нет — без DNS на TUN
-        // Android пойдёт в DNS оператора, который через туннель недоступен.
-        val dnsServers = options.getDNSServerAddress().toList().ifEmpty { listOf(FALLBACK_DNS) }
-        for (address in dnsServers) {
-            try {
-                builder.addDnsServer(address)
-            } catch (_: IllegalArgumentException) {
+        val inet4 = options.getInet4Address().toList()
+        val inet6 = options.getInet6Address().toList()
+        addAddresses(builder, inet4)
+        addAddresses(builder, inet6)
+        val autoRoute = options.getAutoRoute()
+        // Маршруты читаем заранее: они нужны и в билдер, и в честной строке диагностики.
+        val inet4Routes = options.getInet4RouteAddress().toList()
+        val inet6Routes = options.getInet6RouteAddress().toList()
+        if (autoRoute) {
+            // Ядро подменяет DNS своим адресом (hijack); без адресов на TUN Android
+            // пойдёт в DNS оператора, который через туннель недоступен.
+            val dnsServers = options.getDNSServerAddress().toList().ifEmpty { listOf(FALLBACK_DNS) }
+            for (address in dnsServers) {
+                try {
+                    builder.addDnsServer(address)
+                } catch (_: IllegalArgumentException) {
+                }
             }
-        }
-        for (packageName in options.getExcludePackage().toList()) {
-            try {
-                builder.addDisallowedApplication(packageName)
-            } catch (_: Exception) {
-            }
-        }
-        for (packageName in options.getIncludePackage().toList()) {
-            try {
-                builder.addAllowedApplication(packageName)
-            } catch (_: Exception) {
-            }
-        }
-        // Своё приложение вне туннеля: подписка и Telegram-ссылки не должны идти через себя же.
-        try {
-            builder.addDisallowedApplication(packageName)
-        } catch (_: Exception) {
-        }
-        for (route in options.getInet4RouteAddress().toList()) {
-            try {
-                builder.addRoute(route.address(), route.prefix())
-            } catch (_: IllegalArgumentException) {
-            }
-        }
-        for (route in options.getInet6RouteAddress().toList()) {
-            try {
-                builder.addRoute(route.address(), route.prefix())
-            } catch (_: IllegalArgumentException) {
-            }
-        }
-        if (options.getAutoRoute()) {
-            try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // Как в эталонном клиенте: маршруты ядра, а если их нет — весь трафик.
+                if (inet4Routes.isNotEmpty()) {
+                    for (route in inet4Routes) {
+                        try {
+                            builder.addRoute(route.address(), route.prefix())
+                        } catch (_: IllegalArgumentException) {
+                        }
+                    }
+                } else if (inet4.isNotEmpty()) {
+                    builder.addRoute("0.0.0.0", 0)
+                }
+                if (inet6Routes.isNotEmpty()) {
+                    for (route in inet6Routes) {
+                        try {
+                            builder.addRoute(route.address(), route.prefix())
+                        } catch (_: IllegalArgumentException) {
+                        }
+                    }
+                } else if (inet6.isNotEmpty()) {
+                    builder.addRoute("::", 0)
+                }
+            } else {
+                // До Android 13 excludeRoute недоступен: отдаём весь трафик в туннель.
                 builder.addRoute("0.0.0.0", 0)
                 builder.addRoute("::", 0)
-            } catch (_: IllegalArgumentException) {
+            }
+            // Android запрещает смешивать allow и disallow: список или один, или другой.
+            val include = options.getIncludePackage().toList()
+            val exclude = options.getExcludePackage().toList()
+            if (include.isNotEmpty()) {
+                for (name in include) {
+                    try {
+                        builder.addAllowedApplication(name)
+                    } catch (_: Exception) {
+                    }
+                }
+                // Своё приложение в списке «только выбранные» — исключаем явно.
+                if (include.contains(packageName)) {
+                    try {
+                        builder.addDisallowedApplication(packageName)
+                    } catch (_: Exception) {
+                    }
+                }
+            } else {
+                // Своё приложение вне туннеля: подписка и Telegram-ссылки не должны
+                // идти через себя же. Исключение добавляется первым: после allow его уже не принять.
+                try {
+                    builder.addDisallowedApplication(packageName)
+                } catch (_: Exception) {
+                }
+                for (name in exclude) {
+                    if (name == packageName) continue
+                    try {
+                        builder.addDisallowedApplication(name)
+                    } catch (_: Exception) {
+                    }
+                }
             }
         }
         return try {
             val descriptor = builder.establish() ?: return -1
             // Держим PFD живым: ядро забирает только числовой дескриптор.
             tunDescriptor = descriptor
+            myInterface = tunnelName(descriptor.fd)
+            trace.record(
+                CoreTrace.STEP_TUN + ": mtu " + mtu +
+                    ", адреса " + (inet4 + inet6).size +
+                    ", маршрутов " + (if (autoRoute) inet4Routes.size + inet6Routes.size else 0) +
+                        ", адрес ядра " + options.getDNSServerAddress().toList().joinToString(",") +
+                    ", имя " + (myInterface ?: "неизвестно"),
+            )
             descriptor.fd
         } catch (error: Throwable) {
+            trace.record("TUN не поднялся: " + (error.message ?: error.javaClass.simpleName))
             -1
         }
     }
 
-    private fun addAddresses(builder: Builder, prefixes: RoutePrefixIterator) {
-        for (prefix in prefixes.toList()) {
+    /** Имя TUN-интерфейса по дескриптору: ядру оно нужно, чтобы не уйти в себя же. */
+    private fun tunnelName(fd: Int): String? = try {
+        java.io.File("/proc/self/fd/" + fd).canonicalFile.name.takeIf { it.startsWith("tun") }
+    } catch (_: Throwable) {
+        null
+    }
+
+    private fun addAddresses(builder: Builder, prefixes: List<RoutePrefix>) {
+        for (prefix in prefixes) {
             try {
                 builder.addAddress(prefix.address(), prefix.prefix())
             } catch (_: IllegalArgumentException) {
@@ -347,41 +410,85 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
     override fun getInterfaces(): NetworkInterfaceIterator {
         val result = ArrayList<BoxInterface>()
-        try {
-            val enumeration = java.net.NetworkInterface.getNetworkInterfaces()
-            while (enumeration != null && enumeration.hasMoreElements()) {
-                val source = enumeration.nextElement()
-                val item = BoxInterface()
-                item.setName(source.name)
-                item.setIndex(source.index)
-                item.setMTU(
-                    try {
-                        source.mtu
-                    } catch (_: Exception) {
-                        DEFAULT_MTU
-                    },
-                )
-                // Ядро разбирает адреса как netip.Prefix (MustParsePrefix): нужен
-                // формат «адрес/длина префикса» и без scope у IPv6, иначе паника.
-                val addresses = ArrayList<String>()
-                for (interfaceAddress in source.interfaceAddresses) {
-                    val address = interfaceAddress.address ?: continue
-                    val host = address.hostAddress?.substringBefore('%') ?: continue
-                    addresses.add(host + "/" + interfaceAddress.networkPrefixLength.toInt())
-                }
-                item.setAddresses(StringList(addresses))
-                item.setFlags(flagsOf(source))
-                item.setType(typeOf(source))
-                item.setMetered(false)
-                result.add(item)
-            }
+        val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val known = try {
+            java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
         } catch (_: Exception) {
+            emptyList()
         }
+        val seen = HashSet<String>()
+        // Ошибка одной сети не должна обнулять весь список: без интерфейсов ядро
+        // не выпустит ни одного пакета.
+        for (network in connectivity?.allNetworks.orEmpty()) {
+            try {
+                val properties = connectivity?.getLinkProperties(network) ?: continue
+                val name = properties.interfaceName ?: continue
+                if (!seen.add(name)) continue
+                val source = known.firstOrNull { it.name == name } ?: continue
+                val capabilities = connectivity.getNetworkCapabilities(network)
+                result.add(boxInterface(source, properties, capabilities))
+            } catch (_: Exception) {
+            }
+        }
+        interfaceCount = result.size
         return InterfaceList(result)
     }
 
-    /** Тип интерфейса для ядра: wifi/cellular/ethernet/other — по имени. */
-    private fun typeOf(source: java.net.NetworkInterface): Int = when {
+    /** Описание интерфейса для ядра: имя, индекс, MTU, адреса, флаги, DNS и шлюз. */
+    private fun boxInterface(
+        source: java.net.NetworkInterface,
+        properties: LinkProperties,
+        capabilities: NetworkCapabilities?,
+    ): BoxInterface {
+        val item = BoxInterface()
+        item.setName(source.name)
+        item.setIndex(source.index)
+        item.setMTU(
+            try {
+                source.mtu
+            } catch (_: Exception) {
+                DEFAULT_MTU
+            },
+        )
+        // Ядро разбирает адреса как netip.Prefix (MustParsePrefix): нужен
+        // формат «адрес/длина префикса» и без scope у IPv6, иначе паника.
+        val addresses = ArrayList<String>()
+        for (interfaceAddress in source.interfaceAddresses) {
+            val address = interfaceAddress.address ?: continue
+            val host = address.hostAddress?.substringBefore('%') ?: continue
+            addresses.add(host + "/" + interfaceAddress.networkPrefixLength.toInt())
+        }
+        item.setAddresses(StringList(addresses))
+        val dns = ArrayList<String>()
+        for (address in properties.dnsServers) {
+            address.hostAddress?.substringBefore('%')?.let { dns.add(it) }
+        }
+        item.setDNSServer(StringList(dns))
+        val gateways = ArrayList<String>()
+        for (route in properties.routes) {
+            if (route.destination?.prefixLength != 0) continue
+            val gateway = route.gateway ?: continue
+            if (gateway.isAnyLocalAddress) continue
+            gateway.hostAddress?.substringBefore('%')?.let { gateways.add(it) }
+        }
+        item.setGateway(StringList(gateways))
+        item.setFlags(flagsOf(source, capabilities))
+        item.setType(typeOf(source, capabilities))
+        item.setMetered(
+            capabilities != null &&
+                !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
+        )
+        return item
+    }
+
+    /** Тип интерфейса для ядра: wifi/cellular/ethernet/other — по возможностям сети. */
+    private fun typeOf(
+        source: java.net.NetworkInterface,
+        capabilities: NetworkCapabilities?,
+    ): Int = when {
+        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> Libbox.InterfaceTypeWIFI
+        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> Libbox.InterfaceTypeCellular
+        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> Libbox.InterfaceTypeEthernet
         source.name.startsWith("wlan") -> Libbox.InterfaceTypeWIFI
         source.name.startsWith("rmnet") || source.name.startsWith("ccmni") ||
             source.name.startsWith("pdp") -> Libbox.InterfaceTypeCellular
@@ -389,9 +496,16 @@ class StravoVpnService : VpnService(), PlatformInterface {
         else -> Libbox.InterfaceTypeOther
     }
 
-    private fun flagsOf(source: java.net.NetworkInterface): Int {
+    /** Флаги интерфейса: IFF_UP|IFF_RUNNING у сети с интернетом — иначе ядро её не увидит. */
+    private fun flagsOf(
+        source: java.net.NetworkInterface,
+        capabilities: NetworkCapabilities?,
+    ): Int {
         var flags = 0
         if (source.isUp) flags = flags or FLAG_UP
+        if (capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true) {
+            flags = flags or FLAG_UP or FLAG_RUNNING
+        }
         if (source.isLoopback) flags = flags or FLAG_LOOPBACK
         if (source.isPointToPoint) flags = flags or FLAG_POINT_TO_POINT
         if (source.supportsMulticast()) flags = flags or FLAG_MULTICAST
@@ -409,7 +523,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
     }
 
     override fun registerMyInterface(name: String?) {
-        myInterface = name
+        if (!name.isNullOrBlank()) myInterface = name
     }
 
     override fun findConnectionOwner(
@@ -418,7 +532,26 @@ class StravoVpnService : VpnService(), PlatformInterface {
         sourcePort: Int,
         destinationAddress: String?,
         destinationPort: Int,
-    ): ConnectionOwner = ConnectionOwner()
+    ): ConnectionOwner {
+        val owner = ConnectionOwner()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return owner
+        val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return owner
+        try {
+            val uid = connectivity.getConnectionOwnerUid(
+                ipProtocol,
+                InetSocketAddress(sourceAddress, sourcePort),
+                InetSocketAddress(destinationAddress, destinationPort),
+            )
+            if (uid < 0) return owner
+            owner.setUserId(uid)
+            val packages = packageManager.getPackagesForUid(uid)
+            owner.setUserName(packages?.firstOrNull() ?: "")
+            owner.setAndroidPackageNames(StringList(packages?.toList().orEmpty()))
+        } catch (_: Throwable) {
+        }
+        return owner
+    }
 
     override fun includeAllNetworks(): Boolean = false
 
@@ -434,7 +567,22 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
     override fun localDNSTransport(): LocalDNSTransport? = null
 
-    override fun readWIFIState(): WIFIState? = null
+    /** Состояние Wi-Fi читаем сами: без него ядро не разрешает правила по SSID. */
+    override fun readWIFIState(): WIFIState? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Начиная с Android 10 имя сети доступно только с разрешением на геоданные.
+            return null
+        }
+        return try {
+            val manager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            @Suppress("DEPRECATION")
+            val info = manager?.connectionInfo ?: return null
+            val ssid = info.ssid?.removeSurrounding("\"") ?: ""
+            if (ssid == "<unknown ssid>") WIFIState("", "") else WIFIState(ssid, info.bssid ?: "")
+        } catch (_: Throwable) {
+            null
+        }
+    }
 
     override fun readSystemSSHHostKey(): String? = null
 
@@ -526,7 +674,11 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
     }
 
-    /** Минимальный монитор сети по умолчанию: ядру нужны только имя и индекс интерфейса. */
+    /**
+     * Монитор сети по умолчанию: ядру нужны имя и индекс интерфейса, через который
+     * выпускать пакеты. Текущую сеть отдаём сразу, не дожидаясь изменения сети, —
+     * иначе ядро стартует без маршрута наружу.
+     */
     private inner class DefaultInterfaceMonitor(private val listener: InterfaceUpdateListener) {
 
         private val connectivity: ConnectivityManager? =
@@ -545,7 +697,11 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
 
         fun start() {
-            val manager = connectivity ?: return
+            val manager = connectivity
+            if (manager == null) {
+                listener.updateDefaultInterface("", -1, false, false)
+                return
+            }
             try {
                 if (Build.VERSION.SDK_INT >= 24) {
                     manager.registerDefaultNetworkCallback(callback)
@@ -557,6 +713,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
                 }
             } catch (_: Exception) {
             }
+            report(manager.activeNetwork)
         }
 
         fun close() {
@@ -566,20 +723,39 @@ class StravoVpnService : VpnService(), PlatformInterface {
             }
         }
 
-        private fun update(network: Network) {
-            val manager = connectivity ?: return
-            val properties = manager.getLinkProperties(network) ?: return
-            val name = properties.interfaceName ?: return
-            if (name == myInterface || name.startsWith(TUN_PREFIX)) return
-            val index = try {
-                java.net.NetworkInterface.getByName(name)?.index ?: 0
-            } catch (_: Exception) {
-                0
+        private fun update(network: Network) = report(network)
+
+        private fun report(network: Network?) {
+            val manager = connectivity
+            if (network == null || manager == null) {
+                listener.updateDefaultInterface("", -1, false, false)
+                return
             }
-            val capabilities = manager.getNetworkCapabilities(network)
+            val name = try {
+                manager.getLinkProperties(network)?.interfaceName
+            } catch (_: Exception) {
+                null
+            }
+            if (name.isNullOrBlank() || name == myInterface) {
+                listener.updateDefaultInterface("", -1, false, false)
+                return
+            }
+            val index = try {
+                java.net.NetworkInterface.getByName(name)?.index ?: -1
+            } catch (_: Exception) {
+                -1
+            }
+            val capabilities = try {
+                manager.getNetworkCapabilities(network)
+            } catch (_: Exception) {
+                null
+            }
             val expensive = capabilities != null &&
                 !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-            listener.updateDefaultInterface(name, index, expensive, false)
+            val constrained = capabilities != null &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED).not()
+            trace.record("сеть по умолчанию: " + name + " (#" + index + ")")
+            listener.updateDefaultInterface(name, index, expensive, constrained)
         }
     }
 
@@ -610,15 +786,17 @@ class StravoVpnService : VpnService(), PlatformInterface {
         const val EXTRA_LOCATION_ID = "com.stravo.vpn.extra.LOCATION_ID"
 
         private const val SESSION_NAME = "STRAVO VPN"
-        private const val TUN_PREFIX = "tun"
         private const val FALLBACK_DNS = "1.1.1.1"
         private const val DEFAULT_MTU = 9000
         private const val CHANNEL_ID = "stravo.vpn.status"
         private const val NOTIFICATION_ID = 1001
-        private const val FLAG_UP = 1
-        private const val FLAG_LOOPBACK = 4
-        private const val FLAG_POINT_TO_POINT = 8
-        private const val FLAG_MULTICAST = 16
+        // Константы Linux (IFF_*): ядро переводит их в net.Flags через link_flags_unix.go.
+        // Значения Go net.Flags здесь не подходят — интерфейс не распознаётся как рабочий.
+        private const val FLAG_UP = 0x1
+        private const val FLAG_LOOPBACK = 0x8
+        private const val FLAG_POINT_TO_POINT = 0x10
+        private const val FLAG_RUNNING = 0x40
+        private const val FLAG_MULTICAST = 0x1000
 
         const val NODE_MISSING_REASON = "Ядру не передан узел подписки"
         const val KEY_MISSING_REASON = "Ключ узла не найден в защищённом хранилище"
@@ -648,3 +826,11 @@ private fun RoutePrefixIterator.toList(): List<RoutePrefix> {
     return result
 }
 
+private fun java.util.Enumeration<*>.toList(): List<java.net.NetworkInterface> {
+    val result = ArrayList<java.net.NetworkInterface>()
+    while (hasMoreElements()) {
+        val element = nextElement()
+        if (element is java.net.NetworkInterface) result.add(element)
+    }
+    return result
+}
