@@ -250,9 +250,6 @@ object SingBoxConfigBuilder {
             .put("auto_route", true)
             .put("strict_route", false)
             .put("stack", if (variant == CoreVariant.SYSTEM_STACK) "system" else "mixed")
-            // Разбор протокола нужен правилу hijack-dns: без него DNS-пакеты
-            // уходят в туннель как обычный UDP и остаются без ответа.
-            .put("sniff", variant != CoreVariant.NO_SNIFF)
 
         val route = JSONObject()
             .put(
