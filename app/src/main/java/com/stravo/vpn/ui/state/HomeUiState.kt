@@ -61,6 +61,25 @@ data class HomeUiState(
 
     fun nodeFor(locationId: String): SubscriptionNode? =
         subscriptionNodes.firstOrNull { it.id == locationId }
+
+    /**
+     * Автоматический сервер: у пункта «Авто» своего узла нет — берём первый из подписки.
+     * Без этого «Подключить» на авто-локации честно отвечало «нет ключа узла».
+     */
+    fun nodeForLocation(): SubscriptionNode? =
+        if (location.id == LocationsCatalog.AUTO.id) {
+            subscriptionNodes.firstOrNull()
+        } else {
+            nodeFor(location.id)
+        }
+
+    /** Локация, к которой привязан узел: для авто — первая из подписки. */
+    fun connectedLocation(node: SubscriptionNode?): VpnLocation =
+        if (location.id == LocationsCatalog.AUTO.id && node != null) {
+            locations.firstOrNull { it.id == node.id } ?: location
+        } else {
+            location
+        }
 }
 
 enum class Notice {
