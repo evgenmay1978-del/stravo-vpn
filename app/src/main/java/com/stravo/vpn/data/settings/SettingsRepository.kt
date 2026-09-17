@@ -22,6 +22,13 @@ data class StravoSettings(
     /** Раздельный туннель: режим и выбранные пакеты. */
     val appMode: VpnAppMode = VpnAppMode.ALL,
     val apps: Set<String> = emptySet(),
+    /**
+     * Диагностика: пустить трафик туннеля напрямую, без узла.
+     *
+     * Нужно, чтобы отличить «не работает туннель» от «не работает узел»: если с этим
+     * переключателем сайты открываются, TUN, DNS и маршруты в порядке, а дело в узле.
+     */
+    val coreDirectMode: Boolean = false,
 )
 
 /**
@@ -48,6 +55,7 @@ class SettingsRepository(context: Context) {
             .putString(KEY_LANGUAGE, next.language)
             .putString(KEY_APP_MODE, next.appMode.name)
             .putString(KEY_APPS, next.apps.joinToString(","))
+            .putBoolean(KEY_CORE_DIRECT, next.coreDirectMode)
             .commit()
     }
 
@@ -67,6 +75,7 @@ class SettingsRepository(context: Context) {
             ?.filter { it.isNotEmpty() }
             ?.toSet()
             ?: emptySet(),
+        coreDirectMode = prefs.getBoolean(KEY_CORE_DIRECT, false),
     )
 
     private companion object {
@@ -79,6 +88,7 @@ class SettingsRepository(context: Context) {
         const val KEY_LANGUAGE = "language"
         const val KEY_APP_MODE = "app_mode"
         const val KEY_APPS = "apps"
+        const val KEY_CORE_DIRECT = "core_direct"
     }
 }
 
