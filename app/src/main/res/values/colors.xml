@@ -3,4 +3,6 @@
     <color name="stravo_paper">#F2EADB</color>
     <color name="stravo_graphite">#1E2D31</color>
     <color name="stravo_emerald">#2FBF8F</color>
+    <!-- Бумага иконки: тон подобран под артворк знака, чтобы foreground не отличался от background. -->
+    <color name="stravo_icon_paper">#EDE7DC</color>
 </resources>
