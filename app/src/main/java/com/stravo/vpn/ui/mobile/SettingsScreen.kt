@@ -50,6 +50,8 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     // Вариант ядра применяется при следующем подключении, поэтому это локальное состояние.
     var variant by remember { mutableStateOf(viewModel.coreVariant()) }
+    // Результат выгрузки журнала: имя файла в «Загрузках».
+    var logStatus by remember { mutableStateOf<String?>(null) }
 
     val protocols = StravoConfig.PROTOCOLS
     val languages = listOf("Русский", "English")
@@ -155,6 +157,13 @@ fun SettingsScreen(
                 title = stringResource(id = R.string.settings_core_variant),
                 subtitle = variant.label + ": " + variant.hint,
                 onClick = { variant = viewModel.nextCoreVariant() },
+            )
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+            StravoSettingRow(
+                iconRes = R.drawable.ic_download,
+                title = stringResource(id = R.string.settings_core_log_save),
+                subtitle = logStatus ?: stringResource(id = R.string.settings_core_log_save_sub),
+                onClick = { logStatus = viewModel.saveCoreLog() },
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
