@@ -40,6 +40,10 @@ data class HomeUiState(
     val importState: SubscriptionImportState = SubscriptionImportState.Idle,
     /** Одна строка о нештатном прошлом запуске (сбой ядра/приложения). Показывается один раз. */
     val diagnostics: String? = null,
+    /** Последние строки журнала ядра: только шаги и сообщения без адресов и ключей. */
+    val coreLog: List<String> = emptyList(),
+    /** Идёт самопроверка туннеля — кнопка показывает занятость. */
+    val probing: Boolean = false,
 ) {
     val modes: List<NetworkMode> get() = CapabilityPolicy.availableModes(formFactor)
 
@@ -76,6 +80,7 @@ sealed interface HomeEvent {
     data object PowerClick : HomeEvent
     data object QuickConnectClick : HomeEvent
     data object Retry : HomeEvent
+    data object ProbeClick : HomeEvent
     data class LocationSelected(val locationId: String) : HomeEvent
     data class ModeSelected(val mode: NetworkMode) : HomeEvent
     data class NoticeShown(val notice: Notice) : HomeEvent
