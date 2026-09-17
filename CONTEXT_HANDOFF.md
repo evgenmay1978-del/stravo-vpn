@@ -6,106 +6,110 @@
 - Репозиторий: `evgenmay1978-del/stravo-vpn`, ветка `main`.
 - Приложение: `com.stravo.vpn`, minSdk 23, targetSdk 36, один APK для телефона и Android TV.
 - Сборка: только GitHub Actions (`Android build`), локально не собираем.
-- Последнее состояние: ядро sing-box (libbox) подключено, VPN **поднимается**, но **трафик не идёт** —
-  это главная незакрытая задача.
+- Текущее состояние: найдена и исправлена причина «туннель поднимается, трафик не идёт».
+  Идёт проверка на живом устройстве с живой подпиской.
 
 ---
 
-## 1. Что сделано
+## 1. Главная находка: кто на самом деле выпускает трафик
+
+Ядро (libbox) на Android **не** умеет выбирать сеть самостоятельно. Диалог наружу всегда идёт
+через параллельный диалер по интерфейсам, которые ядру отдал Java-слой:
+
+- `experimental/libbox/service.go` — `UsePlatformNetworkInterfaces() == true` включает
+  `NetworkStrategyDefault`: каждый dial идёт через `common/dialer/default_parallel_interface.go`;
+- список сетей заполняется **только** из колбэка `startDefaultInterfaceMonitor`
+  (`experimental/libbox/monitor.go` → `route/network.go`), других вызовов `UpdateInterfaces()` нет;
+- диалеру нужен интерфейс, у которого индекс совпадает с тем, что сообщил монитор; иначе
+  `no available network interface` — и падает **любое** соединение, включая DNS.
+
+Отсюда все симптомы: TUN поднят, статус-бар показывает VPN, интерфейс пишет «ЗАЩИЩЕНО»,
+а трафик не идёт. Плюс вторая ловушка: если индекс интерфейса не найден (в старом коде
+подставлялся 0), ядро уходит в ветку привязки к интерфейсу (`SO_BINDTODEVICE`), которую
+Android обычному приложению не разрешает.
+
+## 2. Что сделано
 
 ### Issue #2 — форматы подписки (`domain/subscription/SubscriptionLinkParser.kt`, `data/subscription/PanelSubscription.kt`)
 - ссылки-обёртки: `happ://`, `incy://`, `sub://`, `v2rayng://`, `clash://`, `sing-box://` и другие
   (вложенный адрес достаётся из query `url=`, из строки, из base64 и из процентного кодирования);
 - адрес без схемы (`sub.example.com/x`) → https;
 - тело подписки списком и base64;
-- **JSON-форматы панелей**: `?format=xray` (массив конфигов Xray) и `?format=mihomo`
-  (JSON-конфиг Clash) приводятся к share-ссылкам; `?format=links` (base64-список) работал и раньше;
-- ошибка называет, что именно не распознано: «Схема «xxx» не распознана», «В строке нет схемы…»,
-  «В ссылке «happ» нет адреса подписки».
+- **JSON-форматы панелей**: `?format=xray` и `?format=mihomo` приводятся к share-ссылкам;
+  `?format=links` (base64-список) работает и раньше;
+- ошибка называет, что именно не распознано.
 
-Проверено на живой подписке владельца: `?format=xray` → 8 серверов, `?format=links` → 9 серверов
-(один узел `naive+https` ядром не поддерживается и пропускается), `?format=mihomo` → 8 серверов.
+Проверено на живой подписке владельца: `?format=xray` → 8 серверов (один узел `naive+https`
+ядром не поддерживается и пропускается).
 
 ### Issue #3 — ядро libbox (`engine/box/`)
-- `StravoVpnService` : `VpnService()` + `PlatformInterface`: `openTun`, `protect`,
-  `getInterfaces`, монитор сети по умолчанию, остальное — честные no-op;
-- `SingBoxVpnEngine` : `VpnEngine` — состояние ядра в `observeState()`;
-- `SingBoxConfigBuilder` — ссылка узла → JSON sing-box (VLESS TCP/WS/HTTP Upgrade/gRPC/QUIC + TLS/Reality,
-  AnyTLS, Hysteria2, Trojan, Shadowsocks); XHTTP отдаёт честный Unsupported;
-- `TunnelCore` — если нативные .so не загрузились, приложение честно об этом говорит;
-- CI: `libbox.yml` стал reusable, `android.yml` и `release.yml` получают AAR артефактом
-  (сборка не падает при промахе кэша);
-- манифест: foreground service `dataSync`, `BIND_VPN_SERVICE`, разрешение VPN спрашивается в MainActivity.
+- `StravoVpnService` : `VpnService()` + `PlatformInterface`, `SingBoxVpnEngine`, `SingBoxConfigBuilder`,
+  `TunnelCore`;
+- CI: `libbox.yml` reusable, `android.yml` и `release.yml` получают AAR артефактом;
+- манифест: foreground service `dataSync`, `BIND_VPN_SERVICE`.
 
-**Два нативных падения найдены и исправлены** (оба роняли процесс целиком):
-1. `startOrReloadService(config, null)` — Go разыменовывает `OverrideOptions` без проверки на nil.
-   Теперь передаётся `OverrideOptions()`.
-2. `getInterfaces()` отдавал адреса без длины префикса, а sing-box разбирает их через
-   `netip.MustParsePrefix` (паника в Go). Теперь «адрес/префикс» из `interfaceAddresses`, IPv6 без scope.
+### Починка «трафик не идёт» (проверяется на устройстве)
+- **монитор сети по умолчанию** (`StravoVpnService.DefaultInterfaceMonitor`) отдаёт ядру текущую
+  сеть **сразу** при старте, повторяет попытки, пока свойства сети и интерфейс не станут видны,
+  и честно сообщает «сети нет» (`""`, индекс `-1`), а не выдуманный индекс 0;
+- **`getInterfaces()`** собирает только активные сети `ConnectivityManager` и заполняет имя, индекс,
+  MTU, адреса, DNS, шлюз, тип и метрику; ошибка одной сети не обнуляет список;
+- **флаги интерфейса** — константы Linux `IFF_*` (IFF_UP|IFF_RUNNING и т.д.), а не значения Go
+  `net.Flags`: ядро переводит их в `net.Flags` своим `link_flags_unix.go`;
+- **список приложений** больше не смешивает `addAllowedApplication` и `addDisallowedApplication`
+  (Android это запрещает и исключение молча глоталось); своё приложение исключается первым;
+- **openTun**: `setMetered(false)`, маршруты ядра на Android 13+ (как в эталонном клиенте),
+  убран `setBlocking`, добавлен `sniff` — без него правило `hijack-dns` не разбирает DNS-пакеты;
+- **диагностика**: `options.setDebug(true)` (без него ядро вообще не зовёт `writeDebugMessage`),
+  журнал ядра на главном экране, выгрузка журнала в «Загрузки» (`stravo-core.log`),
+  самопроверка туннеля (внешний адрес со стороны узла и контрольный запрос),
+  «Прямой режим» и переключатель варианта сборки конфига в настройках;
+- **авто-локация** подключается к первому узлу подписки (в подписке нет локации с id `auto`,
+  раньше «Подключить» на ней честно отвечало «нет ключа узла»).
 
 ### UI
-- телефон **всегда** на кремовой бумаге (системная тёмная тема больше не включает графит);
-- шапка со знаком S, названием и подзаголовком, медальон до 214dp, карточки-сводки, подпись под CTA;
-- знак S в шапке — **тот же, что на иконке приложения** (`drawable-nodpi/s_mark.png`, вырезан из
-  `docs/reference/app_icon.png`);
-- плашка-уведомление гаснет сама и не перекрывает «Быстрое подключение»;
-- локации: флаг в круглом бейдже, названия без протокола («Испания · VLESS» → «Испания»).
+- телефон всегда на кремовой бумаге; шапка со знаком S; медальон до 214dp; карточки-сводки;
+- знак S в шапке — тот же, что на иконке приложения (`drawable-nodpi/s_mark.png`);
+- локации: флаг в бейдже, названия без протокола.
 
-### Раздельный туннель (просьба владельца)
-- Настройки → «Приложения через VPN»: режимы «Все», «Только выбранные», «Все, кроме выбранных»,
-  поиск, иконки, системные приложения по желанию (`ui/mobile/AppsScreen.kt`);
-- выбор хранится в настройках и уходит в ядро через `OverrideOptions`
-  (`include_package`/`exclude_package`); пустой список — все приложения;
-- в манифест добавлен `QUERY_ALL_PACKAGES`. **На устройстве ещё не проверялось.**
+### Раздельный туннель
+- Настройки → «Приложения через VPN»: «Все», «Только выбранные», «Все, кроме выбранных», поиск,
+  иконки (`ui/mobile/AppsScreen.kt`); выбор уходит в ядро через `OverrideOptions`.
+  На устройстве ещё не проверялся.
 
 ### Диагностика
-- `CoreTrace` пишет шаги запуска ядра (переживает падение процесса),
-  `StartupDiagnostics` читает `ApplicationExitInfo` — главный экран показывает одной строкой,
-  что случилось в прошлый запуск (плюс последнее сообщение ядра без адресов и ключей);
+- `CoreTrace` — шаги запуска и кольцевой журнал ядра (только в памяти процесса);
+- `CoreLogReader` — хвост журнала самого ядра из `CrashReport-*.log` в `filesDir`;
+- `CoreLogExporter` — выгрузка журнала в «Загрузки» через MediaStore;
+- `TunnelProbe` — активная сеть (есть ли VPN-транспорт) и внешний адрес;
+- `StartupDiagnostics` — причина прошлого завершения (`ApplicationExitInfo`);
 - подписка переживает перезапуск (`SubscriptionRepository`, `commit()`).
-
----
-
-## 2. Что не работает
-
-**VPN поднимается, но трафик через него не идёт.** Симптомы:
-- статус «ЗАЩИЩЕНО», в системном статус-баре есть значок VPN;
-- при этом сайты (и заблокированные, и обычные) не открываются;
-- проверка из другого приложения на устройстве: `https://api.ipify.org` вернул IP оператора,
-  то есть трафик шёл мимо туннеля (в тот момент туннель, возможно, уже упал — тест нужно повторить
-  при заведомо поднятом туннеле).
-
-Отдельно: при обновлении APK поверх предыдущего подписка в интерфейсе оказывалась пустой —
-нужно проверить, не теряются ли данные приложения при установке (сигнатура debug-ключа в CI
-кэшируется, но факт требует проверки).
-
----
 
 ## 3. Что делать дальше (по порядку)
 
-1. **Собрать и поставить последнюю сборку** (см. раздел 4). Подключиться к узлу.
-2. **Посмотреть последнее сообщение ядра**: `CoreTrace.lastCoreMessage()` уже пишется в
-   `writeDebugMessage` (адреса и ключи вырезаются) и показывается на главном экране следующего
-   запуска. Там будет видно: не проходит Reality-рукопожатие, не резолвится DNS, нет маршрута и т.д.
-   Если сообщение пустое — поднять `"log": {"level": "debug"}` в `SingBoxConfigBuilder.assemble()`.
-3. **DNS**: в `openTun` уже добавлен запасной `1.1.1.1`, если ядро не отдало адреса
-   (иначе Android идёт в DNS оператора, недоступный через туннель). Проверить, что на TUN реально
-   ставится адрес из `options.getDNSServerAddress()` (у sing-box это hijack-адрес TUN).
-4. **Проверить сам туннель**: при подключённом VPN из другого приложения запросить
-   `https://1.1.1.1/cdn-cgi/trace` (без DNS) и `https://api.ipify.org` (с DNS).
-   Если по IP работает, а по имени нет — это DNS. Если не работает ничего — outbound.
-5. **Outbound**: сравнить наш JSON с рабочей ссылкой владельца (Happ/INCY/Karing работают на тех же
-   узлах): `flow`, `fp`, `pbk`, `sid`, `sni`, `type`. Проверить, что `auto_detect_interface`
-   не отдаёт ядру наш же tun (в `DefaultInterfaceMonitor` имена `tun*` отфильтрованы).
-6. Проверить раздельный туннель на устройстве (список приложений, режимы) — код готов, не проверен.
-
----
+1. **Поставить свежую сборку** (см. раздел 4) и подключиться к узлу.
+2. **Прочитать журнал ядра** на главном экране (три последние строки) или взять файл
+   `/sdcard/Download/stravo-core.log` (Настройки → «Сохранить журнал ядра»).
+   Ключевые строки sing-box:
+   - `updated default interface wlan0 (…) type wifi` — монитор сработал;
+   - `no available network interface` — ядро не получило сеть от Java-слоя;
+   - `dial … EPERM` — ушло в привязку к интерфейсу (значит индекс не найден);
+   - строки inbound при висящих страницах — TUN ловит пакеты, проблема в outbound.
+3. **Отличить «не работает туннель» от «не работает узел»**: Настройки → «Прямой режим
+   (диагностика)» пускает трафик туннеля напрямую. Если сайты открываются — TUN, DNS и маршруты
+   в порядке, дело в узле/ключе. Если нет — смотреть TUN и маршруты.
+4. **Варианты ядра** (Настройки → «Вариант ядра»): 1/4 как есть, 2/4 без разбора протокола,
+   3/4 системный стек, 4/4 DNS напрямую. Переключаются без пересборки, применяются при
+   следующем подключении.
+5. **Проверить раздельный туннель** на устройстве (список приложений, режимы).
+6. **Проверить `?format=mihomo`** на живой подписке (раньше проверялся на локальных образцах).
 
 ## 4. Инфраструктура и как всё повторять
 
 **Сборка**
-- push в `main` → workflow `Android build` (job `core` собирает/достаёт `libbox.aar` из кэша,
-  job `build` собирает debug и release APK).
+- push в `main` → workflow `Android build` (job `core` достаёт `libbox.aar` из кэша,
+  job `build` собирает debug и release APK). Один push = один прогон; несколько файлов
+  удобнее коммитить одним изменением.
 
 **Скачать APK**
 ```
@@ -116,9 +120,17 @@ cp apkout/app-debug.apk /sdcard/Download/stravo-vpn-debug.apk
 ```
 Токен GitHub лежит в `~/.config/dsh/github-token` — **никогда не коммитить и не печатать**.
 
+**Пуш без git**
+`node ~/Stravo/tools/ghpush.cjs <каталог> <файл-с-сообщением>` — коммит через Contents API
+(git в окружении нет). Перед пушем полезно `node ~/Stravo/tools/gitdiff.cjs <каталог>`:
+показывает отличающиеся и новые файлы.
+
 **Установить на телефон**
 «Мои файлы» → Загрузки → `stravo-vpn-debug.apk` → «Установщик пакетов» → «Только сейчас» →
 в диалоге «Установить приложение?» кнопка справа (`pm install` не работает: нет прав).
+Debug-ключ в CI кэшируется не всегда: если система предложила «Удалить приложение?» —
+keystore сменился, установка поверх невозможна, данные приложения при этом теряются
+(подписку придётся добавить заново).
 
 **Проверить установленное**
 ```
@@ -127,36 +139,36 @@ unset LD_LIBRARY_PATH; P=$(pm path com.stravo.vpn | head -1 | cut -d: -f2); ls -
 
 **Логи**
 `logcat` показывает только логи своего uid — логи ядра и краши STRAVO читать нельзя.
-Поэтому в приложении есть `CoreTrace` + `StartupDiagnostics` (строка на главном экране).
+Поэтому в приложении есть `CoreTrace`/`CoreLogReader` (главный экран) и выгрузка файла
+в «Загрузки».
 
 **Полезные скрипты** (`~/Stravo/tools/`): `cipoll.cjs` (ждать прогон), `runs.cjs`, `dlapk.cjs`,
-`joblog.cjs` (лог упавшего job), `check.cjs` (проверка скобок и CJK в исходниках),
-`javap.cjs` (разбор классов AAR), `smark.cjs` (знак S из эталонной иконки).
+`joblog.cjs`, `check.cjs` (скобки и CJK), `gitdiff.cjs`, `ghpush.cjs`, `clssig.cjs`
+(сигнатуры классов AAR).
 
-**Исходники sing-box 1.14.1** для сверки API лежат в `~/work/sbsrc/sing-box-1.14.1`
-(скачаны с GitHub), эталонный клиент — `SagerNet/sing-box-for-android` (`bg/BoxService.kt`,
-`bg/VPNService.kt`) — по нему проверяем вызовы libbox.
-
----
+**Исходники для сверки**: sing-box 1.14.1 — `~/work/sbsrc/sing-box-1.14.1`, sing-tun 0.9.3 —
+`~/work/singtun`, эталонный клиент `SagerNet/sing-box-for-android` — `~/work/sfa`
+(`bg/VPNService.kt`, `bg/PlatformInterfaceWrapper.kt`, `bg/DefaultNetworkMonitor.kt`).
 
 ## 5. Правила
 
 - `AGENTS.md`: не логировать и не коммитить URL подписок, UUID, ключи, токены, полные конфиги;
   автотесты не добавлять; прод-серверы и платежи не трогать;
-- стиль: бумага + графит, изумрудный — только функциональный акцент; никаких щитов, замков, пейзажей;
+- стиль: бумага + графит, изумрудный — только функциональный акцент;
 - `app/libs/*.aar` в git не хранится — его кладёт CI;
 - если ядро или API не готовы — показывать честное состояние, не имитировать успех.
-
----
 
 ## 6. Карта изменённых файлов
 
 ```
 app/src/main/java/com/stravo/vpn/
   data/AppContainer.kt                    DI: репозитории, CoreTrace, диагностика, ядро
-  data/diagnostics/CoreTrace.kt           шаги ядра + последнее сообщение ядра
+  data/diagnostics/CoreTrace.kt           шаги ядра + журнал в памяти
+  data/diagnostics/CoreLogReader.kt       хвост журнала ядра из CrashReport-*.log
+  data/diagnostics/CoreLogExporter.kt     выгрузка журнала в «Загрузки»
   data/diagnostics/StartupDiagnostics.kt  причина прошлого завершения (ApplicationExitInfo)
-  data/settings/SettingsRepository.kt     настройки + режим раздельного туннеля и список пакетов
+  data/diagnostics/TunnelProbe.kt         активная сеть и внешний адрес
+  data/settings/SettingsRepository.kt     настройки, раздельный туннель, прямой режим
   data/subscription/PanelSubscription.kt  JSON панелей (Xray / Clash-mihomo) → share-ссылки
   data/subscription/SubscriptionImporter.kt  загрузка подписки, форматы тела, ошибки
   data/subscription/SubscriptionRepository.kt  подписка и узлы переживают перезапуск
@@ -164,13 +176,17 @@ app/src/main/java/com/stravo/vpn/
   domain/subscription/SubscriptionLocations.kt   названия локаций без протокола
   engine/box/StravoVpnService.kt          VpnService + PlatformInterface + диагностика
   engine/box/SingBoxVpnEngine.kt          VpnEngine поверх сервиса
-  engine/box/SingBoxConfigBuilder.kt      ссылка узла → JSON sing-box
+  engine/box/SingBoxConfigBuilder.kt      ссылка узла → JSON sing-box (+ варианты)
+  engine/box/CoreTuning.kt                диагностические варианты сборки конфига
   engine/box/TunnelCore.kt                проверка загрузки нативных .so
+  ui/components/CoreLogCard.kt            журнал ядра на главном экране
   ui/components/SMark.kt                  знак S: PNG из иконки + упрощённый штрих
   ui/mobile/AppsScreen.kt                 раздельный туннель по приложениям
-  ui/mobile/HomeScreen.kt                 главная по макету + строка диагностики
+  ui/mobile/HomeScreen.kt                 главная по макету + журнал + самопроверка
+  ui/mobile/SettingsScreen.kt             настройки + диагностика ядра
+  ui/state/HomeUiState.kt                 состояние главного экрана, авто-локация
+  ui/state/StravoViewModel.kt             события, проба, выгрузка журнала
   ui/theme/StravoTheme.kt                 телефон всегда на бумаге
 docs/IMPLEMENTATION.md                    разделы 1b–1e (ядро, форматы, грабли)
 docs/QA_CHECKLIST.md                      чек-лист, включая форматы подписки
 ```
-
