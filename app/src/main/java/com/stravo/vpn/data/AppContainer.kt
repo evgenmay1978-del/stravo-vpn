@@ -1,6 +1,7 @@
 package com.stravo.vpn.data
 
 import android.content.Context
+import com.stravo.vpn.data.diagnostics.CoreLogReader
 import com.stravo.vpn.data.diagnostics.CoreTrace
 import com.stravo.vpn.data.diagnostics.StartupDiagnostics
 import com.stravo.vpn.data.diagnostics.TunnelProbe
@@ -41,6 +42,9 @@ class AppContainer(context: Context) {
 
     /** Самопроверка туннеля: внешний адрес со стороны узла и контрольный запрос. */
     val tunnelProbe: TunnelProbe = TunnelProbe(appContext, coreTrace)
+
+    /** Журнал самого ядра (libbox пишет его в файл рядом с данными приложения). */
+    val coreLogReader: CoreLogReader = CoreLogReader(appContext, coreTrace)
 
     /** Диагностический вариант сборки конфига ядра: переключается на живом устройстве. */
     val coreTuning: CoreTuning = CoreTuning(appContext)
