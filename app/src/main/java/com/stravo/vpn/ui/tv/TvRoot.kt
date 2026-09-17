@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stravo.vpn.R
 import com.stravo.vpn.core.StravoConfig
 import com.stravo.vpn.ui.components.BrandMark
+import com.stravo.vpn.ui.mobile.AppsScreen
 import com.stravo.vpn.ui.components.PaperCanvas
 import com.stravo.vpn.ui.navigation.Destination
 import com.stravo.vpn.ui.navigation.StravoNavigator
@@ -104,6 +105,13 @@ fun TvRoot(
 
                         Destination.SETTINGS -> TvSettingsScreen(
                             viewModel = viewModel,
+                            onOpenApps = { navigator.select(Destination.APPS) },
+                        )
+
+                        // Раздельный туннель: тот же экран, что на телефоне — он весь на D-pad.
+                        Destination.APPS -> AppsScreen(
+                            viewModel = viewModel,
+                            onBack = { navigator.select(Destination.SETTINGS) },
                         )
 
                         // На TV подписка приходит переносом с телефона: отдельного ввода ссылки нет.

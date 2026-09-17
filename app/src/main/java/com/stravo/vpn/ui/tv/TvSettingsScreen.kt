@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stravo.vpn.BuildConfig
 import com.stravo.vpn.R
 import com.stravo.vpn.ui.components.StravoSettingRow
+import com.stravo.vpn.ui.mobile.appsModeLabel
 import com.stravo.vpn.ui.components.StravoToggle
 import com.stravo.vpn.ui.state.StravoViewModel
 import com.stravo.vpn.ui.theme.LocalStravoPalette
@@ -23,6 +24,7 @@ import com.stravo.vpn.ui.theme.StravoType
 @Composable
 fun TvSettingsScreen(
     viewModel: StravoViewModel,
+    onOpenApps: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalStravoPalette.current
@@ -72,6 +74,12 @@ fun TvSettingsScreen(
                     onCheckedChange = { value -> viewModel.updateSettings { it.copy(networkCheck = value) } },
                 )
             },
+        )
+        StravoSettingRow(
+            iconRes = R.drawable.ic_network,
+            title = stringResource(id = R.string.settings_apps),
+            subtitle = appsModeLabel(settings.appMode),
+            onClick = onOpenApps,
         )
         StravoSettingRow(
             iconRes = R.drawable.ic_info,
