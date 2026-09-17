@@ -143,11 +143,12 @@ fun StravoSettingRow(
             .fillMaxWidth()
             .scale(scale)
             .clip(shape)
-            .background(palette.panel)
-            .border(
-                width = if (focused) StravoTokens.FocusBorder else 1.dp,
-                color = if (focused) palette.accent else palette.outline.copy(alpha = 0.22f),
-                shape = shape,
+            .then(
+                if (focused) {
+                    Modifier.border(StravoTokens.FocusBorder, palette.accent, shape)
+                } else {
+                    Modifier
+                },
             )
             .then(
                 if (onClick != null) {

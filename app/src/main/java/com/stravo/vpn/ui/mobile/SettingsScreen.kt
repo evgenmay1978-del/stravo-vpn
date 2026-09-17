@@ -25,6 +25,7 @@ import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.unit.dp
+import com.stravo.vpn.ui.components.PencilDivider
 
 /** Настройки: протокол, переключатели, язык и сведения о сборке. */
 @Composable
@@ -64,7 +65,7 @@ fun SettingsScreen(
                     viewModel.updateSettings { it.copy(protocol = next) }
                 },
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_bell,
                 title = stringResource(id = R.string.settings_notifications),
@@ -75,7 +76,7 @@ fun SettingsScreen(
                     )
                 },
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_quick_connect,
                 title = stringResource(id = R.string.settings_autoconnect),
@@ -86,7 +87,7 @@ fun SettingsScreen(
                     )
                 },
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_power,
                 title = stringResource(id = R.string.settings_start_on_boot),
@@ -97,7 +98,7 @@ fun SettingsScreen(
                     )
                 },
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_wifi,
                 title = stringResource(id = R.string.settings_network_check),
@@ -108,7 +109,7 @@ fun SettingsScreen(
                     )
                 },
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_globe,
                 title = stringResource(id = R.string.settings_language),
@@ -119,7 +120,7 @@ fun SettingsScreen(
                     viewModel.updateSettings { it.copy(language = next) }
                 },
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_info,
                 title = stringResource(id = R.string.settings_about),

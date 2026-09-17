@@ -35,6 +35,8 @@ import com.stravo.vpn.ui.state.HomeUiState
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
+import com.stravo.vpn.ui.components.PencilDivider
+import androidx.compose.foundation.layout.height
 
 /** Выбор локации: фильтр, поиск и список стран из подписки. */
 @Composable
@@ -95,15 +97,22 @@ fun LocationsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(top = StravoTokens.SpaceMd),
-            verticalArrangement = Arrangement.spacedBy(StravoTokens.SpaceSm),
+                .padding(top = StravoTokens.SpaceSm),
         ) {
             items(items = visible, key = { it.id }) { location ->
-                LocationRow(
-                    location = location,
-                    selected = location.id == state.location.id,
-                    onClick = { onEvent(HomeEvent.LocationSelected(location.id)) },
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    LocationRow(
+                        location = location,
+                        selected = location.id == state.location.id,
+                        onClick = { onEvent(HomeEvent.LocationSelected(location.id)) },
+                    )
+                    PencilDivider(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .padding(horizontal = StravoTokens.SpaceSm),
+                    )
+                }
             }
         }
 
@@ -125,16 +134,11 @@ private fun LocationRow(
     val palette = LocalStravoPalette.current
     val shape = RoundedCornerShape(StravoTokens.CardRadiusMobile)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = if (selected) palette.accent else palette.outline.copy(alpha = 0.20f),
-                shape = shape,
-            )
-            .background(palette.panel)
-            .clickable(role = Role.RadioButton, onClick = onClick),
+    modifier = Modifier
+        .fillMaxWidth()
+        .clip(shape)
+        .clickable(role = Role.RadioButton, onClick = onClick)
+        .padding(vertical = StravoTokens.SpaceSm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceMd),
     ) {

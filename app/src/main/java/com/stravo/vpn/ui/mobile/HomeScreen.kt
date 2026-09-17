@@ -35,7 +35,6 @@ import com.stravo.vpn.telegram.BotLaunchResult
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.BrandMark
-import com.stravo.vpn.ui.components.IconAction
 import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PencilButtonStyle
 import com.stravo.vpn.ui.components.PowerMedallion
@@ -68,21 +67,8 @@ fun HomeScreen(
             .padding(horizontal = StravoTokens.ScreenPaddingMobile),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = StravoTokens.SpaceMd),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BrandMark(size = 36.dp)
-            Spacer(modifier = Modifier.weight(1f))
-            IconAction(
-                iconRes = R.drawable.ic_settings,
-                label = stringResource(id = R.string.nav_settings),
-                onClick = onOpenSettings,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
-        BrandMark(size = 66.dp, withRing = false)
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
+        BrandMark(size = 72.dp, withRing = false)
         Text(
             text = stringResource(id = R.string.app_name),
             style = StravoType.Wordmark,

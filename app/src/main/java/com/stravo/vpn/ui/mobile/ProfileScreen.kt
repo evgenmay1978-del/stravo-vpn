@@ -30,6 +30,7 @@ import com.stravo.vpn.ui.state.Notice
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
+import com.stravo.vpn.ui.components.PencilDivider
 
 /** Профиль: подписка и сервисные действия. Секретов подписки на экране нет. */
 @Composable
@@ -114,28 +115,28 @@ fun ProfileScreen(
                 },
                 onClick = onAddSubscription,
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_profile,
                 title = stringResource(id = R.string.profile_add_subscription),
                 subtitle = stringResource(id = R.string.profile_add_subscription_sub),
                 onClick = onAddSubscription,
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_tv,
                 title = stringResource(id = R.string.profile_connect_tv),
                 subtitle = stringResource(id = R.string.profile_connect_tv_sub),
                 onClick = onConnectTv,
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_share,
                 title = stringResource(id = R.string.profile_invite),
                 subtitle = notAvailable,
                 onClick = { },
             )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_send,
                 title = stringResource(id = R.string.profile_support),

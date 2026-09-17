@@ -104,6 +104,12 @@ fun TvRoot(
                             viewModel = viewModel,
                         )
 
+                        // На TV подписка приходит переносом с телефона: отдельного ввода ссылки нет.
+                        Destination.ADD_SUBSCRIPTION -> TvConnectScreen(
+                            viewModel = viewModel,
+                            onDone = { navigator.select(Destination.HOME) },
+                        )
+
                         // На TV сканера нет: камера и «Свободный интернет» — только телефон.
                         Destination.SCANNER -> TvHomeScreen(
                             state = state,
