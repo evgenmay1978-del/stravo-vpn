@@ -100,6 +100,39 @@ gomobile и кэширует результат по версии (иначе к
 
 ---
 
+## 1d. Ядро собрано: факты для интеграции
+
+libbox.aar собран в CI из sing-box v1.14.1 (workflow libbox.yml, прогон зелёный,
+две независимые сборки дали битово идентичный файл). ABI: arm64-v8a и armeabi-v7a.
+
+Артефакты (вне репозитория, бинарники в git не кладём):
+
+- libbox.aar — API 24, около 54 МиБ;
+- libbox-legacy.aar — API 21, около 47 МиБ; classes.jar идентичен основному.
+
+Ключ кэша, под которым AAR лежат в кэше Actions:
+libbox-aar-v1.14.1-go1.26.8-gomobilev0.1.13-android-arm64-arm-v2
+android.yml должен восстанавливать этот кэш в app/libs перед сборкой, а сам каталог
+app/libs/*.aar — в .gitignore.
+
+API (пакет io.nekohasekai.libbox, класс BoxService в этой версии отсутствует):
+
+- Libbox.setup(SetupOptions), Libbox.newCommandServer(handler, platformInterface);
+- CommandServer.start(), startOrReloadService(config, overrideOptions), closeService(), close();
+- PlatformInterface (реализуется в Kotlin): openTun(TunOptions): Int, startDefaultInterfaceMonitor,
+  autoDetectInterfaceControl, getInterfaces, findConnectionOwner, sendNotification и др.;
+- TunOptions — только геттеры (getMTU, getInet4Address, getAutoRoute, getStrictRoute, ...);
+- CommandServerHandler — интерфейс обратных вызовов (serviceReload, serviceStop, writeDebugMessage).
+
+Решение по minSdk: остаёмся на 23 и берём libbox-legacy.aar (в основном AAR minSdkVersion 24,
+manifest merger упал бы). Legacy отличается только отсутствием naive outbound — для наших
+протоколов это не важно.
+
+Размер: APK вырастет примерно на 70–80 МиБ, если класть оба ABI. Варианты — оставить
+arm64 + arm (нужен v7a для ТВ-боксов) либо сделать splits по ABI.
+
+---
+
 ## 2. Pairing-API (перенос подписки phone → TV)
 
 Контракт, который нужен на стороне сервиса:
