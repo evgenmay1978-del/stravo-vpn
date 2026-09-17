@@ -135,14 +135,14 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         }
         scope.launch {
             if (shouldConnect) {
-                val node = current.nodeFor(current.location.id)
+                val node = current.nodeForLocation()
                 val profile = current.profile ?: VpnProfile(
                     id = node?.id ?: "default",
                     title = node?.name ?: current.subscription.planName,
                     protocolHint = node?.let { it.protocolLabel + " · " + it.transportLabel }
                         ?: _profilesProtocolHint,
                 )
-                container.vpnEngine.connect(profile, current.location)
+                container.vpnEngine.connect(profile, current.connectedLocation(node))
             } else {
                 container.vpnEngine.disconnect()
             }
