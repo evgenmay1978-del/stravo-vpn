@@ -860,6 +860,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
         const val EXTRA_LOCATION_ID = "com.stravo.vpn.extra.LOCATION_ID"
 
         private const val SESSION_NAME = "STRAVO VPN"
+        /** Имена TUN-интерфейсов Android: их нельзя отдавать ядру как маршрут наружу. */
+        private const val TUN_PREFIX = "tun"
         private const val FALLBACK_DNS = "1.1.1.1"
         private const val DEFAULT_MTU = 9000
         private const val LOG_SETTLE_MS = 1200L
