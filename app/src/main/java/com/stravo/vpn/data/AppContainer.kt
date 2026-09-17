@@ -1,6 +1,7 @@
 package com.stravo.vpn.data
 
 import android.content.Context
+import com.stravo.vpn.data.diagnostics.Clipboard
 import com.stravo.vpn.data.diagnostics.CoreLogExporter
 import com.stravo.vpn.data.diagnostics.CoreLogReader
 import com.stravo.vpn.data.diagnostics.CoreTrace
@@ -49,6 +50,9 @@ class AppContainer(context: Context) {
 
     /** Выгрузка журнала в «Загрузки»: так его видно без системного logcat. */
     val coreLogExporter: CoreLogExporter = CoreLogExporter(appContext)
+
+    /** Копирование журнала в буфер обмена: быстрый путь передать его текстом. */
+    val clipboard: Clipboard = Clipboard(appContext)
 
     /** Диагностический вариант сборки конфига ядра: переключается на живом устройстве. */
     val coreTuning: CoreTuning = CoreTuning(appContext)
