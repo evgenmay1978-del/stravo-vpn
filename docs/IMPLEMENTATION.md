@@ -192,8 +192,12 @@ arm64 + arm (нужен v7a для ТВ-боксов) либо сделать sp
    `addDisallowedApplication` в одном `Builder` запрещены, исключение молча
    глоталось и раздельный туннель мог не примениться. Своё приложение исключаем
    первым и только в режиме «все, кроме выбранных».
-6. **`sniff` в tun-inbound нужен правилу `hijack-dns`**: без разбора протокола
-   DNS-пакеты уходят в туннель как обычный UDP и остаются без ответа.
+6. **Разбор протокола — только правилом, не полем inbound.** В sing-box 1.11+ поля
+   `sniff`, `sniff_override_destination`, `domain_strategy` в inbound объявлены
+   legacy, а с 1.13 проверка стала жёсткой: `initialize inbound[0]: legacy inbound
+   fields are deprecated` — и ядро вообще не стартует. Разбор включается правилом
+   `{"action":"sniff"}` в `route.rules`, за ним идёт `{"protocol":"dns","action":"hijack-dns"}`.
+   Для tun это ещё и `address`/`route_address` вместо старых `inet4_address`/`inet4_route_address`.
 7. **`SetupOptions.setDebug(true)`** — без него ядро не зовёт `writeDebugMessage`,
    и «последнее сообщение ядра» всегда пустое. Сам журнал ядра libbox пишет в
    `filesDir/CrashReport-*.log` (и в `crash_reports`), его читает `CoreLogReader`,
