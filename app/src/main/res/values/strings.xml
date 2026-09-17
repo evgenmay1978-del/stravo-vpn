@@ -153,6 +153,8 @@
     <string name="diag_core_log">Журнал ядра</string>
     <string name="diag_probe">Проверить туннель</string>
     <string name="settings_core_variant">Вариант ядра (диагностика)</string>
+    <string name="settings_core_log_save">Сохранить журнал ядра</string>
+    <string name="settings_core_log_save_sub">Файл stravo-core.log появится в «Загрузках»</string>
     <string name="settings_core_direct">Прямой режим (диагностика)</string>
     <string name="settings_core_direct_sub">Трафик туннеля идёт напрямую, без узла</string>
     <string name="diag_probe_running">Проверяем туннель…</string>
