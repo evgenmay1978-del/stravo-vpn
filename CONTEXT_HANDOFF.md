@@ -120,6 +120,60 @@
    есть, а ответов нет — смотреть XTLS Vision/Reality: `flow`, `fp`, `pbk`, `sid`, `sni`.
    Сверять с тем же узлом в рабочем клиенте.
 
+## 2b. XHTTP: что это и почему у нас «не поддерживается» (изучено)
+
+Источники: официальный разбор Xray «XHTTP: Beyond REALITY»
+(github.com/XTLS/Xray-core/discussions/4113), исходники Xray
+`transport/internet/splithttp/config.go`, отчёт о клиентской поддержке в форке
+sing-box-lx (`SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/IMPLEMENTATION_REPORT.md`).
+
+**Идея.** XHTTP — транспорт Xray, где канал разделён на два независимых HTTP-потока:
+
+- **вверх**: клиент отправляет данные `POST /path/<sessionID>/<seq>`; в режиме
+  `packet-up` каждый POST — самостоятельный кусок (сервер склеивает по `seq`, по
+  умолчанию буферизует до 30), в `stream-up` вверх идёт одним долгим потоком с
+  gRPC-подобной маскировкой заголовков;
+- **вниз**: клиент открывает `GET /path/<sessionID>` и получает бесконечный ответ
+  (SSE-подобный: `Content-Type: text/event-stream`, `X-Accel-Buffering: no`,
+  `Cache-Control: no-store`).
+
+Сессия связывается по случайному UUID в **path** (не в query — так меньше проблем с
+посредниками), `seq` считается с нуля; сервер умеет переупорядочивать POST-ы. Смысл —
+пройти через CDN и HTTP-посредники, которые кэшируют запрос целиком: вниз всегда идёт
+«скачивание большого файла», вверх — пачка запросов.
+
+**Режимы** (`mode`): `auto` (по умолчанию: packet-up на H1/H2, stream-one на H3),
+`packet-up` (самый совместимый), `stream-up`, `stream-one` (по сути старый HTTP-транспорт).
+
+**Параметры**: `path`, `host`, `mode`, `extra` (JSON со всеми тонкими настройками),
+`alpn=h2|h3`, `security=tls|reality`, `sni`, `fp`, `pbk`, `sid`.
+Внутри `extra` (и в Xray-конфиге): `sessionIDPlacement`/`sessionIDKey`/`sessionIDLength`
+(path|query|header|cookie), `seqPlacement`/`seqKey`, `uplinkDataPlacement`
+(body|auto|header|cookie) и `uplinkChunkSize`, `uplinkHTTPMethod`, `xPaddingBytes` +
+`xPaddingObfsMode`/`xPaddingKey`/`xPaddingHeader`/`xPaddingPlacement`,
+`scMaxEachPostBytes`, `scMinPostsIntervalMs`, `scMaxBufferedPosts`,
+`scStreamUpServerSecs`, XMUX (`maxConcurrency`, `maxConnections`, `cMaxReuseTimes`,
+`hMaxRequestTimes`, `hKeepAlivePeriod`) и серверные `serverMaxHeaderBytes`, `noSSEHeader`.
+
+**Главное:** **sing-box 1.14.1 XHTTP не умеет вообще** — в `option/v2ray_transport.go`
+перечислены только `http`, `ws`, `quic`, `grpc`, `httpupgrade`; типа `xhttp`/
+`splithttp` нет ни в одном файле ядра. Поэтому `CoreConfig.Unsupported` для XHTTP-узлов —
+честный отказ, а не заглушка.
+
+**Варианты, если XHTTP-узлы нужны** (по росту цены):
+
+1. **Использовать Reality+Vision узлы** — в подписке владельца их шесть
+   (`VLESS · TCP · Reality`), они полностью поддержаны и соответствуют схеме 1.14.1.
+2. **Собрать libbox из форка** с клиентским XHTTP: `Leadaxe/sing-box-lx` (ветка `lx`,
+   build tag `with_xhttp`; реализованы 12 клиентских параметров + obfs, есть lx-build,
+   тесты и отчёт) или `shtorm-7/sing-box-extended` (`transport/v2rayxhttp`).
+   В workflow `libbox.yml` достаточно поменять `singbox_repo`/`singbox_ref`.
+3. **Патчить upstream самим** — это отдельный транспорт (`transport/v2rayxhttp`),
+   дни работы; спека, карта 16 полей и тесты есть в форке.
+
+Чего делать не нужно: «эмулировать» XHTTP через `httpupgrade`/`http` — это другой
+протокол, сервер его не поймёт.
+
 ## 3. Порядок действий
 
 1. Поставить свежую сборку (раздел 4). Включить VPN, открыть пару сайтов в браузере.
