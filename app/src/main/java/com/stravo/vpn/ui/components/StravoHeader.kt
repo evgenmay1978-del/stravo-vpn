@@ -46,12 +46,13 @@ fun BrandMark(
             .then(if (withRing) Modifier.border(1.dp, palette.outline.copy(alpha = 0.35f), CircleShape) else Modifier),
     ) {
         Canvas(modifier = Modifier.size(size)) {
-            val box = this.size.minDimension * 0.56f
+            val box = this.size.minDimension * 0.62f
             drawSMark(
                 origin = Offset((this.size.width - box) / 2f, (this.size.height - box) / 2f),
                 box = box,
                 strokeColor = palette.textPrimary,
                 accentColor = palette.accent,
+                paperColor = palette.panel,
             )
         }
     }
