@@ -479,8 +479,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
         item.setGateway(StringList(gateways))
         item.setFlags(flagsOf(source, capabilities))
         item.setType(typeOf(source, capabilities))
+        val tunnel = myInterface == source.name || source.name.startsWith(TUN_PREFIX)
         item.setMetered(
-            capabilities != null &&
+            !tunnel &&
+                capabilities != null &&
                 !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
         )
         return item
@@ -730,6 +732,17 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
         private fun update(network: Network) = report(network)
 
+        /** Сеть — это наш туннель (VPN-транспорт или имя tun*): для ядра она не маршрут. */
+        private fun isTunnel(network: Network, name: String): Boolean {
+            if (name.startsWith(TUN_PREFIX)) return true
+            val capabilities = try {
+                connectivity?.getNetworkCapabilities(network)
+            } catch (_: Exception) {
+                null
+            }
+            return capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        }
+
         /**
          * Сообщаем ядру сеть по умолчанию. Свойственных Android задержек две: свойства
          * сети могут быть ещё не готовы, а интерфейс — не виден java.net. Поэтому
@@ -747,7 +760,9 @@ class StravoVpnService : VpnService(), PlatformInterface {
                 } catch (_: Exception) {
                     null
                 }
-                if (!name.isNullOrBlank() && name != myInterface) {
+                // Свой TUN отдавать нельзя: ядро тут же отвечает «missing default
+                // interface» и перестаёт выпускать пакеты (проверено на устройстве).
+                if (!name.isNullOrBlank() && name != myInterface && !isTunnel(network, name)) {
                     val index = try {
                         java.net.NetworkInterface.getByName(name)?.index ?: -1
                     } catch (_: Exception) {
@@ -774,8 +789,46 @@ class StravoVpnService : VpnService(), PlatformInterface {
                     return
                 }
             }
+            // Свой туннель может прийти как сеть по умолчанию: тогда берём активную
+            // сеть, которая туннелем не является, — иначе ядро останется без маршрута.
+            val fallback = try {
+                manager.activeNetwork
+            } catch (_: Exception) {
+                null
+            }
+            if (fallback != null && fallback != network) {
+                reportUnderlying(manager, fallback)?.let { return }
+            }
             trace.record("сеть по умолчанию не определилась")
             listener.updateDefaultInterface("", -1, false, false)
+        }
+
+        /** Сеть, через которую реально выходим наружу: без VPN-транспорта и без tun*. */
+        private fun reportUnderlying(manager: ConnectivityManager, network: Network): Unit? {
+            val name = try {
+                manager.getLinkProperties(network)?.interfaceName
+            } catch (_: Exception) {
+                null
+            }
+            if (name.isNullOrBlank() || name == myInterface || isTunnel(network, name)) return null
+            val index = try {
+                java.net.NetworkInterface.getByName(name)?.index ?: -1
+            } catch (_: Exception) {
+                -1
+            }
+            if (index <= 0) return null
+            val capabilities = try {
+                manager.getNetworkCapabilities(network)
+            } catch (_: Exception) {
+                null
+            }
+            val expensive = capabilities != null &&
+                !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+            val constrained = capabilities != null &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED).not()
+            trace.record("сеть по умолчанию (в обход туннеля): " + name + " (#" + index + ")")
+            listener.updateDefaultInterface(name, index, expensive, constrained)
+            return Unit
         }
 
     }
