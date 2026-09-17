@@ -1,0 +1,169 @@
+name: libbox (sing-box Android core)
+
+# Собирает libbox.aar из исходников SagerNet/sing-box через gomobile.
+# Триггеры: ручной запуск и push, затрагивающий только этот файл,
+# чтобы случайно не пересобирать ядро на каждый коммит приложения.
+on:
+  workflow_dispatch:
+    inputs:
+      singbox_repo:
+        description: "Репозиторий sing-box"
+        required: false
+        default: "SagerNet/sing-box"
+        type: string
+      singbox_ref:
+        description: "Тег sing-box (стабильный, закреплённый)"
+        required: false
+        default: "v1.14.1"
+        type: string
+      go_version:
+        description: "Версия Go"
+        required: false
+        default: "1.26.8"
+        type: string
+      gomobile_version:
+        description: "Версия github.com/sagernet/gomobile"
+        required: false
+        default: "v0.1.13"
+        type: string
+      abi_target:
+        description: "Значение gomobile -target"
+        required: false
+        default: "android/arm64,android/arm"
+        type: string
+      cache_version:
+        description: "Инкремент для сброса кэша AAR"
+        required: false
+        default: "1"
+        type: string
+  push:
+    paths:
+      - ".github/workflows/libbox.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  libbox:
+    name: build libbox.aar
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout приложения (нужен каталог app/libs)
+        uses: actions/checkout@v4
+
+      - name: Параметры сборки
+        id: params
+        env:
+          IN_REPO: ${{ inputs.singbox_repo || 'SagerNet/sing-box' }}
+          IN_REF: ${{ inputs.singbox_ref || 'v1.14.1' }}
+          IN_GO: ${{ inputs.go_version || '1.26.8' }}
+          IN_GOMOBILE: ${{ inputs.gomobile_version || 'v0.1.13' }}
+          IN_ABI: ${{ inputs.abi_target || 'android/arm64,android/arm' }}
+          IN_CACHE: ${{ inputs.cache_version || '1' }}
+        run: |
+          set -euo pipefail
+          ABI_SLUG="$(printf '%s' "$IN_ABI" | tr '/,' '--')"
+          {
+            echo "SINGBOX_REPO=$IN_REPO"
+            echo "SINGBOX_REF=$IN_REF"
+            echo "GO_VERSION=$IN_GO"
+            echo "GOMOBILE_VERSION=$IN_GOMOBILE"
+            echo "ABI_TARGET=$IN_ABI"
+            echo "ABI_SLUG=$ABI_SLUG"
+            echo "AAR_CACHE_KEY=libbox-aar-${IN_REF}-go${IN_GO}-gomobile${IN_GOMOBILE}-${ABI_SLUG}-v${IN_CACHE}"
+          } >> "$GITHUB_ENV"
+          echo "Кэш-ключ AAR: libbox-aar-${IN_REF}-go${IN_GO}-gomobile${IN_GOMOBILE}-${ABI_SLUG}-v${IN_CACHE}"
+
+      - name: Restore libbox.aar из кэша
+        id: aar-cache
+        uses: actions/cache@v4
+        with:
+          path: app/libs/libbox.aar
+          key: ${{ env.AAR_CACHE_KEY }}
+          restore-keys: |
+            libbox-aar-${{ env.SINGBOX_REF }}-go${{ env.GO_VERSION }}-
+
+      - name: Checkout sing-box ${{ env.SINGBOX_REF }}
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SINGBOX_REPO }}
+          ref: ${{ env.SINGBOX_REF }}
+          path: sing-box
+          fetch-depth: 1
+
+      - name: Гарантировать тег версии (libbox читает git describe --tags)
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        working-directory: sing-box
+        run: |
+          set -euo pipefail
+          if ! git describe --tags >/dev/null 2>&1; then
+            git tag -f "${{ env.SINGBOX_REF }}"
+          fi
+          echo "sing-box version: $(git describe --tags)"
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Кэш Go-модулей и сборочного кэша
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ env.GO_VERSION }}-${{ env.SINGBOX_REF }}-${{ hashFiles('sing-box/go.sum') }}
+          restore-keys: |
+            go-${{ env.GO_VERSION }}-${{ env.SINGBOX_REF }}-
+            go-${{ env.GO_VERSION }}-
+
+      - name: Setup Android NDK r28 (фиксированная версия sing-box 28.0.13004108)
+        id: setup-ndk
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28
+
+      - name: Setup JDK 17 (build_libbox требует ровно openjdk 17)
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Установка gomobile ${{ env.GOMOBILE_VERSION }}
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          go install -v github.com/sagernet/gomobile/cmd/gomobile@${{ env.GOMOBILE_VERSION }}
+          go install -v github.com/sagernet/gomobile/cmd/gobind@${{ env.GOMOBILE_VERSION }}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build libbox.aar
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        working-directory: sing-box
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          set -euo pipefail
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          go run ./cmd/internal/build_libbox -target android -platform "${{ env.ABI_TARGET }}"
+          mkdir -p "$GITHUB_WORKSPACE/app/libs"
+          cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
+          cp libbox-legacy.aar "$GITHUB_WORKSPACE/app/libs/libbox-legacy.aar"
+          ls -la "$GITHUB_WORKSPACE/app/libs"
+          unzip -l "$GITHUB_WORKSPACE/app/libs/libbox.aar"
+
+      - name: Upload libbox-aar
+        uses: actions/upload-artifact@v4
+        with:
+          name: libbox-aar
+          path: |
+            app/libs/libbox.aar
+            app/libs/libbox-legacy.aar
+          if-no-files-found: error
