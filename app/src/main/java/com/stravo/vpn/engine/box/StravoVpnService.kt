@@ -29,6 +29,7 @@ import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.LocalDNSTransport
 import io.nekohasekai.libbox.NeighborUpdateListener
+import io.nekohasekai.libbox.OverrideOptions
 import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.PlatformUser
 import io.nekohasekai.libbox.RoutePrefix
@@ -160,7 +161,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
             commandServer = server
             trace.record(CoreTrace.STEP_SERVER)
             server.start()
-            server.startOrReloadService(config, null)
+            // OverrideOptions обязателен: ядро разыменовывает его без проверки на null.
+            server.startOrReloadService(config, OverrideOptions())
             trace.record(CoreTrace.STEP_STARTED)
             setState(ConnectionState.Connected, locationId, System.currentTimeMillis())
         } catch (error: Throwable) {

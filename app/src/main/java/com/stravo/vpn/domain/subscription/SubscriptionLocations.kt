@@ -36,10 +36,13 @@ object SubscriptionLocations {
         }
     }
 
-    /** Убирает флаг и служебные разделители из названия сервера. */
+    /** Убирает флаг, протокол и служебные разделители: «🇪🇸 Испания · VLESS» → «Испания». */
     fun cleanName(name: String): String {
         val withoutFlag = removeFlag(name)
-        return withoutFlag
+        val parts = withoutFlag.split('·', '|').map { it.trim() }.filter { it.isNotEmpty() }
+        val kept = parts.filterNot { it.lowercase() in PROTOCOL_WORDS }
+        return (if (kept.isEmpty()) parts else kept)
+            .joinToString(" · ")
             .trim()
             .trim('-', '|', '·', '_', '—', '–', '(', ')')
             .trim()
@@ -81,6 +84,11 @@ object SubscriptionLocations {
         }
         return null
     }
+
+    private val PROTOCOL_WORDS = setOf(
+        "vless", "vmess", "trojan", "shadowsocks", "ss", "hysteria", "hysteria2", "hy2",
+        "anytls", "tuic", "naive", "reality", "tls", "xhttp", "ws", "tcp",
+    )
 
     private const val FLAG_START = 0x1F1E6
     private const val FLAG_END = 0x1F1FF
