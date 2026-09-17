@@ -1,0 +1,45 @@
+package com.stravo.vpn.ui.state
+
+import com.stravo.vpn.domain.model.ConnectionState
+import com.stravo.vpn.domain.model.FormFactor
+import com.stravo.vpn.domain.model.LocationsCatalog
+import com.stravo.vpn.domain.model.NetworkMode
+import com.stravo.vpn.domain.model.Subscription
+import com.stravo.vpn.domain.model.VpnLocation
+import com.stravo.vpn.domain.model.VpnProfile
+import com.stravo.vpn.domain.model.VpnStats
+import com.stravo.vpn.domain.policy.CapabilityPolicy
+
+/** Одно неизменяемое состояние главного экрана. */
+data class HomeUiState(
+    val formFactor: FormFactor = FormFactor.PHONE,
+    val connection: ConnectionState = ConnectionState.Disconnected,
+    val location: VpnLocation = LocationsCatalog.AUTO,
+    val profile: VpnProfile? = null,
+    val subscription: Subscription = Subscription.None,
+    val mode: NetworkMode = NetworkMode.NORMAL_VPN,
+    val stats: VpnStats = VpnStats.Empty,
+    val notice: Notice? = null,
+) {
+    val modes: List<NetworkMode> get() = CapabilityPolicy.availableModes(formFactor)
+    val isTv: Boolean get() = formFactor.isTv
+}
+
+enum class Notice {
+    LINK_COPIED,
+    BOT_UNAVAILABLE,
+    CORE_MISSING,
+    PAIRING_BACKEND_MISSING,
+    PROFILE_MISSING,
+}
+
+/** Все побочные эффекты идут событиями — Compose не дёргает сервисы напрямую. */
+sealed interface HomeEvent {
+    data object PowerClick : HomeEvent
+    data object QuickConnectClick : HomeEvent
+    data object Retry : HomeEvent
+    data class LocationSelected(val locationId: String) : HomeEvent
+    data class ModeSelected(val mode: NetworkMode) : HomeEvent
+    data class NoticeShown(val notice: Notice) : HomeEvent
+    data object NoticeConsumed : HomeEvent
+}

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">STRAVO VPN</string>
+    <string name="tagline">СВОБОДА В СЕТИ</string>
+    <string name="tagline_sub">ВАША СВОБОДА — НАШ ПРИОРИТЕТ</string>
+
+    <string name="status_disconnected">ГОТОВО К ПОДКЛЮЧЕНИЮ</string>
+    <string name="status_connecting">ПОДКЛЮЧЕНИЕ…</string>
+    <string name="status_connected">ЗАЩИЩЕНО</string>
+    <string name="status_connected_sub">СОЕДИНЕНИЕ АКТИВНО</string>
+    <string name="status_error">НУЖНО ВНИМАНИЕ</string>
+
+    <string name="action_back">Назад</string>
+    <string name="action_connect_toggle">Управление подключением</string>
+
+    <string name="card_location">Локация</string>
+    <string name="card_profile">Профиль</string>
+    <string name="card_mode">Обычный VPN</string>
+    <string name="card_mode_sub">Свободный интернет</string>
+    <string name="mode_free_internet">Свободный интернет</string>
+    <string name="mode_free_internet_sub">Режим только для телефона</string>
+
+    <string name="stats_ping">Пинг</string>
+    <string name="stats_download">Загрузка</string>
+    <string name="stats_upload">Отдача</string>
+    <string name="unit_ms">мс</string>
+    <string name="unit_mbps">Мбит/с</string>
+
+    <string name="cta_quick_connect">Быстрое подключение</string>
+
+    <string name="nav_home">Главная</string>
+    <string name="nav_locations">Локации</string>
+    <string name="nav_profile">Профиль</string>
+    <string name="nav_settings">Настройки</string>
+    <string name="nav_connect_phone">Подключить телефон</string>
+
+    <string name="locations_title">Выбор локации</string>
+    <string name="locations_filter_recommended">Рекомендовано</string>
+    <string name="locations_filter_all">Все</string>
+    <string name="locations_search_hint">Поиск страны</string>
+    <string name="locations_footer">Рекомендуем выбирать серверы поближе к вам для максимальной скорости</string>
+    <string name="locations_selected">выбрано</string>
+
+    <string name="profile_title">Профиль</string>
+    <string name="profile_no_subscription">Подписка не подключена</string>
+    <string name="profile_active">активна</string>
+    <string name="profile_valid_until">Действует до %1$s</string>
+    <string name="profile_connect_hint">Подключите подписку через Telegram-бота</string>
+    <string name="profile_manage">Управление подпиской</string>
+    <string name="profile_login">Ввести логин</string>
+    <string name="profile_connect_tv">Подключить ТВ</string>
+    <string name="profile_connect_tv_sub">Сканируйте QR на телефоне</string>
+    <string name="profile_invite">Присоединить друга</string>
+    <string name="profile_support">Поддержка</string>
+    <string name="profile_security_note">Ключи подписки хранятся в защищённом хранилище Android и никогда не показываются на экране.</string>
+    <string name="profile_section_soon">Раздел включится вместе с серверной частью подписки</string>
+
+    <string name="connect_tv_title">Подключить ТВ</string>
+    <string name="connect_tv_sub">Подписка появится на телевизоре автоматически</string>
+    <string name="connect_tv_step_1">Откройте STRAVO VPN на телевизоре</string>
+    <string name="connect_tv_step_2">Выберите «Подключить телефон» и покажите QR</string>
+    <string name="connect_tv_step_3">Отсканируйте код камерой телефона</string>
+    <string name="connect_tv_step_4">Подтвердите перенос в Telegram-боте</string>
+    <string name="connect_tv_open_bot">Открыть Telegram-бот</string>
+    <string name="connect_tv_how">Как это работает?</string>
+    <string name="connect_tv_help_body">Телевизор создаёт одноразовый код на 5 минут. В QR лежит только токен переноса — ни ссылки подписки, ни ключей. После подтверждения в боте подписка приходит на телевизор сама.</string>
+
+    <string name="pairing_backend_missing">Автоматический перенос включится, когда сервис опубликует pairing-API: QR уже ведёт в бота, но подтверждение пока приходит вручную.</string>
+    <string name="pairing_security_note">QR содержит одноразовый токен на 5 минут. Повторное использование кода отклоняется.</string>
+
+    <string name="settings_title">Настройки</string>
+    <string name="settings_protocol">Протокол</string>
+    <string name="settings_notifications">Уведомления</string>
+    <string name="settings_autoconnect">Автоподключение</string>
+    <string name="settings_start_on_boot">Запуск при старте</string>
+    <string name="settings_network_check">Проверка сети</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_footer">STRAVO VPN · универсальная сборка для телефона и Android TV</string>
+
+    <string name="tv_quick_connect_sub">Открыть Telegram-бот</string>
+    <string name="tv_pairing_title">Подключить подписку со смартфона</string>
+    <string name="tv_pairing_step_1">Откройте камеру на телефоне</string>
+    <string name="tv_pairing_step_2">Отсканируйте QR-код</string>
+    <string name="tv_pairing_step_3">Подтвердите в Telegram-боте</string>
+    <string name="tv_pairing_step_4">Подписка добавится автоматически</string>
+    <string name="tv_pairing_refresh">Обновить QR-код</string>
+    <string name="tv_pairing_waiting">Ожидаем подтверждения с телефона</string>
+    <string name="tv_pairing_scan_hint">Отсканируйте камерой телефона</string>
+    <string name="tv_pairing_preparing">Готовим код…</string>
+    <string name="tv_success_title">ПОДПИСКА ДОБАВЛЕНА</string>
+    <string name="tv_success_sub">Теперь STRAVO уже готов к работе</string>
+    <string name="tv_success_action">Перейти на главный экран</string>
+    <string name="tv_footer_note">Один APK для телефона и телевизора</string>
+
+    <string name="notice_link_copied">Ссылка скопирована — откройте её в Telegram</string>
+    <string name="notice_bot_unavailable">Не удалось открыть Telegram: ссылка скопирована</string>
+    <string name="notice_core_missing">Ядро туннеля ещё не подключено к сборке</string>
+    <string name="notice_pairing_backend_missing">Перенос подписки ждёт pairing-API на стороне сервиса</string>
+    <string name="notice_profile_missing">Раздел включится вместе с серверной частью подписки</string>
+</resources>

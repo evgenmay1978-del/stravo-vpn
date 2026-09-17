@@ -1,0 +1,12 @@
+{
+  "brand_s_mark.svg": "Фирменная S для шапки/брендинга",
+  "app_icon_foreground.svg": "Foreground для Android Adaptive Icon, знак внутри safe zone",
+  "app_icon_background.svg": "Background adaptive icon",
+  "app_icon_monochrome.svg": "Monochrome themed icon",
+  "tv_banner_320x180.svg": "Android TV banner",
+  "drafting_overlay.svg": "Чертёжные окружности/направляющие вокруг главного состояния",
+  "tv_focus_frame.svg": "Фокусная рамка TV",
+  "paper_texture.png": "Тихая бумажная фактура",
+  "graphite_noise.png": "Графитная фактура для масок/overlay",
+  "ic_*.svg": "Единый карандашный набор пиктограмм"
+}

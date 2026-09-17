@@ -1,0 +1,47 @@
+{
+  "colors": {
+    "paper": "#F2EADB",
+    "graphite": "#1E2D31",
+    "graphiteSecondary": "#445156",
+    "emeraldAccent": "#2FBF8F",
+    "emeraldAccentUsage": "Только active/connected/focus/quick-connect. Не превращать интерфейс в зелёный."
+  },
+  "radiusDp": {
+    "cardMobile": 28,
+    "cardTv": 30,
+    "buttonMobile": 34,
+    "buttonTv": 28
+  },
+  "spacingDp": [
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    32,
+    40,
+    48,
+    64
+  ],
+  "mobile": {
+    "contentMaxWidthDp": 640,
+    "horizontalPaddingDp": 20,
+    "touchTargetMinDp": 48
+  },
+  "tv": {
+    "reference": "1920x1080",
+    "safeMarginDp": 48,
+    "focusScale": 1.05,
+    "focusBorderDp": 3,
+    "focusGlow": "subtle emerald, no bloom that harms text readability"
+  },
+  "styleRules": [
+    "Основной стиль чёрно-белый карандаш/графит на бумаге.",
+    "Не использовать щиты, замки, горы или фоновые пейзажи.",
+    "Не использовать абсолютные px-координаты.",
+    "Не рисовать весь экран одним bitmap.",
+    "Текст и интерактивные элементы всегда нативные Compose-компоненты.",
+    "Карандашная фактура — через фон/overlay/assets, не через растянутый screenshot."
+  ]
+}

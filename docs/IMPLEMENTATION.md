@@ -1,0 +1,85 @@
+# Контракты и что осталось подключить
+
+Документ фиксирует границу между готовым клиентом и серверной частью.
+Клиент **не имитирует** ни подключение, ни успешный перенос подписки.
+
+---
+
+## 1. Ядро туннеля
+
+Интерфейс (реализация пока `UnavailableVpnEngine`):
+
+```kotlin
+interface VpnEngine {
+    fun observeState(): StateFlow<VpnConnectionSnapshot>
+    suspend fun connect(profile: VpnProfile?, location: VpnLocation)
+    suspend fun disconnect()
+}
+```
+
+Что должен предоставить сервис, чтобы подключить настоящее ядро:
+
+1. **Контракт подписки** — обезличенный способ получить конфигурацию узлов: список локаций,
+   протокол (VLESS / Hysteria2 / AnyTLS / WebRTC), параметры транспорта.
+   В репозиторий попадает только код; URL подписки, UUID и ключи — никогда.
+2. **Реализация `VpnService`** — поднятие туннеля, `Builder.establish()`, маршрутизация,
+   обработка переподключений, отдача состояния в `VpnEngine`.
+3. **Хранение секретов** — Android Keystore (`SecretStore`), без логирования и без бэкапа.
+
+После появления ядра:
+- `AppContainer.vpnEngine` заменяется на рабочую реализацию;
+- UI и ViewModel менять не нужно — они уже работают через интерфейс;
+- режим «Свободный интернет» остаётся **только на телефоне** (`CapabilityPolicy` fail-closed).
+
+---
+
+## 2. Pairing-API (перенос подписки phone → TV)
+
+Контракт, который нужен на стороне сервиса:
+
+```
+POST /pairing/session                    -> { "token": "...", "expires_at": <epoch_ms> }
+GET  /pairing/session/{token}            -> { "status": "waiting|claimed|importing|success|expired" }
+POST /pairing/session/{token}/claim      -> (вызывается ботом после подтверждения пользователем)
+```
+
+Правила, уже зашитые в клиент:
+
+- QR содержит **только** токен: `https://t.me/<bot>?start=pair_<token>`;
+- TTL — 5 минут, отсчёт виден на TV («Код обновится через mm:ss»);
+- повторный claim отклоняется;
+- секреты подписки в QR и в логах не появляются;
+- состояния на TV: WAITING → CLAIMED → IMPORTING → SUCCESS, плюс EXPIRED и ERROR;
+- после SUCCESS подписка обязана появиться в Профиле и Локациях (сейчас `SubscriptionRepository`
+  наполняется только реальным путём импорта — `markSubscriptionImported` вызывается из кода импорта,
+  а не из UI).
+
+Пока API нет, `StubPairingBackend` возвращает `NotConfigured`, а экраны показывают честную подпись:
+«Автоматический перенос включится, когда сервис опубликует pairing-API».
+
+---
+
+## 3. Telegram-бот
+
+Конфигурация в одном месте — `core/StravoConfig.kt`:
+
+```kotlin
+const val BOT_USERNAME = "MaestroSecureVPN_bot"
+const val START_PARAM_MOBILE = "stravo_quick_connect"
+const val START_PARAM_TV = "stravo_tv_quick_connect"
+const val START_PARAM_PAIR_PREFIX = "pair_"
+```
+
+Поведение телефона: `tg://resolve?domain=...&start=...` → `https://t.me/...?start=...` →
+копирование ссылки в буфер с подсказкой. Лишние разрешения не запрашиваются, WebView не используется.
+
+Поведение TV: Telegram обычно отсутствует, поэтому «Быстрое подключение» открывает экран с QR,
+кнопкой «Открыть ссылку» и обратным отсчётом.
+
+---
+
+## 4. Что сознательно не сделано
+
+- Нет фейкового «подключено» и фейковых цифр статистики: до измерений показывается длинное тире.
+- Нет пользовательского пункта «Обход белых списков» — ни строк, ни состояния, ни навигации.
+- Нет автотестов: по правилу владельца они не добавляются без отдельного разрешения.

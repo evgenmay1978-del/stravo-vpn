@@ -1,0 +1,23 @@
+# Gradle / Android
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+captures/
+*.iml
+.idea/
+*.hprof
+hs_err_pid*.log
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Секреты и рабочие артефакты — в репозиторий не попадают
+.secrets/
+*.env
