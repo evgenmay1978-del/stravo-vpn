@@ -27,12 +27,12 @@ class CoreLogExporter(private val context: Context) {
                 put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
             }
             val existing = findExisting(collection)
-            val uri: Uri? = if (existing != null) {
+            val uri = if (existing != null) {
                 resolver.update(existing, values, null, null)
                 existing
             } else {
-                resolver.insert(collection, values)
-            } ?: return null
+                resolver.insert(collection, values) ?: return null
+            }
             resolver.openOutputStream(uri)?.use { stream ->
                 stream.write(lines.joinToString("\n").toByteArray())
             } ?: return null
