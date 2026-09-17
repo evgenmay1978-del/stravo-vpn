@@ -11,6 +11,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.stravo.vpn.BuildConfig
@@ -45,6 +48,8 @@ fun SettingsScreen(
 ) {
     val palette = LocalStravoPalette.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    // Вариант ядра применяется при следующем подключении, поэтому это локальное состояние.
+    var variant by remember { mutableStateOf(viewModel.coreVariant()) }
 
     val protocols = StravoConfig.PROTOCOLS
     val languages = listOf("Русский", "English")
@@ -141,6 +146,29 @@ fun SettingsScreen(
                 iconRes = R.drawable.ic_info,
                 title = stringResource(id = R.string.settings_about),
                 subtitle = "v" + BuildConfig.VERSION_NAME,
+            )
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+            // Диагностика ядра: варианты сборки конфига и прямой режим без узла.
+            // Нужны, пока туннель поднимается, а трафик не идёт.
+            StravoSettingRow(
+                iconRes = R.drawable.ic_network,
+                title = stringResource(id = R.string.settings_core_variant),
+                subtitle = variant.label + ": " + variant.hint,
+                onClick = { variant = viewModel.nextCoreVariant() },
+            )
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+            StravoSettingRow(
+                iconRes = R.drawable.ic_power,
+                title = stringResource(id = R.string.settings_core_direct),
+                subtitle = stringResource(id = R.string.settings_core_direct_sub),
+                trailing = {
+                    StravoToggle(
+                        checked = settings.coreDirectMode,
+                        onCheckedChange = { value ->
+                            viewModel.updateSettings { it.copy(coreDirectMode = value) }
+                        },
+                    )
+                },
             )
         }
 
