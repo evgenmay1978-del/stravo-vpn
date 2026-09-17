@@ -105,6 +105,20 @@ fun HomeScreen(
             modifier = Modifier.padding(top = StravoTokens.SpaceSm, start = StravoTokens.SpaceLg, end = StravoTokens.SpaceLg),
         )
 
+        state.diagnostics?.let { message ->
+            Text(
+                text = message,
+                style = StravoType.Tiny,
+                color = palette.accentDeep,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(
+                    top = StravoTokens.SpaceMd,
+                    start = StravoTokens.SpaceLg,
+                    end = StravoTokens.SpaceLg,
+                ),
+            )
+        }
+
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
         Row(

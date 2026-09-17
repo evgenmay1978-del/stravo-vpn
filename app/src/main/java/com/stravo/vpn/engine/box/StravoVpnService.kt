@@ -17,6 +17,7 @@ import com.stravo.vpn.BuildConfig
 import com.stravo.vpn.MainActivity
 import com.stravo.vpn.R
 import com.stravo.vpn.StravoApplication
+import com.stravo.vpn.data.diagnostics.CoreTrace
 import com.stravo.vpn.domain.engine.VpnConnectionSnapshot
 import com.stravo.vpn.domain.model.ConnectionState
 import io.nekohasekai.libbox.BridgeOptions
@@ -60,6 +61,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
     private var defaultMonitor: DefaultInterfaceMonitor? = null
     private var myInterface: String? = null
     private var currentNodeId: String? = null
+    private var failureStep: String? = null
+
     @Volatile
     private var foregroundStarted = false
 
@@ -82,6 +85,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
             return START_NOT_STICKY
         }
         startInForeground()
+        trace.record(CoreTrace.STEP_FOREGROUND)
         if (currentNodeId == nodeId && commandServer != null) return START_NOT_STICKY
         startTunnel(nodeId, locationId)
         return START_NOT_STICKY
@@ -94,10 +98,15 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
     override fun onDestroy() {
         stopTunnel()
+        // Штатная остановка: следующая диагностика не считает её аварией.
+        if (failureStep == null) trace.record(CoreTrace.STEP_IDLE)
         super.onDestroy()
     }
 
     // --- Запуск и остановка ядра -----------------------------------------
+
+    private val trace: CoreTrace
+        get() = (application as StravoApplication).container.coreTrace
 
     private fun startTunnel(nodeId: String, locationId: String?) {
         currentNodeId = nodeId
@@ -114,11 +123,13 @@ class StravoVpnService : VpnService(), PlatformInterface {
                     "Транспорт " + built.transport + " не поддерживается ядром этой сборки",
                     locationId,
                 )
+                trace.record(CoreTrace.STEP_IDLE)
                 return
             }
 
             CoreConfig.Broken -> {
                 publishError(BROKEN_NODE_REASON, locationId)
+                trace.record(CoreTrace.STEP_IDLE)
                 return
             }
         }
@@ -138,15 +149,24 @@ class StravoVpnService : VpnService(), PlatformInterface {
             options.setAppVersion(BuildConfig.VERSION_NAME)
             options.setFixAndroidStack(true)
             Libbox.setup(options)
+            trace.record(CoreTrace.STEP_SETUP)
+
+            // Проверяем конфиг до старта: понятная ошибка вместо падения нативного кода.
+            Libbox.checkConfig(config)
+            trace.record(CoreTrace.STEP_CONFIG)
 
             val server = Libbox.newCommandServer(handler, this)
             commandServer = server
+            trace.record(CoreTrace.STEP_SERVER)
             server.start()
             server.startOrReloadService(config, null)
+            trace.record(CoreTrace.STEP_STARTED)
             setState(ConnectionState.Connected, locationId, System.currentTimeMillis())
         } catch (error: Throwable) {
             // В сообщении нет ни конфига, ни ключей: только текст ошибки ядра.
             val reason = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+            failureStep = CoreTrace.errorStep(reason)
+            trace.record(failureStep!!)
             publishError("Ядро не подняло туннель: " + reason, locationId)
             stopTunnel()
             stopSelf()
@@ -214,6 +234,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
     // --- PlatformInterface: TUN и сеть ------------------------------------
 
     override fun openTun(options: TunOptions): Int {
+        if (prepare(this) != null) {
+            // Разрешение VPN не выдано: ядро получит честную ошибку, а не пустой TUN.
+            return -1
+        }
         val builder = Builder()
             .setSession(SESSION_NAME)
             .setMtu(if (options.getMTU() > 0) options.getMTU() else DEFAULT_MTU)

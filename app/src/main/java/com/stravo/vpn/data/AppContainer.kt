@@ -1,6 +1,8 @@
 package com.stravo.vpn.data
 
 import android.content.Context
+import com.stravo.vpn.data.diagnostics.CoreTrace
+import com.stravo.vpn.data.diagnostics.StartupDiagnostics
 import com.stravo.vpn.data.profile.ProfileRepository
 import com.stravo.vpn.data.secret.SecretStore
 import com.stravo.vpn.data.settings.SettingsRepository
@@ -22,7 +24,8 @@ class AppContainer(context: Context) {
 
     val profiles: ProfileRepository = ProfileRepository()
 
-    val subscriptions: SubscriptionRepository = SubscriptionRepository()
+    /** Подписка переживает перезапуск: план, дата и безопасные карточки узлов. */
+    val subscriptions: SubscriptionRepository = SubscriptionRepository(appContext)
 
     /** Полные конфиги узлов подписки: только Keystore, только по запросу ядра. */
     val secretStore: SecretStore = SecretStore(appContext)
@@ -30,6 +33,12 @@ class AppContainer(context: Context) {
     val subscriptionImporter: SubscriptionImporter = SubscriptionImporter(secretStore)
 
     val pairing: PairingRepository = PairingRepository()
+
+    /** Шаги запуска ядра: нужны, чтобы честно объяснить аварийное завершение. */
+    val coreTrace: CoreTrace = CoreTrace(appContext)
+
+    /** Одна строка о прошлом запуске, если он завершился нештатно. Показывается один раз. */
+    val startupDiagnostics: String? = StartupDiagnostics(appContext).message
 
     private val configProvider: VpnConfigProvider =
         VpnConfigProvider { nodeId -> subscriptionImporter.configFor(nodeId) }

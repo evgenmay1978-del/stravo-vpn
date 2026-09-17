@@ -46,6 +46,9 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     init {
+        container.startupDiagnostics?.let { message ->
+            _home.update { it.copy(diagnostics = message) }
+        }
         container.vpnEngine.observeState().let { engineState ->
             scope.launch {
                 engineState.collect { snapshot ->

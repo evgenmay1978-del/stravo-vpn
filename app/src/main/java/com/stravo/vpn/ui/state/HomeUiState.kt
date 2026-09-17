@@ -38,6 +38,8 @@ data class HomeUiState(
     val stats: VpnStats = VpnStats.Empty,
     val notice: Notice? = null,
     val importState: SubscriptionImportState = SubscriptionImportState.Idle,
+    /** Одна строка о нештатном прошлом запуске (сбой ядра/приложения). Показывается один раз. */
+    val diagnostics: String? = null,
 ) {
     val modes: List<NetworkMode> get() = CapabilityPolicy.availableModes(formFactor)
 
