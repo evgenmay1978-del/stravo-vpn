@@ -9,7 +9,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -82,6 +81,7 @@ fun StravoCard(
 
 /** Разделитель-карандашная линия. */
 @Composable
-fun PencilDivider(modifier: Modifier = Modifier, color: Color = LocalStravoPalette.current.outline.copy(alpha = 0.22f)) {
-    Box(modifier = modifier.background(color))
+fun PencilDivider(modifier: Modifier = Modifier, color: Color? = null) {
+    val palette = LocalStravoPalette.current
+    Box(modifier = modifier.background(color ?: palette.outline.copy(alpha = 0.22f)))
 }
