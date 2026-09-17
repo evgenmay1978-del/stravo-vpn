@@ -1,25 +1,39 @@
 package com.stravo.vpn.ui.components
 
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-
-/** Доли от размера знака: тело ленты, светлая грань, изумрудная нить и утолщения. */
-private const val RIBBON = 0.190f
-private const val INNER_FACE = 0.44f
-private const val ACCENT_LINE = 0.105f
-private const val KNOB = 0.58f
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.stravo.vpn.R
 
 /**
- * Фирменная буква S рисуется кодом (без bitmap), поэтому одинаково чёткая
- * на любом размере и не превращается в растянутую картинку.
- *
- * Форма — плотная карандашная лента с круглыми утолщениями на концах
- * и тонкой изумрудной линией по центру, как в макете.
+ * Фирменный знак S — тот же, что на иконке приложения: каллиграфическая лента
+ * с изумрудной нитью. Знак вырезан из эталонной иконки в прозрачный PNG
+ * (drawable-nodpi/s_mark.png), поэтому в интерфейсе выглядит ровно как на лаунчере,
+ * а не как приблизительный рисунок кодом.
  */
+@Composable
+fun SMarkImage(
+    modifier: Modifier = Modifier,
+    alpha: Float = 1f,
+) {
+    Image(
+        painter = painterResource(id = R.drawable.s_mark),
+        contentDescription = null,
+        modifier = modifier,
+        contentScale = ContentScale.Fit,
+        alpha = alpha,
+    )
+}
+
+/** Упрощённый штрих знака для мелких мест (центр QR, иллюстрация переноса). */
 object SMark {
 
     fun path(box: Float, origin: Offset): Path {
@@ -35,7 +49,6 @@ object SMark {
         }
     }
 
-    /** Точки утолщений на концах знака. */
     fun terminals(box: Float, origin: Offset): Pair<Offset, Offset> {
         val s = box / 100f
         return Offset(origin.x + 73f * s, origin.y + 27f * s) to
@@ -43,10 +56,7 @@ object SMark {
     }
 }
 
-/**
- * Карандашный знак: графитовая лента, светлая внутренняя грань (если известен фон),
- * изумрудная нить по центру и утолщения на концах.
- */
+/** Тот же силуэт, нарисованный кодом: графитовая лента и изумрудная нить. */
 fun DrawScope.drawSMark(
     origin: Offset,
     box: Float,
@@ -56,22 +66,22 @@ fun DrawScope.drawSMark(
     paperColor: Color? = null,
 ) {
     val path = SMark.path(box, origin)
-    val ribbon = box * RIBBON
+    val ribbon = box * 0.190f
     drawPath(path, color = strokeColor, style = Stroke(width = ribbon, cap = StrokeCap.Round))
     if (paperColor != null) {
         drawPath(
             path,
             color = paperColor.copy(alpha = 0.90f),
-            style = Stroke(width = ribbon * INNER_FACE, cap = StrokeCap.Round),
+            style = Stroke(width = ribbon * 0.44f, cap = StrokeCap.Round),
         )
     }
     drawPath(
         path,
         color = accentColor.copy(alpha = accentAlpha),
-        style = Stroke(width = ribbon * ACCENT_LINE, cap = StrokeCap.Round),
+        style = Stroke(width = ribbon * 0.105f, cap = StrokeCap.Round),
     )
     val (head, tail) = SMark.terminals(box, origin)
-    val knob = ribbon * KNOB
+    val knob = ribbon * 0.58f
     drawCircle(color = strokeColor, radius = knob, center = head)
     drawCircle(color = strokeColor, radius = knob, center = tail)
 }

@@ -137,6 +137,12 @@ fun MobileRoot(
                     Destination.SETTINGS -> SettingsScreen(
                         viewModel = viewModel,
                         onBack = { navigator.back() },
+                        onOpenApps = { navigator.push(Destination.APPS) },
+                    )
+
+                    Destination.APPS -> AppsScreen(
+                        viewModel = viewModel,
+                        onBack = { navigator.back() },
                     )
                 }
 

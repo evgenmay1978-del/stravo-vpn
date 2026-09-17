@@ -5,6 +5,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/** Кто ходит через туннель: все приложения, только выбранные или все, кроме выбранных. */
+enum class VpnAppMode {
+    ALL,
+    ONLY_SELECTED,
+    EXCEPT_SELECTED,
+}
+
 data class StravoSettings(
     val protocol: String = "Авто (рекомендуется)",
     val notifications: Boolean = true,
@@ -12,6 +19,9 @@ data class StravoSettings(
     val startOnBoot: Boolean = false,
     val networkCheck: Boolean = true,
     val language: String = "Русский",
+    /** Раздельный туннель: режим и выбранные пакеты. */
+    val appMode: VpnAppMode = VpnAppMode.ALL,
+    val apps: Set<String> = emptySet(),
 )
 
 /**
@@ -36,7 +46,9 @@ class SettingsRepository(context: Context) {
             .putBoolean(KEY_START_ON_BOOT, next.startOnBoot)
             .putBoolean(KEY_NETWORK_CHECK, next.networkCheck)
             .putString(KEY_LANGUAGE, next.language)
-            .apply()
+            .putString(KEY_APP_MODE, next.appMode.name)
+            .putString(KEY_APPS, next.apps.joinToString(","))
+            .commit()
     }
 
     private fun read(): StravoSettings = StravoSettings(
@@ -46,6 +58,15 @@ class SettingsRepository(context: Context) {
         startOnBoot = prefs.getBoolean(KEY_START_ON_BOOT, false),
         networkCheck = prefs.getBoolean(KEY_NETWORK_CHECK, true),
         language = prefs.getString(KEY_LANGUAGE, null) ?: "Русский",
+        appMode = runCatching {
+            VpnAppMode.valueOf(prefs.getString(KEY_APP_MODE, null) ?: VpnAppMode.ALL.name)
+        }.getOrDefault(VpnAppMode.ALL),
+        apps = prefs.getString(KEY_APPS, null)
+            ?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.toSet()
+            ?: emptySet(),
     )
 
     private companion object {
@@ -56,5 +77,8 @@ class SettingsRepository(context: Context) {
         const val KEY_START_ON_BOOT = "start_on_boot"
         const val KEY_NETWORK_CHECK = "network_check"
         const val KEY_LANGUAGE = "language"
+        const val KEY_APP_MODE = "app_mode"
+        const val KEY_APPS = "apps"
     }
 }
+

@@ -18,6 +18,7 @@ import com.stravo.vpn.MainActivity
 import com.stravo.vpn.R
 import com.stravo.vpn.StravoApplication
 import com.stravo.vpn.data.diagnostics.CoreTrace
+import com.stravo.vpn.data.settings.VpnAppMode
 import com.stravo.vpn.domain.engine.VpnConnectionSnapshot
 import com.stravo.vpn.domain.model.ConnectionState
 import io.nekohasekai.libbox.BridgeOptions
@@ -162,7 +163,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
             trace.record(CoreTrace.STEP_SERVER)
             server.start()
             // OverrideOptions обязателен: ядро разыменовывает его без проверки на null.
-            server.startOrReloadService(config, OverrideOptions())
+            server.startOrReloadService(config, overrideOptions())
             trace.record(CoreTrace.STEP_STARTED)
             setState(ConnectionState.Connected, locationId, System.currentTimeMillis())
         } catch (error: Throwable) {
@@ -174,6 +175,21 @@ class StravoVpnService : VpnService(), PlatformInterface {
             stopTunnel()
             stopSelf()
         }
+    }
+
+    /** Раздельный туннель из настроек: пустой список — через VPN ходят все приложения. */
+    private fun overrideOptions(): OverrideOptions {
+        val settings = (application as StravoApplication).container.settings.settings.value
+        val options = OverrideOptions()
+        options.setAutoRedirect(false)
+        val packages = settings.apps.toList()
+        if (packages.isEmpty()) return options
+        when (settings.appMode) {
+            VpnAppMode.ONLY_SELECTED -> options.setIncludePackage(StringList(packages))
+            VpnAppMode.EXCEPT_SELECTED -> options.setExcludePackage(StringList(packages))
+            VpnAppMode.ALL -> Unit
+        }
+        return options
     }
 
     private fun stopTunnel() {

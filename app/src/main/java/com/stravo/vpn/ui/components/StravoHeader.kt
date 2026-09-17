@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,16 +46,11 @@ fun BrandMark(
             .background(palette.panel)
             .then(if (withRing) Modifier.border(1.dp, palette.outline.copy(alpha = 0.35f), CircleShape) else Modifier),
     ) {
-        Canvas(modifier = Modifier.size(size)) {
-            val box = this.size.minDimension * 0.62f
-            drawSMark(
-                origin = Offset((this.size.width - box) / 2f, (this.size.height - box) / 2f),
-                box = box,
-                strokeColor = palette.textPrimary,
-                accentColor = palette.accent,
-                paperColor = palette.panel,
-            )
-        }
+        SMarkImage(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(size * 0.10f),
+        )
     }
 }
 

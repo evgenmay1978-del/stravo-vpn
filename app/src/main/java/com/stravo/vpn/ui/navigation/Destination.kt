@@ -16,6 +16,7 @@ enum class Destination(
     SETTINGS("settings", R.string.nav_settings, R.drawable.ic_settings),
     SCANNER("scanner", R.string.scan_title, R.drawable.ic_scan),
     ADD_SUBSCRIPTION("add_subscription", R.string.add_sub_title, R.drawable.ic_crown),
+    APPS("apps", R.string.settings_apps, R.drawable.ic_network),
     ;
 
     companion object {

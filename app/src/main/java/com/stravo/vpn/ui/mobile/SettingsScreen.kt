@@ -27,11 +27,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.unit.dp
 import com.stravo.vpn.ui.components.PencilDivider
 
+/** Подпись режима раздельного туннеля. */
+@Composable
+fun appsModeLabel(mode: com.stravo.vpn.data.settings.VpnAppMode): String = when (mode) {
+    com.stravo.vpn.data.settings.VpnAppMode.ALL -> stringResource(id = R.string.apps_mode_all)
+    com.stravo.vpn.data.settings.VpnAppMode.ONLY_SELECTED -> stringResource(id = R.string.apps_mode_only)
+    com.stravo.vpn.data.settings.VpnAppMode.EXCEPT_SELECTED -> stringResource(id = R.string.apps_mode_except)
+}
+
 /** Настройки: протокол, переключатели, язык и сведения о сборке. */
 @Composable
 fun SettingsScreen(
     viewModel: StravoViewModel,
     onBack: () -> Unit,
+    onOpenApps: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalStravoPalette.current
@@ -108,6 +117,13 @@ fun SettingsScreen(
                         onCheckedChange = { value -> viewModel.updateSettings { it.copy(networkCheck = value) } },
                     )
                 },
+            )
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+            StravoSettingRow(
+                iconRes = R.drawable.ic_network,
+                title = stringResource(id = R.string.settings_apps),
+                subtitle = appsModeLabel(settings.appMode),
+                onClick = onOpenApps,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(

@@ -77,6 +77,14 @@
     <string name="settings_network_check">Проверка сети</string>
     <string name="settings_language">Язык</string>
     <string name="settings_about">О приложении</string>
+    <string name="settings_apps">Приложения через VPN</string>
+    <string name="settings_apps_hint">По умолчанию через VPN ходят все приложения. Можно оставить только выбранные или исключить лишние.</string>
+    <string name="apps_mode_all">Все</string>
+    <string name="apps_mode_only">Только выбранные</string>
+    <string name="apps_mode_except">Все, кроме выбранных</string>
+    <string name="apps_search">Поиск приложения</string>
+    <string name="apps_show_system">Показывать системные</string>
+    <string name="apps_loading">Загружаем приложения…</string>
     <string name="settings_footer">STRAVO VPN · универсальная сборка для телефона и Android TV</string>
 
     <string name="tv_quick_connect_sub">Открыть Telegram-бот</string>
