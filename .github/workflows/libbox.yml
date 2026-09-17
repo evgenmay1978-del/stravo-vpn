@@ -60,7 +60,7 @@ jobs:
           IN_GO: ${{ inputs.go_version || '1.26.8' }}
           IN_GOMOBILE: ${{ inputs.gomobile_version || 'v0.1.13' }}
           IN_ABI: ${{ inputs.abi_target || 'android/arm64,android/arm' }}
-          IN_CACHE: ${{ inputs.cache_version || '1' }}
+          IN_CACHE: ${{ inputs.cache_version || '2' }}
         run: |
           set -euo pipefail
           ABI_SLUG="$(printf '%s' "$IN_ABI" | tr '/,' '--')"
