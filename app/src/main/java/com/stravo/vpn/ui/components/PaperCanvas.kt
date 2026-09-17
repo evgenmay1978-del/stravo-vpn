@@ -38,7 +38,7 @@ fun PaperCanvas(
                 contentDescription = null,
                 modifier = Modifier.matchParentSize().clipToBounds(),
                 contentScale = ContentScale.Crop,
-                alpha = if (palette.isDark) 0.08f else 0.40f,
+                alpha = if (palette.isDark) 0.05f else 0.16f,
             )
         }
         if (showContours) {
@@ -52,7 +52,7 @@ fun PaperCanvas(
 @Composable
 fun ContourSketch(
     modifier: Modifier = Modifier,
-    alpha: Float = 0.14f,
+    alpha: Float = 0.10f,
 ) {
     val palette = LocalStravoPalette.current
     val ink = if (palette.isDark) Color.White else palette.outline

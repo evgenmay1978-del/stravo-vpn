@@ -61,7 +61,7 @@ fun PowerMedallion(
         connecting -> pulse
         active -> 0.9f
         failed -> 0.35f
-        else -> 0.16f
+        else -> 0.30f
     }
     val glyphColor = when {
         active || connecting -> palette.accent
@@ -118,7 +118,7 @@ fun PowerMedallion(
                 style = Stroke(width = 3.dp.toPx()),
             )
             drawCircle(
-                color = palette.textPrimary.copy(alpha = 0.22f),
+                color = palette.textPrimary.copy(alpha = 0.30f),
                 radius = radius * 0.86f,
                 center = center,
                 style = Stroke(width = 1.dp.toPx()),

@@ -31,8 +31,8 @@ data class StravoPalette(
             accent = StravoColors.Emerald,
             accentDeep = StravoColors.EmeraldDeep,
             onAccent = StravoColors.Paper,
-            medallion = StravoColors.Graphite,
-            medallionDeep = Color(0xFF0E1618),
+            medallion = Color(0xFF2A3A40),
+            medallionDeep = Color(0xFF101A1D),
             isDark = false,
         )
 
