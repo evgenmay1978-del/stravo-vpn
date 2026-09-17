@@ -59,6 +59,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
     private var commandServer: CommandServer? = null
     private var serverThread: Thread? = null
     private var defaultMonitor: DefaultInterfaceMonitor? = null
+    private var tunDescriptor: android.os.ParcelFileDescriptor? = null
     private var myInterface: String? = null
     private var currentNodeId: String? = null
     private var failureStep: String? = null
@@ -238,6 +239,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
             // Разрешение VPN не выдано: ядро получит честную ошибку, а не пустой TUN.
             return -1
         }
+        trace.record(CoreTrace.STEP_TUN)
         val builder = Builder()
             .setSession(SESSION_NAME)
             .setMtu(if (options.getMTU() > 0) options.getMTU() else DEFAULT_MTU)
@@ -291,7 +293,9 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
         return try {
             val descriptor = builder.establish() ?: return -1
-            descriptor.detachFd()
+            // Держим PFD живым: ядро забирает только числовой дескриптор.
+            tunDescriptor = descriptor
+            descriptor.fd
         } catch (error: Throwable) {
             -1
         }
@@ -326,20 +330,32 @@ class StravoVpnService : VpnService(), PlatformInterface {
                         DEFAULT_MTU
                     },
                 )
+                // Ядро разбирает адреса как netip.Prefix (MustParsePrefix): нужен
+                // формат «адрес/длина префикса» и без scope у IPv6, иначе паника.
                 val addresses = ArrayList<String>()
-                val iterator = source.inetAddresses
-                while (iterator.hasMoreElements()) {
-                    val address: InetAddress = iterator.nextElement()
-                    val host = address.hostAddress
-                    if (host != null) addresses.add(host)
+                for (interfaceAddress in source.interfaceAddresses) {
+                    val address = interfaceAddress.address ?: continue
+                    val host = address.hostAddress?.substringBefore('%') ?: continue
+                    addresses.add(host + "/" + interfaceAddress.networkPrefixLength.toInt())
                 }
                 item.setAddresses(StringList(addresses))
                 item.setFlags(flagsOf(source))
+                item.setType(typeOf(source))
+                item.setMetered(false)
                 result.add(item)
             }
         } catch (_: Exception) {
         }
         return InterfaceList(result)
+    }
+
+    /** Тип интерфейса для ядра: wifi/cellular/ethernet/other — по имени. */
+    private fun typeOf(source: java.net.NetworkInterface): Int = when {
+        source.name.startsWith("wlan") -> Libbox.InterfaceTypeWIFI
+        source.name.startsWith("rmnet") || source.name.startsWith("ccmni") ||
+            source.name.startsWith("pdp") -> Libbox.InterfaceTypeCellular
+        source.name.startsWith("eth") -> Libbox.InterfaceTypeEthernet
+        else -> Libbox.InterfaceTypeOther
     }
 
     private fun flagsOf(source: java.net.NetworkInterface): Int {

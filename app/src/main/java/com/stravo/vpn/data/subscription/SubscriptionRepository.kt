@@ -22,8 +22,10 @@ class SubscriptionRepository(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private val _subscription = MutableStateFlow(loadSubscription())
-    private val _nodes = MutableStateFlow(loadNodes())
+    private val stored: Stored = read()
+
+    private val _subscription = MutableStateFlow(stored.subscription)
+    private val _nodes = MutableStateFlow(stored.nodes)
 
     val subscription: StateFlow<Subscription> = _subscription.asStateFlow()
 
@@ -54,14 +56,36 @@ class SubscriptionRepository(context: Context) {
 
     // --- Хранение ---------------------------------------------------------
 
+    /** commit(), а не apply(): ядро может уронить процесс сразу после импорта. */
     private fun persist() {
+        val nodes = _nodes.value
         val subscription = _subscription.value
         val root = JSONObject()
             .put("plan", subscription.planName)
             .put("until", subscription.activeUntil ?: JSONObject.NULL)
-            .put("active", subscription.isActive)
-            .put("nodes", encodeNodes(_nodes.value))
-        prefs.edit().putString(KEY_STATE, root.toString()).apply()
+            .put("nodes", encodeNodes(nodes))
+        prefs.edit().putString(KEY_STATE, root.toString()).commit()
+    }
+
+    private fun read(): Stored {
+        val raw = prefs.getString(KEY_STATE, null) ?: return Stored(Subscription.None, emptyList())
+        return try {
+            val root = JSONObject(raw)
+            val nodes = decodeNodes(root.optJSONArray("nodes"))
+            val plan = root.optString("plan").takeIf { it.isNotBlank() } ?: DEFAULT_PLAN
+            val until = root.optString("until").takeIf { it.isNotBlank() && it != "null" }
+            val active = root.optBoolean("active", nodes.isNotEmpty()) && nodes.isNotEmpty()
+            Stored(
+                subscription = if (active) {
+                    Subscription(planName = plan, activeUntil = until, isActive = true)
+                } else {
+                    Subscription.None
+                },
+                nodes = nodes,
+            )
+        } catch (error: Exception) {
+            Stored(Subscription.None, emptyList())
+        }
     }
 
     private fun encodeNodes(nodes: List<SubscriptionNode>): JSONArray {
@@ -80,48 +104,30 @@ class SubscriptionRepository(context: Context) {
         return array
     }
 
-    private fun loadNodes(): List<SubscriptionNode> {
-        val raw = prefs.getString(KEY_STATE, null) ?: return emptyList()
-        return try {
-            val array = JSONObject(raw).optJSONArray("nodes") ?: return emptyList()
-            val result = ArrayList<SubscriptionNode>(array.length())
-            for (index in 0 until array.length()) {
-                val item = array.optJSONObject(index) ?: continue
-                val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
-                result.add(
-                    SubscriptionNode(
-                        id = id,
-                        name = item.optString("name"),
-                        protocolId = item.optString("protocolId"),
-                        protocolLabel = item.optString("protocolLabel"),
-                        transport = enumOf(item.optString("transport"), VpnTransport.UNKNOWN),
-                        security = enumOf(item.optString("security"), VpnSecurity.NONE),
-                    ),
-                )
-            }
-            result
-        } catch (error: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun loadSubscription(): Subscription {
-        val raw = prefs.getString(KEY_STATE, null) ?: return Subscription.None
-        return try {
-            val root = JSONObject(raw)
-            val active = root.optBoolean("active") && _nodes.value.isNotEmpty()
-            Subscription(
-                planName = root.optString("plan").takeIf { it.isNotBlank() } ?: DEFAULT_PLAN,
-                activeUntil = root.optString("until").takeIf { it.isNotBlank() && it != "null" },
-                isActive = active,
+    private fun decodeNodes(array: JSONArray?): List<SubscriptionNode> {
+        if (array == null) return emptyList()
+        val result = ArrayList<SubscriptionNode>(array.length())
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
+            result.add(
+                SubscriptionNode(
+                    id = id,
+                    name = item.optString("name"),
+                    protocolId = item.optString("protocolId"),
+                    protocolLabel = item.optString("protocolLabel"),
+                    transport = enumOf(item.optString("transport"), VpnTransport.UNKNOWN),
+                    security = enumOf(item.optString("security"), VpnSecurity.NONE),
+                ),
             )
-        } catch (error: Exception) {
-            Subscription.None
         }
+        return result
     }
 
     private inline fun <reified T : Enum<T>> enumOf(name: String, fallback: T): T =
         enumValues<T>().firstOrNull { it.name == name } ?: fallback
+
+    private class Stored(val subscription: Subscription, val nodes: List<SubscriptionNode>)
 
     private companion object {
         const val DEFAULT_PLAN = "STRAVO VPN"

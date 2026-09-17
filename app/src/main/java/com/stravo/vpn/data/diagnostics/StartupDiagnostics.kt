@@ -20,14 +20,21 @@ class StartupDiagnostics(context: Context) {
         val shownAt = prefs.getLong(KEY_SHOWN, 0L)
 
         val exit = lastAbnormalExit(context)
-        if (exit != null && exit.first > shownAt) {
-            prefs.edit().putLong(KEY_SHOWN, exit.first).apply()
-            return exit.second
+        val fresh = exit != null && exit.first > shownAt
+        if (fresh) {
+            prefs.edit().putLong(KEY_SHOWN, exit!!.first).apply()
         }
 
-        val step = CoreTrace(context).interruptedStep() ?: return null
-        CoreTrace(context).clear()
-        return "Прошлый запуск ядра прервался на шаге: " + step
+        val trace = CoreTrace(context)
+        val step = trace.interruptedStep()
+        trace.clear()
+
+        return when {
+            fresh && step != null -> exit!!.second + " · последний шаг: " + step
+            fresh -> exit!!.second
+            step != null -> "Прошлый запуск ядра прервался на шаге: " + step
+            else -> null
+        }
     }
 
     /** Последнее аварийное завершение процесса (API 30+). */
