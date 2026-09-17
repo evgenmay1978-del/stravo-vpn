@@ -53,6 +53,28 @@ interface VpnEngine {
 
 ---
 
+## 1b. Ядро туннеля: что ставим и как (в работе)
+
+Ядро — **sing-box (libbox)**: только он закрывает весь заявленный набор — VLESS с транспортом
+**XHTTP**, **AnyTLS**, Hysteria2, Trojan, Shadowsocks. У Xray нет AnyTLS, поэтому он не подходит.
+
+Готового AAR нет ни в Maven Central, ни на JitPack, поэтому ядро собирается в CI:
+workflow libbox.yml тянет закреплённую версию SagerNet/sing-box, собирает libbox.aar через
+gomobile и кэширует результат по версии (иначе каждый прогон — 15–20 минут).
+
+Дальше в приложении:
+
+1. app/libs/libbox.aar + implementation(files("libs/libbox.aar")).
+2. StravoVpnService : VpnService(), PlatformInterface — отдаёт ядру TUN через Builder.establish().
+3. SingBoxVpnEngine : VpnEngine — старт/стоп сервиса и настоящее состояние в observeState().
+4. SingBoxConfigBuilder — из ссылки узла (берётся из SecretStore) в JSON sing-box.
+5. Манифест: foreground service, FOREGROUND_SERVICE_DATA_SYNC, POST_NOTIFICATIONS.
+
+Правило остаётся: пока ядро не поднялось, приложение показывает честную ошибку и не рисует
+«подключено».
+
+---
+
 ## 2. Pairing-API (перенос подписки phone → TV)
 
 Контракт, который нужен на стороне сервиса:
