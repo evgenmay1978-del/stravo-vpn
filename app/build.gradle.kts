@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.stravo.vpn"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.stravo.vpn"
