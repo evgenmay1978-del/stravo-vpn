@@ -863,7 +863,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         /** Имена TUN-интерфейсов Android: их нельзя отдавать ядру как маршрут наружу. */
         private const val TUN_PREFIX = "tun"
         private const val FALLBACK_DNS = "1.1.1.1"
-        private const val DEFAULT_MTU = 9000
+        private const val DEFAULT_MTU = 1500
         private const val LOG_SETTLE_MS = 1200L
         private const val REPORT_ATTEMPTS = 8
         private const val REPORT_RETRY_MS = 120L
