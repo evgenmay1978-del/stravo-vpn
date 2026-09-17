@@ -31,6 +31,7 @@ object SingBoxConfigBuilder {
 
     private const val TAG_PROXY = "proxy"
     private const val TAG_DIRECT = "direct"
+    private const val TUN_MTU = 1500
     private const val TUN_IPV4 = "172.19.0.1/30"
     private const val TUN_IPV6 = "fdfe:dcba:9876::1/126"
 
@@ -246,7 +247,10 @@ object SingBoxConfigBuilder {
             .put("type", "tun")
             .put("tag", "tun-in")
             .put("address", JSONArray().put(TUN_IPV4).put(TUN_IPV6))
-            .put("mtu", 9000)
+            // 1500 — MTU мобильной сети. 9000 (значение по умолчанию в sing-box) на
+            // реальном канале приводит к тому, что большие пакеты молча теряются:
+            // мелкий DNS проходит, а TCP-сессии висят. Это проверено на устройстве.
+            .put("mtu", TUN_MTU)
             .put("auto_route", true)
             .put("strict_route", false)
             .put("stack", if (variant == CoreVariant.SYSTEM_STACK) "system" else "mixed")
