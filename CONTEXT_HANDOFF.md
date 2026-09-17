@@ -122,6 +122,40 @@
 5. **Прокси-путь для stream-соединений**: если `inbound` и `outbound connection` есть, а
    ответов нет — сверять с узлом в рабочем клиенте `flow`, `fp`, `pbk`, `sid`, `sni`.
 
+## 2a. Как устроены рабочие клиенты (изучено по исходникам)
+
+**v2rayNG (2dust/v2rayNG, ветка `master`, Xray-core) — главный ориентир.**
+- Архитектура: `CoreVpnService` поднимает TUN и **отдаёт файловый дескриптор ядру**
+  (`CoreServiceManager.startCoreLoop(mInterface)`), в конфиге Xray — inbound `tun`
+  с `"MTU": 1500` (`assets/v2ray_config_with_tun.json`), рядом локальный SOCKS:10808.
+- TUN-билдер: `builder.setMtu(SettingsManager.getVpnMtu())`, `addAddress(ipv4Client, 30)`,
+  `addRoute("0.0.0.0", 0)` (или список маршрутов, если включён обход LAN), IPv6 —
+  `addAddress(ipv6Client, 126)` + `addRoute("::", 0)`, `setMetered(false)`
+  (`service/CoreVpnService.kt`).
+- DNS: адреса берутся из настроек и ставятся на билдер (`builder.addDnsServer`) — то есть
+  DNS приложения уходит в туннель как обычный трафик, ядро его перехватывает.
+- **QUIC блокируется**: в штатной маршрутизации первое правило —
+  `{"remarks":"阻断udp443","outboundTag":"block","port":"443","network":"udp"}`
+  (`assets/custom_routing_global`, `custom_routing_black`). Это подтверждает решение
+  блокировать udp/443 и у нас.
+- Сниффинг — в inbound через `sniffing.destOverride [http, tls, quic]` (в Xray поле
+  своё, к sing-box не переносится).
+
+**INCY / Happ.** Панель отдаёт `?format=xray` (JSON Xray) и `?format=links`
+(base64-список share-ссылок); INCY на скриншоте показывает «VLESS · JSON · TCP · REALITY» —
+то есть работает именно с Xray-конфигами. Их конфиг узла (сверено на живой подписке)
+содержит: `inbounds` socks/http + `sniffing`, `outbounds` vless + freedom + **blackhole
+`block-quic`**, `routing` с правилом `{"network":"udp","port":"443","outboundTag":"block-quic"}`
+и затем всё в прокси. Happ — клиент с собственным ядром (Xray-совместимый), читает те же
+share-ссылки и `extra`-параметры XHTTP; из официальной документации Happ
+(dev-docs «examples-of-links-and-parameters») важно, что он поддерживает те же поля ссылок,
+включая `mode`, `extra`, `alpn`, `fp`, `pbk`, `sid`.
+
+**Общий вывод:** все три клиента (INCY, v2rayNG и панель) на одних и тех же узлах
+**блокируют QUIC (udp/443)** и работают через Reality+Vision по TCP. Наш конфиг этого
+правила не имел — оно добавлено (`block-quic` в outbounds и `route.rules`).
+Второй общий момент — MTU 1500; у нас было 9000.
+
 ## 2b. XHTTP: что это и почему у нас «не поддерживается» (изучено)
 
 Источники: официальный разбор Xray «XHTTP: Beyond REALITY»
