@@ -52,6 +52,7 @@ fun SettingsScreen(
     var variant by remember { mutableStateOf(viewModel.coreVariant()) }
     // Результат выгрузки журнала: имя файла в «Загрузках».
     var logStatus by remember { mutableStateOf<String?>(null) }
+    var copyStatus by remember { mutableStateOf<String?>(null) }
 
     val protocols = StravoConfig.PROTOCOLS
     val languages = listOf("Русский", "English")
@@ -164,6 +165,16 @@ fun SettingsScreen(
                 title = stringResource(id = R.string.settings_core_log_save),
                 subtitle = logStatus ?: stringResource(id = R.string.settings_core_log_save_sub),
                 onClick = { logStatus = viewModel.saveCoreLog() },
+            )
+            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+            StravoSettingRow(
+                iconRes = R.drawable.ic_share,
+                title = stringResource(id = R.string.settings_core_log_copy),
+                subtitle = copyStatus ?: stringResource(id = R.string.settings_core_log_copy_sub),
+                onClick = {
+                    val count = viewModel.copyCoreLog()
+                    copyStatus = if (count > 0) "Скопировано строк: " + count else null
+                },
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
