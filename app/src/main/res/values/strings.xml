@@ -150,4 +150,11 @@
     <string name="notice_subscription_removed">Подписка удалена</string>
     <string name="notice_subscription_required">Сначала добавьте подписку: Профиль → Добавить подписку</string>
     <string name="scan_sub_subscription">Наведите камеру на QR с ключом или ссылкой подписки</string>
+    <string name="diag_core_log">Журнал ядра</string>
+    <string name="diag_probe">Проверить туннель</string>
+    <string name="settings_core_variant">Вариант ядра (диагностика)</string>
+    <string name="settings_core_direct">Прямой режим (диагностика)</string>
+    <string name="settings_core_direct_sub">Трафик туннеля идёт напрямую, без узла</string>
+    <string name="diag_probe_running">Проверяем туннель…</string>
+    <string name="diag_core_log_hint">Шаги запуска и последние сообщения ядра без адресов и ключей</string>
 </resources>
