@@ -34,7 +34,7 @@ on:
       cache_version:
         description: "Инкремент для сброса кэша AAR"
         required: false
-        default: "1"
+        default: "2"
         type: string
   push:
     paths:
@@ -79,7 +79,11 @@ jobs:
         id: aar-cache
         uses: actions/cache@v4
         with:
-          path: app/libs/libbox.aar
+          # Кэшируем оба AAR одним ключом: основного достаточно для повторной
+          # сборки, а legacy нужен, чтобы артефакт был полным и на cache-hit прогоне.
+          path: |
+            app/libs/libbox.aar
+            app/libs/libbox-legacy.aar
           key: ${{ env.AAR_CACHE_KEY }}
           restore-keys: |
             libbox-aar-${{ env.SINGBOX_REF }}-go${{ env.GO_VERSION }}-
