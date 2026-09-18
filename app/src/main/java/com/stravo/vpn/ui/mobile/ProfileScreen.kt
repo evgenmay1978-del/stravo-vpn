@@ -10,9 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,12 +44,15 @@ fun ProfileScreen(
     state: HomeUiState,
     onConnectTv: () -> Unit,
     onAddSubscription: () -> Unit,
+    onRemoveSubscription: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalStravoPalette.current
     val context = LocalContext.current
     val notAvailable = stringResource(id = R.string.profile_section_soon)
+    // Удаление подписки необратимо для ключей на устройстве — сначала спрашиваем.
+    var confirmRemoval by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -122,6 +131,15 @@ fun ProfileScreen(
                 subtitle = stringResource(id = R.string.profile_add_subscription_sub),
                 onClick = onAddSubscription,
             )
+            if (state.subscription.isActive) {
+                PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+                StravoSettingRow(
+                    iconRes = R.drawable.ic_delete,
+                    title = stringResource(id = R.string.profile_remove),
+                    subtitle = stringResource(id = R.string.profile_remove_sub),
+                    onClick = { confirmRemoval = true },
+                )
+            }
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_tv,
@@ -158,6 +176,47 @@ fun ProfileScreen(
             color = palette.textSecondary,
         )
         Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
+    }
+
+    if (confirmRemoval) {
+        AlertDialog(
+            onDismissRequest = { confirmRemoval = false },
+            title = {
+                Text(
+                    text = stringResource(id = R.string.profile_remove_title),
+                    style = StravoType.BodyStrong,
+                    color = palette.textPrimary,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(id = R.string.profile_remove_body),
+                    style = StravoType.Caption,
+                    color = palette.textSecondary,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmRemoval = false
+                        onRemoveSubscription()
+                    },
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.profile_remove_confirm),
+                        color = palette.accent,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemoval = false }) {
+                    Text(
+                        text = stringResource(id = R.string.profile_remove_cancel),
+                        color = palette.textSecondary,
+                    )
+                }
+            },
+        )
     }
 }
 
