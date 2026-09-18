@@ -19,9 +19,10 @@
 
 ## Важно и честно
 
-- **Ядро туннеля подключено**: sing-box 1.14.1 (libbox) внутри `StravoVpnService`. Поддерживаются
-  VLESS (TCP/WebSocket/HTTP Upgrade/gRPC/QUIC, TLS/Reality), AnyTLS, Hysteria2, Trojan, Shadowsocks.
-  Транспорт XHTTP ядро этой сборки не умеет — узел с ним даёт честную ошибку, а не тихий отказ.
+- **Ядро туннеля подключено**: sing-box внутри `StravoVpnService`. Поддерживаются VLESS
+  (TCP/XHTTP/WebSocket/HTTP Upgrade/gRPC/QUIC, TLS/Reality), AnyTLS, Hysteria2, Trojan, Shadowsocks.
+  XHTTP собирается из форка sing-box-lx (`with_xhttp`), а настройки узла из панели переносятся
+  в конфиг целиком — включая `uplinkHTTPMethod` и размещение session/seq для узлов за CDN.
   Сборка только под arm64-v8a и armeabi-v7a.
 - **Pairing-API сервиса ещё не опубликован.** QR создаётся и ведёт в Telegram-бота, но подтверждение
   переноса обязан прислать сервер; клиент не рисует фальшивый успех.
