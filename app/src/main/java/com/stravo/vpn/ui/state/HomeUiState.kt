@@ -44,7 +44,16 @@ data class HomeUiState(
     val coreLog: List<String> = emptyList(),
     /** Идёт самопроверка туннеля — кнопка показывает занятость. */
     val probing: Boolean = false,
+    /**
+     * Локация, которая реально поднята в туннеле. Может не совпадать с выбранной:
+     * смена локации на ходу не перезапускает ядро, и карточка не должна врать.
+     */
+    val connectedLocationId: String? = null,
 ) {
+    /** Локация поднятого туннеля (если он поднят). */
+    val tunnelLocation: VpnLocation?
+        get() = connectedLocationId?.let { id -> locations.firstOrNull { it.id == id } }
+
     val modes: List<NetworkMode> get() = CapabilityPolicy.availableModes(formFactor)
 
     val isTv: Boolean get() = formFactor.isTv
