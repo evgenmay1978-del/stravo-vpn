@@ -5,8 +5,10 @@ import com.stravo.vpn.data.diagnostics.Clipboard
 import com.stravo.vpn.data.diagnostics.CoreLogExporter
 import com.stravo.vpn.data.diagnostics.CoreLogReader
 import com.stravo.vpn.data.diagnostics.CoreTrace
+import com.stravo.vpn.data.diagnostics.CoreApiToken
 import com.stravo.vpn.data.diagnostics.StartupDiagnostics
 import com.stravo.vpn.data.diagnostics.TunnelProbe
+import com.stravo.vpn.data.diagnostics.TunnelStats
 import com.stravo.vpn.data.profile.ProfileRepository
 import com.stravo.vpn.data.secret.SecretStore
 import com.stravo.vpn.data.settings.SettingsRepository
@@ -44,6 +46,12 @@ class AppContainer(context: Context) {
 
     /** Самопроверка туннеля: внешний адрес со стороны узла и контрольный запрос. */
     val tunnelProbe: TunnelProbe = TunnelProbe(appContext, coreTrace)
+
+    /** Ключ доступа к петлевому API ядра: без него метрики читал бы любой процесс. */
+    val coreApiToken: CoreApiToken = CoreApiToken(appContext)
+
+    /** Метрики для главного экрана: пинг, загрузка и отдача из локального API ядра. */
+    val tunnelStats: TunnelStats = TunnelStats(coreApiToken.value)
 
     /** Журнал самого ядра (libbox пишет его в файл рядом с данными приложения). */
     val coreLogReader: CoreLogReader = CoreLogReader(appContext, coreTrace)
