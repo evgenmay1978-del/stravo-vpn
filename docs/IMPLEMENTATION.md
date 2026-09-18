@@ -254,6 +254,48 @@ X25519). Остальные отпечатки, которые понимает 
 
 ---
 
+## 1g. Стек TUN: по умолчанию gVisor, а не mixed (найдено 18.09.2026)
+
+**Симптом.** REALITY уже проходит, UDP (DNS, QUIC) ходит, но TCP-соединений нет ни одного:
+в журнале за 25 секунд работы YouTube — 34 строки `router: pre-match[0] => sniff`,
+5 пар `inbound packet connection from/to` (это UDP) и **ноль** `inbound connection from`.
+
+**Разбор.** `pre-match[0] => sniff` для TCP печатает `Router.PreMatch` (`route/route.go`):
+для не-UDP потока правило `sniff` сразу отдаёт `PreMatchContinue`. Дальше
+`ForwardDispatcher.judgeAndInstall` (`sing-tun/flow_dispatch.go`) ставит вердикт
+`ActionAccept` и пакет **не** забирает — он уходит в `Mixed.processIPv4` →
+`System.processIPv4TCP`, то есть в системный стек: пакет переписывается
+(src — второй адрес TUN, dst — адрес TUN + NAT-порт) и возвращается в TUN, чтобы ядро
+отдало его слушающему сокету, из которого sing-box и создаёт `inbound connection`.
+На этом устройстве последний шаг не срабатывает: SYN-ы судятся и исчезают.
+
+Почему так — по исходникам: `docs/configuration/inbound/tun.md` («`mixed` = Mixed `system`
+TCP stack and `gvisor` UDP stack»), `sing-tun/stack.go` (`NewStack("mixed") = NewMixed`),
+`stack_mixed.go: processIPv4` (TCP → `System.processIPv4TCP`, UDP → gVisor). Значит в
+`mixed` и `system` **весь TCP идёт через системный стек**, и gVisor для TCP не используется
+вовсе — вопреки тому, что подсказывает название. Клиенты на Xray (INCY, Happ, v2rayNG)
+работают через gVisor: в `assets/v2ray_config_with_tun.json` у v2rayNG поля `stack` нет,
+то есть берётся значение Xray по умолчанию — gVisor.
+
+**Решение.** `SingBoxConfigBuilder.stackOf(variant)`: стек TUN берётся из варианта ядра,
+по умолчанию `gvisor`; `mixed` и `system` остались вариантами для сравнения. gVisor есть
+в сборке (`cmd/internal/build_libbox` добавляет тег `with_gvisor`), ядро пересобирать не нужно.
+`CoreVariant` теперь: `1/5 · gVisor` (по умолчанию), `2/5 · mixed`, `3/5 · системный стек`,
+`4/5 · DNS напрямую`, `5/5 · локальный прокси`. Старое сохранённое значение `BASE` больше
+не существует и честно падает в gVisor (`CoreTuning.variant()`).
+
+**Заодно.** Вариант «DNS напрямую» больше не пускает весь трафик мимо узла (прежний
+`directResolver` менял и `route.final`) — теперь он трогает только detour DNS; мимо узла
+пускает «Прямой режим». `CoreTrace.MAX_LINES` поднят с 160 до 400 строк: окна в 25 секунд
+не хватало, интересные строки вытеснялись.
+
+**Признак успеха в журнале:** `inbound connection from <ip>:<port>` → `inbound connection to
+<ip>:443` → `outbound/vless[proxy]: outbound connection to <ip>:443`. Если и на gVisor
+`inbound connection from` не появляется — TCP не доходит до TUN, и разбирать надо маршруты
+и режим приложений, а не стек.
+
+---
+
 ## 2. Pairing-API (перенос подписки phone → TV)
 
 Контракт, который нужен на стороне сервиса:
