@@ -6,15 +6,12 @@
 - Репозиторий: `evgenmay1978-del/stravo-vpn`, ветка `main`.
 - Приложение: `com.stravo.vpn`, minSdk 23, targetSdk 36, один APK для телефона и Android TV.
 - Сборка: только GitHub Actions (`Android build`), локально не собираем.
-- Текущее состояние на конец дня 18.09.2026: туннель поднимается, DNS через узел **работает**,
-  обычный TCP-трафик приложений по-прежнему не идёт (страницы висят, телефон теряет интернет).
-  Это последняя незакрытая задача.
-- Последняя установленная сборка: `757fec54` (внутри: сеть по умолчанию из платформенного
-  слоя, IFF_*-флаги, `sniff` правилом, MTU 1500, блокировка QUIC, локальный SOCKS 4/4).
-  APK лежит в `/sdcard/Download/stravo-vpn-debug.apk`; при установке данные приложения
-  стираются — подписку надо добавлять заново.
-- Что НЕ подтвердилось на устройстве: ни MTU 1500, ни блокировка QUIC сами по себе проблему
-  не закрыли (проверка была до/во время этих правок). Порядок дальнейших проверок — раздел 3.
+- Состояние на утро 18.09.2026: **найдена и исправлена причина «VPN не работает вообще»** —
+  современный REALITY-сервер отбрасывает наш ClientHello, потому что в нём нет гибридной
+  пост-квантовой доли ключа X25519MLKEM768 (раздел 1). Правка в `SingBoxConfigBuilder`.
+- На устройстве эта правка ещё **не проверена**: нужен журнал после установки свежей сборки.
+  Признак успеха — строки `outbound/vless[proxy]: outbound connection to <ip>:443`
+  и `dns: exchanged … NOERROR`, а не `reality verification failed`.
 
 ---
 
@@ -24,144 +21,140 @@
 
 - главный экран → карточка «Журнал ядра» (последние строки);
 - Настройки → «Сохранить журнал ядра» → файл `/sdcard/Download/stravo-core.log*.txt`;
-- Настройки → «Скопировать журнал ядра» → буфер обмена;
+- Настройки → «Скопировать журнал ядра» → буфер обмена (оттуда читается `android_clipboard`);
 - `CoreLogReader` дополнительно читает `filesDir/CrashReport-*.log`, куда libbox пишет
   stderr самого sing-box.
 
-Что уже видно по журналам владельца (это факты, а не догадки):
+Что видно в журнале, когда всё плохо (лог владельца, 18.09.2026 06:17):
 
 ```
-шаг: TUN поднят: mtu 9000, адреса 2, маршрутов 0, адрес ядра 172.19.0.2,fdfe:dcba:9876::2, имя tun0
-ядро: network: updated default interface rmnet_data0, index 289, type cellular, expensive
-ядро: inbound/tun[tun-in]: inbound DNS packet from <ip>:…
-ядро: outbound/vless[proxy]: outbound packet connection to <ip>:53
+inbound/tun[tun-in]: inbound DNS packet from <ip>:…
+router: found package name: <приложение>
+dns: exchange <домен>. IN A
+outbound/vless[proxy]: outbound packet connection to <ip>:53
+ERROR router: process DNS packet: dial UDP connection: reality verification failed
+```
+
+`reality verification failed` — это не «нет сети» и не «узел лежит»: TCP до узла доходит,
+TLS-рукопожатие начинается, но REALITY-подписи в сертификате нет (сервер увёл нас на
+сайт-заглушку). Причина — в нашем ClientHello (раздел 1).
+
+Когда всё хорошо, в журнале есть:
+
+```
+шаг: TUN поднят: mtu 1500, адреса 2, маршрутов 2, адрес ядра …, имя tun0
+ядро: network: updated default interface <iface>, index <n>, type cellular
 ядро: XtlsPadding … / Xtls Unpadding new block …
 ядро: dns: exchanged <домен> NOERROR
+ядро: outbound/vless[proxy]: outbound connection to <ip>:443
 ```
 
-То есть: TUN поднят, сеть по умолчанию отдана ядру, UDP/packet-соединения (DNS) через узел
-проходят и **ответы приходят**. При этом в журнале нет ни одной строки
-`outbound/vless[proxy]: outbound connection to <ip>:443` — то есть TCP-соединения от
-приложений до outbound либо не доходят, либо умирают до логирования. Ошибок и WARN нет.
+## 1. Причина «VPN не работает» и что исправлено (18.09.2026)
 
-## 1. Что сделано
+### Что случилось
 
-### Issue #2 — форматы подписки
-`domain/subscription/SubscriptionLinkParser.kt`, `data/subscription/PanelSubscription.kt`:
-обёртки `happ://`, `incy://`, `sub://`, `v2rayng://`, `clash://`, `sing-box://`; адрес без схемы;
-тело списком и base64; JSON панелей `?format=xray` и `?format=mihomo` → share-ссылки; понятные
-ошибки. Проверено на живой подписке: `?format=xray` → 8 серверов.
+08.09.2026 в серверной библиотеке REALITY (`xtls/reality`) появился коммит `8cdf7bf9`
+«REALITY protocol: Reject outdated/strange Client Hello that doesn't have X25519MLKEM768
+before optional X25519». Он вошёл в Xray-core v26.9.8 и v26.9.9 (обе — 08.09.2026).
+С этого момента сервер требует, чтобы в ClientHello была гибридная пост-квантовая доля
+ключа **X25519MLKEM768 (0x11ec)** и шла **перед** обычной X25519 (0x001d):
 
-### Issue #3 — ядро libbox (`engine/box/`)
-`StravoVpnService` : `VpnService()` + `PlatformInterface`, `SingBoxVpnEngine`,
-`SingBoxConfigBuilder`, `TunnelCore`; CI собирает `libbox.aar` и подкладывает в `app/libs`.
+```go
+for _, keyShare := range hs.clientHello.keyShares {
+    if keyShare.group == X25519MLKEM768 && len(keyShare.data) == mlkem.EncapsulationKeySize768+32 {
+        peerPub2 = keyShare.data[mlkem.EncapsulationKeySize768:]
+        continue
+    }
+    if keyShare.group == X25519 && len(keyShare.data) == 32 {
+        peerPub = keyShare.data
+        break
+    }
+}
+if peerPub2 == nil {
+    break // reject outdated/strange Client Hello that doesn't have X25519MLKEM768 …
+}
+```
 
-### Платформенный слой (сверено с эталонным клиентом sing-box-for-android)
-- **Монитор сети по умолчанию** — единственный источник сетей для ядра
-  (`experimental/libbox/monitor.go` — единственный вызов `UpdateInterfaces()`): отдаёт
-  текущую сеть сразу, повторяет попытки, пока свойства сети и интерфейс не станут видны.
-- **Свой TUN никогда не отдаётся как сеть по умолчанию**: Android после `establish()` начинает
-  показывать приложению наш же tun0, ядро отвечало `ERROR network: missing default interface`
-  и переставало выпускать пакеты. Теперь сеть с VPN-транспортом/именем `tun*` отбрасывается,
-  а если она всё же пришла — берётся активная сеть в обход туннеля (строка в журнале:
-  «сеть по умолчанию (в обход туннеля)»).
-- **`getInterfaces()`** собирает только активные сети `ConnectivityManager`: имя, индекс, MTU,
-  адреса, DNS, шлюз, тип, метрика; ошибка одной сети не обнуляет список.
-- **Флаги интерфейса — константы Linux `IFF_*`** (`IFF_UP=0x1`, `IFF_LOOPBACK=0x8`,
-  `IFF_POINTOPOINT=0x10`, `IFF_RUNNING=0x40`, `IFF_MULTICAST=0x1000`): libbox переводит их в
-  `net.Flags` своим `link_flags_unix.go`; значения Go `net.Flags` дают интерфейс без
-  `IFF_RUNNING`.
-- **Раздельный туннель**: нельзя смешивать `addAllowedApplication` и
-  `addDisallowedApplication` (Android бросает исключение, оно молча глоталось); своё
-  приложение исключается первым. Режим «Только выбранные» с пустым списком не пускает
-  через VPN никого — это отдельная ловушка, проверять в чек-листе.
-- **`findConnectionOwner`** через `ConnectivityManager.getConnectionOwnerUid` + пакеты uid.
+Если доли нет, сервер не считает клиента REALITY-клиентом: он молча уводит соединение на
+настоящий сайт-заглушку (`dest`) и ретранслирует ответ. Клиент видит настоящий сертификат,
+не находит в нём REALITY-подпись (HMAC-SHA512 по ed25519-ключу, посчитанный на общем
+секрете) и падает с `reality verification failed`. Падает самый первый шаг — установка TLS,
+поэтому через узел не идёт вообще ничего, включая DNS.
 
-### Конфиг ядра
-- **`sniff` больше не поле inbound**: в sing-box 1.11+ поля `sniff`, `sniff_override_destination`,
-  `domain_strategy` объявлены legacy, а с 1.13 проверка жёсткая —
-  `initialize inbound[0]: legacy inbound fields are deprecated…`, ядро не стартует.
-  Разбор включается правилом `{"action":"sniff"}` в `route.rules`, за ним
-  `{"protocol":"dns","action":"hijack-dns"}`. Для tun — `address`/`route_address`
-  (старые `inet4_address`/`inet4_route_address` удалены).
-- **MTU туннеля 1500** вместо 9000 (значение sing-box по умолчанию): на мобильном канале
-  крупные пакеты дробятся/теряются. Ещё не подтверждено на устройстве.
-- **QUIC блокируется** правилом `network udp, port 443 -> outbound block-quic` — ровно так
-  делает рабочий клиент на этих же узлах (конфиги панели). Без этого приложения висят на
-  QUIC, вместо того чтобы сразу уйти на TCP. См. раздел 2b.
-- Диагностические варианты (`CoreTuning`): 1/3 как есть, 2/3 системный стек, 3/3 DNS напрямую;
-  «Прямой режим» пускает трафик туннеля без узла (отличить «не работает туннель» от
-  «не работает узел»).
+### Почему это случилось именно у нас
 
-### UI, диагностика
-Главный экран с журналом ядра и самопроверкой, настройки с диагностикой, выгрузка журнала
-файлом и в буфер, `StartupDiagnostics`, авто-локация подключается к первому узлу подписки.
+Ядро — sing-box 1.14.1 с `metacubex/utls v1.8.7` (`common/tls/reality_client.go`
+и `common/tls/utls_client.go`). Гибридную долю X25519MLKEM768 в этой версии uTLS несёт
+**только отпечаток `chrome`** (`HelloChrome_133`: GREASE, X25519MLKEM768, X25519).
+Остальные отпечатки, которые понимает sing-box, отправляют только обычную X25519:
 
-## 2. Что не работает и что уже проверено
+| `fp` из ссылки | ClientHello (uTLS 1.8.7) | новый сервер |
+| --- | --- | --- |
+| `chrome`, пусто | GREASE, **X25519MLKEM768**, X25519 | принимает |
+| `firefox` | X25519, P256 | отбрасывает |
+| `safari` | GREASE, X25519 | отбрасывает |
+| `ios` | GREASE, X25519 | отбрасывает |
+| `edge` | X25519, P256 | отбрасывает |
+| `android`, `360`, `qq` | без PQ | отбрасывает |
+| `random` | один из пяти (шанс 1/5) | как повезёт |
+| `randomized` | свой набор | отбрасывает |
 
-**Симптом**: страницы не открываются, телефон теряет интернет, пока VPN включён.
-При этом DNS через узел резолвится (см. журнал выше), а TCP-соединений в журнале нет.
+До 08.09.2026 отпечаток на приём не влиял — работал любой. Клиенты на Xray (INCY, Happ,
+v2rayNG) отправляют PQ-долю всегда (`if ecdhe == nil { ecdhe = KeyShareStates.MlkemEcdhe }`),
+поэтому на тех же узлах у них всё работает. Это и был главный признак: **узел жив, виноват
+наш ClientHello.**
 
-Проверено и **исключено**:
-- конфиг проходит `Libbox.checkConfig`, ядро стартует, TUN поднимается (`started at tun0`);
-- сеть по умолчанию ядру отдаётся (`updated default interface rmnet_data0, index 289`);
-- узел и ключ рабочие (те же серверы работают в INCY/Happ), Reality-рукопожатие проходит:
-  видны `XtlsPadding` / `Xtls Unpadding new block`;
-- DNS-ответы приходят через узел (`dns: exchanged … NOERROR`), то есть прокси-канал
-  двунаправленный и не мёртвый;
-- в конфиге нет неизвестных полей: `type`/`udp` DNS, `detour`, `default_domain_resolver`
-  вида `{"server":…}`, `auto_detect_interface`, `stack`, `route.rules` — всё валидно для 1.14.1;
-- правила `sniff`/`hijack-dns` — ровно то, что советует официальная миграция sing-box.
+### Что исправлено в коде
 
-**Основные гипотезы, которые надо проверять дальше (по порядку)**:
-1. **QUIC** (уже в коде, не проверено): приложения пробуют QUIC (UDP/443), он через узел
-   не проходит (а через sing-box вообще не поддержан), и браузер висит вместо перехода на
-   TCP. Рабочий клиент на этих же узлах блокирует QUIC первым правилом. Проверка: открыть
-   сайт, в журнале должны появиться `outbound connection to <ip>:443` (TCP) и страница
-   должна открыться.
-2. **MTU 9000 → 1500** (уже в коде, не проверено): при MTU 9000 мелкие DNS-пакеты проходят,
-   а TCP-сегменты (~500–1500 байт) теряются — тоже подходит под картину.
-3. **TCP не доходит до tun**: в журнале при открытии страницы не появится ни
-   `inbound connection`, ни `outbound connection`. Причина — маршруты TUN или режим
-   приложений («Только выбранные»/«Все, кроме выбранных»); проверять режим «Все».
-4. **TCP доходит, но гибнет в gVisor-стеке** (`stack: "mixed"`): переключить вариант
-   «2/4 · системный стек» и повторить.
-5. **Прокси-путь для stream-соединений**: если `inbound` и `outbound connection` есть, а
-   ответов нет — сверять с узлом в рабочем клиенте `flow`, `fp`, `pbk`, `sid`, `sni`.
+`app/src/main/java/com/stravo/vpn/engine/box/SingBoxConfigBuilder.kt`, `applyTls`:
+
+- для REALITY отпечаток из ссылки больше не берётся — всегда ставится `chrome`
+  (константа `REALITY_FINGERPRINT`, там же объяснение почему);
+- для не-REALITY TLS (`security=tls`) отпечаток из ссылки уважается как раньше;
+- побочный эффект: ссылка без `fp` больше не даёт `uTLS is required by reality client`
+  (раньше блок `utls` в конфиг не попадал вовсе, и ядро отказывалось строить outbound).
+
+`StravoVpnService.openTun`: в строке «TUN поднят» теперь считается реальное число маршрутов,
+ушедших в `Builder` (пустой список `route_address` означает «весь трафик» — 0.0.0.0/0 и ::/0,
+и в журнале это 2, а не 0; прежняя формулировка путала при разборе).
+
+## 2. Что проверено и **не** является причиной
+
+- **TUN и маршруты в порядке.** `openTun` при `auto_route` и пустом списке `route_address`
+  ставит `0.0.0.0/0` (и `::/0`) плюс адреса DNS из опций ядра — поэтому DNS-пакеты и попадали
+  в туннель. Строка «маршрутов 0» в старых журналах считала только явные маршруты конфига;
+  теперь это исправлено.
+- **Сеть по умолчанию ядру отдаётся** (`updated default interface rmnet_data0`), свой `tun0`
+  отбрасывается — иначе ядро уходило бы в себя.
+- **MTU 1500 и блокировка QUIC** (`network udp, port 443 -> outbound block-quic`) совпадают
+  с рабочими клиентами на этих узлах (v2rayNG, конфиги панели) и оставлены. На
+  `reality verification failed` они не влияют: ошибка возникает раньше, на TLS.
+- **Конфиг валиден для 1.14.1**: `sniff` и `hijack-dns` — правилами в `route.rules`,
+  `address`/`route_address` вместо legacy-полей, `default_domain_resolver` вида `{"server":…}`.
+- **XHTTP ядро 1.14.1 не умеет** — это отдельный честный отказ `CoreConfig.Unsupported`,
+  а не заглушка (раздел 2b).
 
 ## 2a. Как устроены рабочие клиенты (изучено по исходникам)
 
-**v2rayNG (2dust/v2rayNG, ветка `master`, Xray-core) — главный ориентир.**
-- Архитектура: `CoreVpnService` поднимает TUN и **отдаёт файловый дескриптор ядру**
+**v2rayNG (2dust/v2rayNG, Xray-core) — главный ориентир.**
+- `CoreVpnService` поднимает TUN и **отдаёт файловый дескриптор ядру**
   (`CoreServiceManager.startCoreLoop(mInterface)`), в конфиге Xray — inbound `tun`
-  с `"MTU": 1500` (`assets/v2ray_config_with_tun.json`), рядом локальный SOCKS:10808.
-- TUN-билдер: `builder.setMtu(SettingsManager.getVpnMtu())`, `addAddress(ipv4Client, 30)`,
-  `addRoute("0.0.0.0", 0)` (или список маршрутов, если включён обход LAN), IPv6 —
-  `addAddress(ipv6Client, 126)` + `addRoute("::", 0)`, `setMetered(false)`
-  (`service/CoreVpnService.kt`).
-- DNS: адреса берутся из настроек и ставятся на билдер (`builder.addDnsServer`) — то есть
-  DNS приложения уходит в туннель как обычный трафик, ядро его перехватывает.
+  с `"MTU": 1500`, рядом локальный SOCKS:10808.
+- TUN-билдер: `setMtu(...)`, `addAddress(ipv4Client, 30)`, `addRoute("0.0.0.0", 0)`,
+  IPv6 — `addAddress(ipv6Client, 126)` + `addRoute("::", 0)`, `setMetered(false)`.
+- DNS-адреса ставятся на билдер (`builder.addDnsServer`) — DNS приложения уходит в туннель
+  как обычный трафик, ядро его перехватывает.
 - **QUIC блокируется**: в штатной маршрутизации первое правило —
-  `{"remarks":"阻断udp443","outboundTag":"block","port":"443","network":"udp"}`
-  (`assets/custom_routing_global`, `custom_routing_black`). Это подтверждает решение
-  блокировать udp/443 и у нас.
-- Сниффинг — в inbound через `sniffing.destOverride [http, tls, quic]` (в Xray поле
-  своё, к sing-box не переносится).
+  `{"remarks":"阻断udp443","outboundTag":"block","port":"443","network":"udp"}`.
+- REALITY: клиент Xray всегда отправляет PQ-долю (`Ecdhe`, иначе `MlkemEcdhe`) — см. раздел 1.
 
-**INCY / Happ.** Панель отдаёт `?format=xray` (JSON Xray) и `?format=links`
-(base64-список share-ссылок); INCY на скриншоте показывает «VLESS · JSON · TCP · REALITY» —
-то есть работает именно с Xray-конфигами. Их конфиг узла (сверено на живой подписке)
-содержит: `inbounds` socks/http + `sniffing`, `outbounds` vless + freedom + **blackhole
-`block-quic`**, `routing` с правилом `{"network":"udp","port":"443","outboundTag":"block-quic"}`
-и затем всё в прокси. Happ — клиент с собственным ядром (Xray-совместимый), читает те же
-share-ссылки и `extra`-параметры XHTTP; из официальной документации Happ
-(dev-docs «examples-of-links-and-parameters») важно, что он поддерживает те же поля ссылок,
-включая `mode`, `extra`, `alpn`, `fp`, `pbk`, `sid`.
+**INCY / Happ.** Панель отдаёт `?format=xray` и `?format=links`; INCY показывает
+«VLESS · JSON · TCP · REALITY». Конфиг узла содержит `outbounds` vless + freedom +
+blackhole `block-quic` и правило `{"network":"udp","port":"443","outboundTag":"block-quic"}`.
+Happ читает те же share-ссылки и `extra`-параметры XHTTP.
 
-**Общий вывод:** все три клиента (INCY, v2rayNG и панель) на одних и тех же узлах
-**блокируют QUIC (udp/443)** и работают через Reality+Vision по TCP. Наш конфиг этого
-правила не имел — оно добавлено (`block-quic` в outbounds и `route.rules`).
-Второй общий момент — MTU 1500; у нас было 9000.
+**Общий вывод:** на этих узлах все рабочие клиенты блокируют QUIC (udp/443), ходят по TCP
+и **отправляют X25519MLKEM768**. У нас теперь есть и то, и другое.
 
 ## 2b. XHTTP: что это и почему у нас «не поддерживается» (изучено)
 
@@ -181,22 +174,18 @@ sing-box-lx (`SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/IMPLEMENTATION_REPORT.md`).
   `Cache-Control: no-store`).
 
 Сессия связывается по случайному UUID в **path** (не в query — так меньше проблем с
-посредниками), `seq` считается с нуля; сервер умеет переупорядочивать POST-ы. Смысл —
-пройти через CDN и HTTP-посредники, которые кэшируют запрос целиком: вниз всегда идёт
-«скачивание большого файла», вверх — пачка запросов.
+посредниками), `seq` считается с нуля; сервер умеет переупорядочивать POST-ы.
 
-**Режимы** (`mode`): `auto` (по умолчанию: packet-up на H1/H2, stream-one на H3),
-`packet-up` (самый совместимый), `stream-up`, `stream-one` (по сути старый HTTP-транспорт).
+**Режимы** (`mode`): `auto`, `packet-up` (самый совместимый), `stream-up`, `stream-one`.
 
 **Параметры**: `path`, `host`, `mode`, `extra` (JSON со всеми тонкими настройками),
 `alpn=h2|h3`, `security=tls|reality`, `sni`, `fp`, `pbk`, `sid`.
-Внутри `extra` (и в Xray-конфиге): `sessionIDPlacement`/`sessionIDKey`/`sessionIDLength`
-(path|query|header|cookie), `seqPlacement`/`seqKey`, `uplinkDataPlacement`
-(body|auto|header|cookie) и `uplinkChunkSize`, `uplinkHTTPMethod`, `xPaddingBytes` +
-`xPaddingObfsMode`/`xPaddingKey`/`xPaddingHeader`/`xPaddingPlacement`,
-`scMaxEachPostBytes`, `scMinPostsIntervalMs`, `scMaxBufferedPosts`,
-`scStreamUpServerSecs`, XMUX (`maxConcurrency`, `maxConnections`, `cMaxReuseTimes`,
-`hMaxRequestTimes`, `hKeepAlivePeriod`) и серверные `serverMaxHeaderBytes`, `noSSEHeader`.
+Внутри `extra`: `sessionIDPlacement`/`sessionIDKey`/`sessionIDLength`,
+`seqPlacement`/`seqKey`, `uplinkDataPlacement` и `uplinkChunkSize`, `uplinkHTTPMethod`,
+`xPaddingBytes` + `xPaddingObfsMode`/`xPaddingKey`/`xPaddingHeader`/`xPaddingPlacement`,
+`scMaxEachPostBytes`, `scMinPostsIntervalMs`, `scMaxBufferedPosts`, `scStreamUpServerSecs`,
+XMUX (`maxConcurrency`, `maxConnections`, `cMaxReuseTimes`, `hMaxRequestTimes`,
+`hKeepAlivePeriod`) и серверные `serverMaxHeaderBytes`, `noSSEHeader`.
 
 **Главное:** **sing-box 1.14.1 XHTTP не умеет вообще** — в `option/v2ray_transport.go`
 перечислены только `http`, `ws`, `quic`, `grpc`, `httpupgrade`; типа `xhttp`/
@@ -206,33 +195,37 @@ sing-box-lx (`SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/IMPLEMENTATION_REPORT.md`).
 **Варианты, если XHTTP-узлы нужны** (по росту цены):
 
 1. **Использовать Reality+Vision узлы** — в подписке владельца их шесть
-   (`VLESS · TCP · Reality`), они полностью поддержаны и соответствуют схеме 1.14.1.
+   (`VLESS · TCP · Reality`), они полностью поддержаны.
 2. **Собрать libbox из форка** с клиентским XHTTP: `Leadaxe/sing-box-lx` (ветка `lx`,
-   build tag `with_xhttp`; реализованы 12 клиентских параметров + obfs, есть lx-build,
-   тесты и отчёт) или `shtorm-7/sing-box-extended` (`transport/v2rayxhttp`).
+   build tag `with_xhttp`) или `shtorm-7/sing-box-extended` (`transport/v2rayxhttp`).
    В workflow `libbox.yml` достаточно поменять `singbox_repo`/`singbox_ref`.
-3. **Патчить upstream самим** — это отдельный транспорт (`transport/v2rayxhttp`),
-   дни работы; спека, карта 16 полей и тесты есть в форке.
+3. **Патчить upstream самим** — это отдельный транспорт, дни работы.
 
 Чего делать не нужно: «эмулировать» XHTTP через `httpupgrade`/`http` — это другой
 протокол, сервер его не поймёт.
 
 ## 3. Порядок действий
 
-1. Поставить свежую сборку (раздел 4) и добавить подписку заново (обновление через
-   установщик часто стирает данные приложения — см. про keystore в разделе 4).
-   Включить VPN, открыть пару сайтов в браузере.
-2. Настройки → «Сохранить журнал ядра» → прислать `stravo-core.log` (в нём нет адресов и ключей).
-3. По журналу определить, на каком шаге рвётся TCP (гипотезы 2–4 выше), и править точечно.
-4. Если TCP не доходит до tun — проверить режим приложений (должно быть «Все») и маршруты.
-5. Если дело в стеке — переключить «Вариант ядра» на 2/3 и повторить без пересборки.
+1. Собрать и поставить свежую сборку (раздел 4), добавить подписку (установка APK часто
+   стирает данные приложения — см. про keystore).
+2. Включить VPN, открыть пару сайтов.
+3. Настройки → «Сохранить/Скопировать журнал ядра» → проверить, что вместо
+   `reality verification failed` появились `XtlsPadding`, `dns: exchanged … NOERROR`
+   и `outbound connection to <ip>:443`.
+4. Если REALITY по-прежнему падает — сверить с панелью `pbk`, `sid`, `sni` узла и версию
+   Xray на узле (PQ-долю требуют v26.9.8+). Клиенты Xray на тех же узлах работают —
+   значит дело в нашем конфиге, а не в узле.
+5. Если REALITY проходит, а страницы всё равно не открываются — переходить к гипотезам
+   про стек и маршруты: вариант ядра «2/4 · системный стек», «3/4 · DNS напрямую»,
+   «4/4 · локальный прокси» (SOCKS на 127.0.0.1:10808 без TUN).
 6. Никогда не проверять туннель «на живую» из этого же телефона, если по нему идёт сессия:
    при нерабочем туннеле связь пропадает — владельцу приходится выключать VPN вручную.
 
 ## 4. Инфраструктура
 
-**Сборка**: push в `main` → workflow `Android build` (job `core` достаёт `libbox.aar` из кэша,
-job `build` собирает debug и release APK).
+**Сборка**: push в `main` → workflow `Android build` (job `core` достаёт `libbox.aar` из
+кэша, job `build` собирает debug и release APK). Ядро — pinned `SagerNet/sing-box v1.14.1`,
+ключ кэша AAR `libbox-aar-v1.14.1-go1.26.8-gomobilev0.1.13-android-arm64-android-arm-v2`.
 
 **Скачать APK**
 ```
@@ -248,8 +241,9 @@ cp apkout/app-debug.apk /sdcard/Download/stravo-vpn-debug.apk
 
 **Установка на телефон**: «Мои файлы» → Загрузки → `stravo-vpn-debug.apk` → «Установщик
 пакетов» → «Только сейчас» → «Установить». `pm install` не работает (нет прав).
-Debug-ключ в CI кэшируется не всегда: при смене ключа установка поверх невозможна,
-данные приложения теряются (подписку придётся добавить заново).
+Release-сборка подписывается тем же debug-ключом (если владелец не задал свой keystore),
+поэтому debug и release взаимозаменяемы; при промахе кэша ключа установка поверх невозможна
+и данные приложения теряются (подписку придётся добавить заново).
 
 **Проверить установленное**
 ```
@@ -260,8 +254,9 @@ unset LD_LIBRARY_PATH; P=$(pm path com.stravo.vpn | head -1 | cut -d: -f2); ls -
 `check.cjs` (скобки и CJK), `gitdiff.cjs`, `ghpush.cjs`, `analyzlog.cjs`/`logtimeline.cjs`
 (разбор журнала ядра), `clssig.cjs` (сигнатуры классов AAR).
 
-**Исходники для сверки**: sing-box 1.14.1 — `~/work/sbsrc/sing-box-1.14.1` (там же `docs/`),
-sing-tun 0.9.3 — `~/work/singtun`, эталон `SagerNet/sing-box-for-android` — `~/work/sfa`.
+**Исходники для сверки**: sing-box 1.14.1 — `~/work/sbsrc/sing-box-1.14.1`, sing-tun 0.9.3 —
+`~/work/singtun`, эталон `SagerNet/sing-box-for-android` — `~/work/sfa`,
+разбор REALITY (сервер и клиент) — `~/work/vpndiag/` (`rel/REALITY-main`, `utls/utls-1.8.7`).
 
 ## 5. Правила
 
@@ -290,7 +285,7 @@ app/src/main/java/com/stravo/vpn/
   domain/subscription/SubscriptionLocations.kt   названия локаций без протокола
   engine/box/StravoVpnService.kt          VpnService + PlatformInterface + диагностика
   engine/box/SingBoxVpnEngine.kt          VpnEngine поверх сервиса
-  engine/box/SingBoxConfigBuilder.kt      ссылка узла → JSON sing-box (+ варианты, MTU 1500)
+  engine/box/SingBoxConfigBuilder.kt      ссылка узла → JSON sing-box (+ REALITY: fp chrome)
   engine/box/CoreTuning.kt                диагностические варианты сборки конфига
   engine/box/TunnelCore.kt                проверка загрузки нативных .so
   ui/components/CoreLogCard.kt            журнал ядра на главном экране
@@ -301,6 +296,6 @@ app/src/main/java/com/stravo/vpn/
   ui/state/HomeUiState.kt                 состояние главного экрана, авто-локация
   ui/state/StravoViewModel.kt             события, проба, выгрузка журнала
   ui/theme/StravoTheme.kt                 телефон всегда на бумаге
-docs/IMPLEMENTATION.md                    разделы 1b–1e (ядро, форматы, грабли)
+docs/IMPLEMENTATION.md                    разделы 1b–1f (ядро, форматы, грабли, REALITY)
 docs/QA_CHECKLIST.md                      чек-лист: форматы подписки и реальный трафик
 ```
