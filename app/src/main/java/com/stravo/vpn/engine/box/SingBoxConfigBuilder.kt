@@ -34,6 +34,11 @@ object SingBoxConfigBuilder {
     private const val TAG_BLOCK = "block-quic"
     private const val TAG_SOCKS = "socks-in"
     private const val LOCAL_PROXY_PORT = 10808
+    /**
+     * Единственный отпечаток uTLS 1.8.7 с гибридной долей ключа X25519MLKEM768.
+     * Без неё современный REALITY-сервер считает клиента «странным» и не пускает.
+     */
+    private const val REALITY_FINGERPRINT = "chrome"
     private const val TUN_MTU = 1500
     private const val TUN_IPV4 = "172.19.0.1/30"
     private const val TUN_IPV6 = "fdfe:dcba:9876::1/126"
@@ -207,11 +212,25 @@ object SingBoxConfigBuilder {
         if (link.query["allowinsecure"] == "1" || link.query["insecure"] == "1") tls.put("insecure", true)
         val alpn = link.query["alpn"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
         if (!alpn.isNullOrEmpty()) tls.put("alpn", JSONArray(alpn))
-        link.query["fp"]?.takeIf { it.isNotBlank() }?.let {
-            tls.put("utls", JSONObject().put("enabled", true).put("fingerprint", it))
-        }
         val publicKey = link.query["pbk"]
-        if (security == "reality" || !publicKey.isNullOrBlank()) {
+        val isReality = security == "reality" || !publicKey.isNullOrBlank()
+        // Отпечаток uTLS. Для REALITY это не косметика: с 08.09.2026 серверная часть
+        // REALITY (xtls/reality, коммит 8cdf7bf9; Xray v26.9.8+) отбрасывает ClientHello,
+        // в котором нет гибридной доли ключа X25519MLKEM768 перед обычной X25519, и уводит
+        // такого клиента на настоящий сайт-заглушку. Ядро видит это как
+        // «reality verification failed» и не пропускает вообще ничего.
+        // В uTLS 1.8.7 (ядро sing-box 1.14.1) такую долю несёт только chrome
+        // (HelloChrome_133: GREASE, X25519MLKEM768, X25519), поэтому для REALITY
+        // отпечаток из ссылки не берём, а всегда ставим chrome.
+        val fingerprint = if (isReality) {
+            REALITY_FINGERPRINT
+        } else {
+            link.query["fp"]?.takeIf { it.isNotBlank() }
+        }
+        if (fingerprint != null) {
+            tls.put("utls", JSONObject().put("enabled", true).put("fingerprint", fingerprint))
+        }
+        if (isReality) {
             val reality = JSONObject().put("enabled", true)
             if (!publicKey.isNullOrBlank()) reality.put("public_key", publicKey)
             link.query["sid"]?.takeIf { it.isNotBlank() }?.let { reality.put("short_id", it) }
