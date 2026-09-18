@@ -159,11 +159,21 @@ class StravoVpnService : VpnService(), PlatformInterface {
             }
         }
 
+        // Запасной конфиг без локального API метрик. Ядро, собранное без тега
+        // with_clash_api, отвергает конфиг с блоком experimental.clash_api целиком —
+        // вместе с узлом и TUN. Плитки пинга и скорости такого запуска не стоят.
+        val withoutMetrics =
+            (SingBoxConfigBuilder.build(link, variant, directMode, apiSecret = null)
+                as? CoreConfig.Ready)?.json
+
         setState(ConnectionState.Connecting, locationId, null)
-        serverThread = Thread({ runCore(config, locationId) }, "stravo-libbox").apply { start() }
+        serverThread = Thread(
+            { runCore(config, withoutMetrics, locationId) },
+            "stravo-libbox",
+        ).apply { start() }
     }
 
-    private fun runCore(config: String, locationId: String?) {
+    private fun runCore(config: String, fallback: String?, locationId: String?) {
         try {
             val options = SetupOptions()
             options.setBasePath(filesDir.absolutePath)
@@ -177,16 +187,25 @@ class StravoVpnService : VpnService(), PlatformInterface {
             Libbox.setup(options)
             trace.record(CoreTrace.STEP_SETUP)
 
-            // Проверяем конфиг до старта: понятная ошибка вместо падения нативного кода.
-            Libbox.checkConfig(config)
-            trace.record(CoreTrace.STEP_CONFIG)
-
             val server = Libbox.newCommandServer(handler, this)
             commandServer = server
             trace.record(CoreTrace.STEP_SERVER)
             server.start()
-            // OverrideOptions обязателен: ядро разыменовывает его без проверки на null.
-            server.startOrReloadService(config, overrideOptions())
+
+            var active = config
+            try {
+                checkAndStart(server, active)
+            } catch (error: Throwable) {
+                // Ядро без with_clash_api отвечает «clash api is not included in this
+                // build» и не берёт конфиг целиком: повторяем без локального API,
+                // чтобы туннель поднялся, а метрики честно показывали прочерки.
+                if (fallback == null || fallback == active || !isMetricsUnsupported(error)) {
+                    throw error
+                }
+                active = fallback
+                trace.record(CoreTrace.STEP_NO_METRICS)
+                checkAndStart(server, active)
+            }
             trace.record(CoreTrace.STEP_STARTED)
             trace.record(
                 "ядро запущено, интерфейсов отдано: " + interfaceCount +
@@ -205,6 +224,26 @@ class StravoVpnService : VpnService(), PlatformInterface {
             stopTunnel()
             stopSelf()
         }
+    }
+
+    /**
+     * Проверка конфига и запуск ядра. Проверка идёт до старта: понятная ошибка
+     * приложения вместо падения нативного кода.
+     */
+    private fun checkAndStart(server: CommandServer, config: String) {
+        Libbox.checkConfig(config)
+        trace.record(CoreTrace.STEP_CONFIG)
+        // OverrideOptions обязателен: ядро разыменовывает его без проверки на null.
+        server.startOrReloadService(config, overrideOptions())
+    }
+
+    /**
+     * Признак того, что эта сборка ядра собрана без локального API метрик: sing-box
+     * отвечает «clash api is not included in this build, rebuild with -tags with_clash_api».
+     */
+    private fun isMetricsUnsupported(error: Throwable): Boolean {
+        val text = (error.message ?: "").lowercase()
+        return text.contains("clash api") || text.contains("with_clash_api")
     }
 
     /** Раздельный туннель из настроек: пустой список — через VPN ходят все приложения. */
