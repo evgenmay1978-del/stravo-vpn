@@ -8,7 +8,22 @@ data class VpnLocation(
     val recommended: Boolean = false,
     /** Написания, которые встречаются в названиях серверов подписки. */
     val aliases: List<String> = emptyList(),
-)
+    /** Протокол узла: «VLESS · TCP · Reality». Секретов не содержит. */
+    val protocol: String? = null,
+    /** Чего ядру этой сборки не хватает для узла (например, XHTTP) — честная пометка. */
+    val limitation: String? = null,
+) {
+    /**
+     * Вторая строка строки списка и карточки: город, протокол и ограничение.
+     * Пустые части не оставляют висящих разделителей.
+     */
+    val subtitle: String
+        get() = listOfNotNull(
+            city.takeIf { it.isNotBlank() },
+            protocol?.takeIf { it.isNotBlank() },
+            limitation?.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+}
 
 /**
  * Витрина локаций. Статический список — это подсказка для пустого состояния;
