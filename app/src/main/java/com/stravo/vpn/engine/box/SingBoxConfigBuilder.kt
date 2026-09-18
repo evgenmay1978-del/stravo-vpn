@@ -55,7 +55,7 @@ object SingBoxConfigBuilder {
      */
     fun build(
         link: String,
-        variant: CoreVariant = CoreVariant.BASE,
+        variant: CoreVariant = CoreVariant.GVISOR,
         directMode: Boolean = false,
     ): CoreConfig {
         val value = link.trim()
@@ -241,6 +241,21 @@ object SingBoxConfigBuilder {
 
     // --- Каркас конфига ---------------------------------------------------
 
+    /**
+     * Сетевой стек TUN.
+     *
+     * По умолчанию gVisor: в `mixed` и `system` TCP обрабатывает системный стек
+     * (NAT + возврат пакета в TUN), и на устройстве владельца TCP-соединения до
+     * обработчика не доходили вообще — в журнале были только `pre-match[0] => sniff`
+     * от SYN и ни одной строки `inbound connection from`, при этом UDP (DNS, QUIC)
+     * работал. Xray-клиенты (INCY, Happ, v2rayNG) на этих же узлах ходят через gVisor.
+     */
+    private fun stackOf(variant: CoreVariant): String = when (variant) {
+        CoreVariant.MIXED -> "mixed"
+        CoreVariant.SYSTEM_STACK -> "system"
+        else -> "gvisor"
+    }
+
     private fun assemble(
         outbound: JSONObject,
         variant: CoreVariant,
@@ -248,7 +263,9 @@ object SingBoxConfigBuilder {
     ): JSONObject {
         // Вариант «DNS напрямую» оставляет резолвер в сети оператора: если с ним
         // страницы открываются, значит трафик до узла не доходит из-за DNS-петли.
-        val directResolver = variant == CoreVariant.DIRECT_RESOLVER || directMode
+        // «Прямой режим» пускает мимо узла весь трафик туннеля, а не только DNS.
+        val directDns = variant == CoreVariant.DIRECT_RESOLVER
+        val directTraffic = directMode
         val dns = JSONObject()
             .put(
                 "servers",
@@ -259,7 +276,7 @@ object SingBoxConfigBuilder {
                             .put("type", "udp")
                             .put("tag", "dns-proxy")
                             .put("server", "1.1.1.1")
-                            .put("detour", if (directResolver) TAG_DIRECT else TAG_PROXY),
+                            .put("detour", if (directDns || directTraffic) TAG_DIRECT else TAG_PROXY),
                     ),
             )
             .put("final", "dns-proxy")
@@ -275,7 +292,7 @@ object SingBoxConfigBuilder {
             .put("mtu", TUN_MTU)
             .put("auto_route", true)
             .put("strict_route", false)
-            .put("stack", if (variant == CoreVariant.SYSTEM_STACK) "system" else "mixed")
+            .put("stack", stackOf(variant))
 
         val route = JSONObject()
             .put(
@@ -293,7 +310,7 @@ object SingBoxConfigBuilder {
                             .put("outbound", TAG_BLOCK),
                     ),
             )
-            .put("final", if (directResolver) TAG_DIRECT else TAG_PROXY)
+            .put("final", if (directTraffic) TAG_DIRECT else TAG_PROXY)
             .put("auto_detect_interface", true)
             .put("default_domain_resolver", JSONObject().put("server", "dns-direct"))
 
