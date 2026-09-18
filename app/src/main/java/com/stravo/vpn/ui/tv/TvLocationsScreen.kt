@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import com.stravo.vpn.R
 import com.stravo.vpn.ui.components.StravoCard
 import com.stravo.vpn.ui.state.HomeEvent
@@ -56,7 +57,14 @@ fun TvLocationsScreen(
                         Text(text = location.flag, style = StravoType.BodyStrong, color = palette.textPrimary)
                         Column(modifier = Modifier.padding(start = StravoTokens.SpaceMd)) {
                             Text(text = location.country, style = StravoType.BodyStrong, color = palette.textPrimary)
-                            Text(text = location.city, style = StravoType.Caption, color = palette.textSecondary)
+                            // Город и протокол вместе: у части узлов строка иначе пустая.
+                            Text(
+                                text = location.subtitle,
+                                style = StravoType.Caption,
+                                color = palette.textSecondary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
