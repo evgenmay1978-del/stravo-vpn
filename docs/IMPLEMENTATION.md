@@ -338,6 +338,35 @@ TCP stack and `gvisor` UDP stack»), `sing-tun/stack.go` (`NewStack("mixed") = N
 
 ---
 
+## 1i. XHTTP и постоянная подпись (18.09.2026)
+
+**XHTTP.** Владелец: «приложение должно быть всеядным», в подписке 4 узла VLESS и 4 XHTTP CDN.
+Upstream sing-box XHTTP не умеет ни в 1.14.1, ни в v1.15.0-alpha.6 (в \`transport/\` только
+v2ray/http/websocket/httpupgrade/grpc/quic), поэтому ядро собирается из форка
+**Leadaxe/sing-box-lx** (ветка \`lx\`: база — upstream 1.14.1 + клиентский
+\`transport/v2rayxhttp\`, тег \`with_xhttp\`). libbox-API форка совпадает с upstream,
+платформенный слой не менялся.
+
+- \`libbox.yml\`: \`singbox_repo=Leadaxe/sing-box-lx\`, \`singbox_ref=lx\`, NDK **r28c**
+  (в CI форка именно он), кэш AAR v3, плюс шаг, возвращающий \`with_clash_api\` в теги
+  \`build_libbox\` (форк его не включает, а нам он нужен для метрик);
+- \`SingBoxConfigBuilder.xhttp()\`: ссылка → \`transport\` по спецификации форка
+  (\`URL_PARSING.md\`): \`path\` с обрезкой query-хвоста, \`host\`, \`mode\`,
+  \`x_padding_bytes\`, \`no_grpc_header\`, placement-поля, \`uplink_*\`,
+  \`sc_max_each_post_bytes\`/\`sc_min_posts_interval_ms\` («30.0» → «30»). Источники —
+  плоские параметры и \`extra\` (URL-encoded JSON, приоритет у extra), ключи snake_case;
+- для XHTTP \`flow\` не выставляется: vision с ним несовместим;
+- откат: вернуть в \`libbox.yml\` upstream-репозиторий и тег, поднять \`cache_version\`.
+
+**Подпись.** Каждый прогон CI подписывал APK новым ключом: кэш \`~/.android/debug.keystore\`
+в Actions не сохранялся (в списке кэшей его нет), у пяти сборок — пять разных сертификатов,
+отсюда «невозможно обновить». Теперь в GitHub Secrets лежит постоянный keystore
+(PKCS#12, CN=Stravo VPN, 30 лет), \`android.yml\` раскладывает его и падает без секрета,
+а \`debug\` подписывается тем же ключом, что \`release\`. Переход требует одной переустановки:
+установленная сборка подписана старым одноразовым ключом.
+
+---
+
 ## 2. Pairing-API (перенос подписки phone → TV)
 
 Контракт, который нужен на стороне сервиса:
