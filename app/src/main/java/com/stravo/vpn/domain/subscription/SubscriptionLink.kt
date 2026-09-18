@@ -19,10 +19,11 @@ data class SubscriptionNode(
     val securityLabel: String? get() = security.displayName.takeIf { security != VpnSecurity.NONE }
 
     /**
-     * Умеет ли ядро этой сборки такой транспорт. XHTTP sing-box 1.14 не поддерживает
-     * вовсе, поэтому узел показывается с честной пометкой, а не как рабочий.
+     * Умеет ли ядро этой сборки такой транспорт. XHTTP поддержан: ядро собирается из
+     * форка sing-box-lx с тегом `with_xhttp`. Пометка остаётся для транспортов, которые
+     * не распознал сам разбор ссылки.
      */
-    val supportedByCore: Boolean get() = transport != VpnTransport.XHTTP
+    val supportedByCore: Boolean get() = transport != VpnTransport.UNKNOWN
 }
 
 /** Почему строка не распознана. Готовый текст для пользователя собирается в UI. */
