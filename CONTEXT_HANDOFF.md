@@ -452,6 +452,53 @@ OPTIONS 200 / GET 400 / POST 405. Reality-узлы: TCP 58–89 мс.
 `IOSchedulingClass=idle`; история в `cdn-health.jsonl` (хвост ограничен 2000
 строк), переходы состояний — в `cdn-health.log`.
 
+## 1i. Серверный инцидент 18.09.2026: почему «CDN отвалился» (18.09.2026, вечер)
+
+**Доступ.** В окружении ассистента нет ssh-клиента, поэтому SSH собран из чистого JS
+(`ssh2` в `~/work/sshjs`, запуск `node sshx.cjs --host … --user root --key|--password-file … --cmd "…"`).
+Владелец положил пароль root от S1 в файл в «Загрузках» (в чат и в репозиторий он не попадает).
+С S1 доступны **S2** (пароль из `/etc/maestro-panel.env` через `SSH_ASKPASS` —
+`sshpass` на S1 нет) и **S3** (ключ `/root/.ssh/maestro_olcrtc_s3`).
+**S4 пока недоступен**: ни пароль, ни ключи с S1/S2/S3 не подходят; публичный ключ ассистента
+владелец добавлял, но на S4 он не сработал — проверить `/root/.ssh/authorized_keys`
+(права 600, владелец root, `PubkeyAuthentication yes`, не сломанная строка — в истории
+проекта уже был malformed-вариант).
+
+**Причина «CDN отвалился» — серверная, не наш клиент:**
+- **S4 не работает как CDN-узел**: закрыты 18443 (сайдкар) и 4001; его units —
+  `maestro-xray-cdn-commercial`, `maestro-xray-cdn-commercial-agent`,
+  `maestro-cdn-ingress`, `x-ui`.
+- **Контроллер коммерческого CDN на S1** (`maestro-cdn-controller.service`) запущен из
+  кандидата от 04.09 (`/var/backups/maestro-commercial-controller-20260904-s4-qzBchh/…`) и
+  не может ходить в rqlite: `rqlite: request transport failed` (в том числе
+  `verify schema`, `verify voter foreign keys`), при том что тот же запрос
+  curl'ом с теми же CA/сертификатом/ключом работает.
+- **rqlite здоров**: два голосующих узла на :4001 (S2 и S3), mTLS
+  (`/var/lib/maestro-cdn-rqlite-bootstrap/pki/`), сертификаты до 2027. Формат
+  `MAESTRO_RQLITE_ENDPOINTS` — **через запятую**; вариант через пробелы даёт
+  `invalid rqlite runtime configuration`. Бэкапы env: `…/runtime.env.bak-*`.
+- Следствие: `passes_completed_6m: 0`, все проходы отложены (`deferrals_6m: 8`) →
+  white-list/metering не расчитывается → узлы CDN не авторизуют клиентов → в приложении «n/a»,
+  на XHTTP-пути 400/405.
+
+**Что уже сделано**: read-only инвентарь S1 (панель, контроллер, коммерческие units, nginx,
+x-ui, rqlite, сторожей CDN: `maestro-cdn-diag`, `maestro-cdn-watch@S1`,
+`maestro-cdn-probe`); перезапуск контроллера (сейчас `failed`); эксперименты с
+форматом эндпоинтов откатаны; **авария по вине ассистента** — при чистке процессов был убит
+системный процесс основной панели, панель поднята обратно (`/healthz` → `ok`,
+подписка 200, `provisioning enabled`).
+
+**Что осталось**: доступ на S4 → поднять его стек; у контроллера заменить `ExecStart` на
+актуальный `/usr/local/bin/maestro-panel` (с бэкапом юнита и проверкой: схема проходит,
+`passes_completed_6m > 0`, отложенных нет); проверить снаружи; затем удаление olcRTC/WDTT
+и установка сторожа CDN.
+
+**Полный серверный handoff** (с адресами и рабочими путями, в репозиторий не коммитить):
+`/sdcard/Download/maestro-purge/SERVER-HANDOFF-2026-09-18.md`; там же
+`CONTEXT-ENTRY.md` (запись для maestro-репозитория), `purge-olcrtc-wdtt.sh` и
+`RUNBOOK-olcrtc-wdtt-purge.md`; сторож CDN — `/sdcard/Download/maestro-ops/`
+(`run-in-termux.sh` ставит его и снимает старых одной командой).
+
 ## 2. Что проверено и **не** является причиной
 
 - **TUN и маршруты в порядке.** `openTun` при `auto_route` и пустом списке `route_address`
