@@ -166,6 +166,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
             (SingBoxConfigBuilder.build(link, variant, directMode, apiSecret = null)
                 as? CoreConfig.Ready)?.json
 
+        // Что именно ушло в ядро — одной строкой без секретов: по ней разбирается
+        // отказ узла (например, «405 Method Not Allowed» от CDN).
+        SingBoxConfigBuilder.describe(config)?.let { trace.record("транспорт: " + it) }
+
         setState(ConnectionState.Connecting, locationId, null)
         serverThread = Thread(
             { runCore(config, withoutMetrics, locationId) },
