@@ -1,6 +1,9 @@
 name: libbox (sing-box Android core)
 
-# Собирает libbox.aar из исходников SagerNet/sing-box через gomobile.
+# Собирает libbox.aar через gomobile. Источник — форк Leadaxe/sing-box-lx (ветка lx):
+# база — upstream sing-box 1.14.1, плюс клиентский транспорт XHTTP (тег with_xhttp),
+# которого в upstream нет даже в 1.15.0-alpha. Ниже шаг возвращает with_clash_api:
+# форк намеренно его не включает, а приложению он нужен для метрик (пинг/скорость).
 # Триггеры: ручной запуск и push, затрагивающий только этот файл,
 # чтобы случайно не пересобирать ядро на каждый коммит приложения.
 on:
@@ -9,12 +12,12 @@ on:
       singbox_repo:
         description: "Репозиторий sing-box"
         required: false
-        default: "SagerNet/sing-box"
+        default: "Leadaxe/sing-box-lx"
         type: string
       singbox_ref:
-        description: "Тег sing-box (стабильный, закреплённый)"
+        description: "Ветка/тег sing-box: форк Leadaxe/sing-box-lx несёт клиентский XHTTP"
         required: false
-        default: "v1.14.1"
+        default: "lx"
         type: string
       go_version:
         description: "Версия Go"
@@ -34,18 +37,18 @@ on:
       cache_version:
         description: "Инкремент для сброса кэша AAR"
         required: false
-        default: "2"
+        default: "3"
         type: string
   # Вызывается из android.yml и release.yml: любой сборке приложения нужно ядро.
   workflow_call:
     inputs:
       singbox_repo:
         required: false
-        default: "SagerNet/sing-box"
+        default: "Leadaxe/sing-box-lx"
         type: string
       singbox_ref:
         required: false
-        default: "v1.14.1"
+        default: "lx"
         type: string
       go_version:
         required: false
@@ -61,7 +64,7 @@ on:
         type: string
       cache_version:
         required: false
-        default: "2"
+        default: "3"
         type: string
   push:
     paths:
@@ -87,7 +90,7 @@ jobs:
           IN_GO: ${{ inputs.go_version || '1.26.8' }}
           IN_GOMOBILE: ${{ inputs.gomobile_version || 'v0.1.13' }}
           IN_ABI: ${{ inputs.abi_target || 'android/arm64,android/arm' }}
-          IN_CACHE: ${{ inputs.cache_version || '2' }}
+          IN_CACHE: ${{ inputs.cache_version || '3' }}
         run: |
           set -euo pipefail
           ABI_SLUG="$(printf '%s' "$IN_ABI" | tr '/,' '--')"
@@ -134,6 +137,20 @@ jobs:
           fi
           echo "sing-box version: $(git describe --tags)"
 
+      - name: Вернуть with_clash_api в теги сборки ядра
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        working-directory: sing-box
+        run: |
+          set -euo pipefail
+          grep -q 'with_clash_api' cmd/internal/build_libbox/main.go && {
+            echo "with_clash_api уже в тегах, патч не нужен"
+            exit 0
+          }
+          # Форк намеренно не включает with_clash_api (свой протокол команд), но
+          # приложению он нужен: через локальный API ядра берутся пинг и скорость.
+          sed -i 's/sharedTags = append(sharedTags, "with_gvisor"/sharedTags = append(sharedTags, "with_gvisor", "with_clash_api"/' cmd/internal/build_libbox/main.go
+          grep -n 'with_clash_api' cmd/internal/build_libbox/main.go
+
       - name: Setup Go ${{ env.GO_VERSION }}
         if: steps.aar-cache.outputs.cache-hit != 'true'
         uses: actions/setup-go@v5
@@ -153,12 +170,12 @@ jobs:
             go-${{ env.GO_VERSION }}-${{ env.SINGBOX_REF }}-
             go-${{ env.GO_VERSION }}-
 
-      - name: Setup Android NDK r28 (фиксированная версия sing-box 28.0.13004108)
+      - name: Setup Android NDK r28c (версия из CI форка)
         id: setup-ndk
         if: steps.aar-cache.outputs.cache-hit != 'true'
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r28
+          ndk-version: r28c
 
       - name: Setup JDK 17 (build_libbox требует ровно openjdk 17)
         if: steps.aar-cache.outputs.cache-hit != 'true'
