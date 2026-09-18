@@ -130,9 +130,22 @@ object PanelSubscription {
 
             "xhttp", "splithttp" -> {
                 val xhttp = stream.optJSONObject("xhttpSettings")
-                xhttp?.optString("path")?.takeIf { it.isNotBlank() }?.let { params["path"] = it }
-                xhttp?.optString("host")?.takeIf { it.isNotBlank() }?.let { params["host"] = it }
-                xhttp?.optString("mode")?.takeIf { it.isNotBlank() }?.let { params["mode"] = it }
+                // XHTTP за CDN держится на тонких параметрах: режим packet-up, метод
+                // отправки (панель ставит GET, потому что CDN пропускает GET/HEAD/
+                // OPTIONS), размещение session и seq в query. Панель кладёт их в
+                // extra (JSON строкой) и дублирует плоскими полями.
+                //
+                // Раньше в ссылку попадали только path, host и mode: остальное
+                // терялось, ядро уходило на умолчания (uplink POST, session в пути),
+                // и узел за CDN отвечал 405 Method Not Allowed — туннель поднимался,
+                // а трафик не шёл. Теперь extra переносится как есть, а плоские поля —
+                // по таблице имён ниже.
+                xhttp?.optString("extra")?.takeIf { it.isNotBlank() && it != NULL_TEXT }
+                    ?.let { params["extra"] = it }
+                for ((panelKey, linkKey) in XHTTP_LINK_PARAMS) {
+                    xhttp?.optString(panelKey)?.takeIf { it.isNotBlank() && it != NULL_TEXT }
+                        ?.let { params[linkKey] = it }
+                }
             }
         }
         return params
@@ -271,6 +284,42 @@ object PanelSubscription {
         }
         return builder.toString()
     }
+
+    /**
+     * Поля xhttpSettings (имена Xray/панели, слева) → параметры share-ссылки,
+     * которые разбирает SingBoxConfigBuilder (имена ядра sing-box-lx, справа;
+     * см. SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/URL_PARSING.md).
+     *
+     * Без этого переноса ссылка теряет всё, кроме path/host/mode, и ядро берёт
+     * умолчания: uplink POST и session в пути — узел за CDN отвечает 405.
+     */
+    private val XHTTP_LINK_PARAMS = listOf(
+        "path" to "path",
+        "host" to "host",
+        "mode" to "mode",
+        "uplinkHTTPMethod" to "uplinkHTTPMethod",
+        "uplinkDataPlacement" to "uplinkDataPlacement",
+        "uplinkDataKey" to "uplinkDataKey",
+        "uplinkChunkSize" to "uplinkChunkSize",
+        "sessionIDPlacement" to "sessionPlacement",
+        "sessionIDKey" to "sessionKey",
+        "sessionIDLength" to "sessionLength",
+        "sessionIDTable" to "sessionTable",
+        "seqPlacement" to "seqPlacement",
+        "seqKey" to "seqKey",
+        "xPaddingBytes" to "xPaddingBytes",
+        "noGRPCHeader" to "noGRPCHeader",
+        "xPaddingObfsMode" to "xPaddingObfsMode",
+        "xPaddingKey" to "xPaddingKey",
+        "xPaddingHeader" to "xPaddingHeader",
+        "xPaddingPlacement" to "xPaddingPlacement",
+        "xPaddingMethod" to "xPaddingMethod",
+        "scMaxEachPostBytes" to "scMaxEachPostBytes",
+        "scMinPostsIntervalMs" to "scMinPostsIntervalMs",
+    )
+
+    /** org.json отдаёт отсутствующее значение строкой "null": это не значение. */
+    private const val NULL_TEXT = "null"
 
     private val PROTOCOL_WORDS = setOf(
         "vless", "vmess", "trojan", "shadowsocks", "ss", "hysteria", "hysteria2", "hy2",
