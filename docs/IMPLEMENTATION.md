@@ -362,6 +362,9 @@ v2ray/http/websocket/httpupgrade/grpc/quic), поэтому ядро собир�
   sing-box-lx». Без этого узел за CDN получал \`405 Method Not Allowed\`: ядро уходило на
   умолчания (uplink POST, session в пути), а панель требует \`uplinkHTTPMethod: GET\` и
   размещение session/seq в query;
+- \`SingBoxConfigBuilder.vless()\`: строка \`encryption\` из ссылки переносится в outbound —
+  пост-квантовое шифрование VLESS (\`mlkem768x25519plus…\`), которым панель закрывает CDN-узлы.
+  Клиентскую часть форк умеет (SPEC 032), upstream sing-box — нет;
 - для XHTTP \`flow\` не выставляется: vision с ним несовместим;
 - откат: вернуть в \`libbox.yml\` upstream-репозиторий и тег, поднять \`cache_version\`.
 
