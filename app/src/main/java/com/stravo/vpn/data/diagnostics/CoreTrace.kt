@@ -54,26 +54,6 @@ class CoreTrace(context: Context) {
     fun lastContext(): String? = prefs.getString(KEY_CONTEXT, null)
         ?.takeIf { it.isNotBlank() }
 
-    /**
-     * Контекст последнего запуска ядра: узел, вариант ядра и схема транспорта.
-     *
-     * Хранится отдельно от журнала (который вытесняется по 400 строк) и попадает
-     * в шапку выгружаемого файла: без него по одному хвосту ядра не понять, на каком
-     * узле и с каким транспортом он снят. Секретов здесь нет — только подписи.
-     */
-    @Synchronized
-    fun recordContext(node: String?, core: String?, transport: String?) {
-        val text = listOfNotNull(
-            node?.takeIf { it.isNotBlank() }?.let { "узел: " + it },
-            core?.takeIf { it.isNotBlank() }?.let { "ядро: " + it },
-            transport?.takeIf { it.isNotBlank() }?.let { "транспорт: " + it },
-        ).joinToString(" · ")
-        prefs.edit().putString(KEY_CONTEXT, text).apply()
-    }
-
-    fun lastContext(): String? = prefs.getString(KEY_CONTEXT, null)
-        ?.takeIf { it.isNotBlank() }
-
     /** Последнее сообщение ядра (уже без адресов и ключей). */
     fun recordCoreMessage(message: String) {
         val text = redact(message).take(MAX_MESSAGE)
@@ -95,7 +75,7 @@ class CoreTrace(context: Context) {
     }
 
     fun clear() {
-        prefs.edit().remove(KEY_STEP).remove(KEY_TIME).remove(KEY_MESSAGE).apply()
+        prefs.edit().remove(KEY_STEP).remove(KEY_TIME).remove(KEY_MESSAGE).remove(KEY_CONTEXT).apply()
         synchronized(this) { log.clear() }
     }
 
