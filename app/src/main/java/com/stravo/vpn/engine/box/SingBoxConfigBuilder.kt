@@ -64,12 +64,18 @@ object SingBoxConfigBuilder {
      *
      * [directMode] пускает трафик туннеля напрямую, без узла: так проверяют сам TUN,
      * DNS и маршруты, когда узел под подозрением.
+     *
+     * [apiSecret] — ключ локального API метрик; null означает «собрать конфиг без
+     * API вовсе». Это не украшение: ядро, собранное без тега `with_clash_api`,
+     * отвергает конфиг с блоком `experimental.clash_api` целиком, вместе с узлом
+     * и TUN, — поэтому метрики никогда не должны быть условием запуска (см.
+     * [com.stravo.vpn.engine.box.StravoVpnService]).
      */
     fun build(
         link: String,
         variant: CoreVariant = CoreVariant.GVISOR,
         directMode: Boolean = false,
-        apiSecret: String = "",
+        apiSecret: String? = null,
     ): CoreConfig {
         val value = link.trim()
         val scheme = value.substringBefore("://", "").lowercase()
@@ -357,7 +363,7 @@ object SingBoxConfigBuilder {
         outbound: JSONObject,
         variant: CoreVariant,
         directMode: Boolean,
-        apiSecret: String,
+        apiSecret: String?,
     ): JSONObject {
         // Вариант «DNS напрямую» оставляет резолвер в сети оператора: если с ним
         // страницы открываются, значит трафик до узла не доходит из-за DNS-петли.
@@ -428,7 +434,7 @@ object SingBoxConfigBuilder {
                 )
         }
 
-        return JSONObject()
+        val config = JSONObject()
             // debug: пока туннель не возит трафик, сообщения ядра — единственная
             // диагностика. В интерфейс они попадают без адресов и ключей (CoreTrace).
             .put("log", JSONObject().put("level", "debug"))
@@ -442,11 +448,16 @@ object SingBoxConfigBuilder {
                     .put(JSONObject().put("type", "block").put("tag", TAG_BLOCK)),
             )
             .put("route", route)
-            // Локальный API ядра — единственный честный источник метрик: он отдаёт
-            // скорость (байт/с по туннелю) и задержку проверки узла. Слушает только
-            // петлевой адрес; ключ обязателен, потому что петлевой адрес на Android
-            // общий для всех приложений.
-            .put(
+        // Локальный API ядра — единственный честный источник метрик: он отдаёт
+        // скорость (байт/с по туннелю) и задержку проверки узла. Слушает только
+        // петлевой адрес; ключ обязателен, потому что петлевой адрес на Android
+        // общий для всех приложений.
+        //
+        // Без ключа блок не добавляется совсем: сборка ядра без with_clash_api
+        // отвергает такой конфиг целиком («clash api is not included in this build»),
+        // и туннель не поднимается — метрики не стоят выключенного VPN.
+        if (apiSecret != null) {
+            config.put(
                 "experimental",
                 JSONObject().put(
                     "clash_api",
@@ -455,6 +466,8 @@ object SingBoxConfigBuilder {
                         .put("secret", apiSecret),
                 ),
             )
+        }
+        return config
     }
 
     // --- Разбор ссылки ----------------------------------------------------
