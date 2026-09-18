@@ -28,7 +28,7 @@ object SubscriptionLocations {
             limitation = if (node.supportedByCore) {
                 null
             } else {
-                "ядро не поддерживает " + node.transport.displayName
+                "транспорт не распознан"
             },
         )
     }
