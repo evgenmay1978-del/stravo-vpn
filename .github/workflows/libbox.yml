@@ -126,6 +126,9 @@ jobs:
           ref: ${{ env.SINGBOX_REF }}
           path: sing-box
           fetch-depth: 1
+          # Форк держит sing-tun, gVisor и uTLS сабмодулями (go.mod заменяет их на
+          # ./submodules/*): без выкачки сборка падает на «reading submodules/utls/go.mod».
+          submodules: recursive
 
       - name: Гарантировать тег версии (libbox читает git describe --tags)
         if: steps.aar-cache.outputs.cache-hit != 'true'
