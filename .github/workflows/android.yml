@@ -38,18 +38,35 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-      # Один и тот же debug-ключ между прогонами. Иначе каждый APK подписан
-      # заново, и установка поверх предыдущей сборки падает по подписи.
-      - name: Restore debug keystore
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
+      # Подпись — постоянным ключом из GitHub Secrets. Раньше ключ каждый прогон
+      # генерировался заново (кэш ~/.android/debug.keystore в CI не сохранялся),
+      # поэтому установка поверх предыдущей сборки падала по подписи. Свой ключ
+      # используется и для debug, и для release: APK взаимозаменяемы.
+      - name: Prepare keystore (обязателен для обновлений)
+        env:
+          KEYSTORE_B64: ${{ secrets.STRAVO_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Нет секрета STRAVO_KEYSTORE_BASE64 — сборка была бы подписана новым ключом, и обновление поверх установленного приложения стало бы невозможно."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/stravo-signing.p12"
+          echo "STRAVO_KEYSTORE_FILE=$RUNNER_TEMP/stravo-signing.p12" >> "$GITHUB_ENV"
+          echo "Подпись: постоянный ключ из секретов."
 
       - name: Build debug APK
+        env:
+          STRAVO_KEYSTORE_PASSWORD: ${{ secrets.STRAVO_KEYSTORE_PASSWORD }}
+          STRAVO_KEY_ALIAS: ${{ secrets.STRAVO_KEY_ALIAS }}
+          STRAVO_KEY_PASSWORD: ${{ secrets.STRAVO_KEY_PASSWORD }}
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
       - name: Build release APK
+        env:
+          STRAVO_KEYSTORE_PASSWORD: ${{ secrets.STRAVO_KEYSTORE_PASSWORD }}
+          STRAVO_KEY_ALIAS: ${{ secrets.STRAVO_KEY_ALIAS }}
+          STRAVO_KEY_PASSWORD: ${{ secrets.STRAVO_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
 
       - name: Upload debug APK
