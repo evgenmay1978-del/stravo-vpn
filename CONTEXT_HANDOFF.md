@@ -206,6 +206,27 @@ XHTTP» — честно, а не как рабочие. Поиск в спис�
 (`connectedLocationId` из снимка сервиса), а не выбранный в списке; при расхождении
 добавляется «выбран другой узел» — смена локации на ходу ядро не перезапускает.
 
+## 1c. Подпись сборок: один постоянный ключ (18.09.2026)
+
+**Что было.** Каждый прогон CI подписывал APK **новым** ключом: кэш
+\`~/.android/debug.keystore\` (\`actions/cache\`, ключ \`android-debug-keystore-v1\`) в CI
+никогда не сохранялся — в списке кэшей репозитория его нет. Проверено сравнением
+сертификатов: у пяти сборок пять разных SHA-256. Отсюда «невозможно обновить» и потеря
+данных при каждой установке.
+
+**Как теперь.** Постоянный keystore (PKCS#12, \`CN=Stravo VPN\`, 30 лет) лежит в GitHub
+Secrets: \`STRAVO_KEYSTORE_BASE64\`, \`STRAVO_KEYSTORE_PASSWORD\`, \`STRAVO_KEY_ALIAS\`,
+\`STRAVO_KEY_PASSWORD\`; файл в репозиторий не коммитится. В \`android.yml\` шаг
+«Prepare keystore» раскладывает его и **падает**, если секрета нет, — лучше явная ошибка,
+чем молча подписать сборку новым ключом. В \`app/build.gradle.kts\` debug подписывается тем
+же ключом, что release: debug- и release-APK взаимозаменяемы.
+
+**Важно про переход.** Установленная сейчас на телефоне сборка подписана старым
+одноразовым ключом, поэтому первый раз приложение нужно **удалить** и поставить заново
+(подписку добавить заново). Дальше обновления идут поверх без потери данных.
+Проверить подпись собранного APK: \`unzip -p app.apk META-INF/CERT.RSA\` и сверить
+SHA-256 сертификата.
+
 ## 2. Что проверено и **не** является причиной
 
 - **TUN и маршруты в порядке.** `openTun` при `auto_route` и пустом списке `route_address`
@@ -248,53 +269,41 @@ Happ читает те же share-ссылки и `extra`-параметры XHT
 **Общий вывод:** на этих узлах все рабочие клиенты блокируют QUIC (udp/443), ходят по TCP
 и **отправляют X25519MLKEM768**. У нас теперь есть и то, и другое.
 
-## 2b. XHTTP: что это и почему у нас «не поддерживается» (изучено)
+## 2b. XHTTP: поддержан ядром из форка (18.09.2026)
 
-Источники: официальный разбор Xray «XHTTP: Beyond REALITY»
-(github.com/XTLS/Xray-core/discussions/4113), исходники Xray
-`transport/internet/splithttp/config.go`, отчёт о клиентской поддержке в форке
-sing-box-lx (`SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/IMPLEMENTATION_REPORT.md`).
+**Что это.** XHTTP (Xray «splithttp») — транспорт, где канал разделён на два HTTP-потока:
+вверх идут \`POST /path/<sessionID>/<seq>\` (в \`packet-up\` каждый POST самостоятелен, в
+\`stream-up\` — один долгий поток), вниз — долгий \`GET /path/<sessionID>\` с SSE-подобным
+ответом. Смысл — проходить через CDN и HTTP-посредники. Режимы: \`auto\` (Reality →
+stream-one, иначе packet-up), \`packet-up\`, \`stream-up\`, \`stream-one\`. Тонкие параметры
+(path/host/mode/extra, placement, xPadding, XMUX, sc*) описаны в спецификации форка.
 
-**Идея.** XHTTP — транспорт Xray, где канал разделён на два независимых HTTP-потока:
+**Почему не upstream.** В sing-box XHTTP нет вообще — ни в 1.14.1, ни в свежей
+\`v1.15.0-alpha.6\` (в \`transport/\` только v2ray/http/websocket/httpupgrade/grpc/quic).
+Поэтому ядро собирается из форка **\`Leadaxe/sing-box-lx\`**, ветка **\`lx\`**: база — upstream
+1.14.1, сверху клиентский XHTTP (\`transport/v2rayxhttp\`, тег сборки \`with_xhttp\`) и ещё
+несколько lx-расширений. libbox-API там тот же, что и в upstream (сверено по
+\`experimental/libbox/platform.go\`), поэтому платформенный слой приложения не менялся.
 
-- **вверх**: клиент отправляет данные `POST /path/<sessionID>/<seq>`; в режиме
-  `packet-up` каждый POST — самостоятельный кусок (сервер склеивает по `seq`, по
-  умолчанию буферизует до 30), в `stream-up` вверх идёт одним долгим потоком с
-  gRPC-подобной маскировкой заголовков;
-- **вниз**: клиент открывает `GET /path/<sessionID>` и получает бесконечный ответ
-  (SSE-подобный: `Content-Type: text/event-stream`, `X-Accel-Buffering: no`,
-  `Cache-Control: no-store`).
+**Как включено.**
+- \`.github/workflows/libbox.yml\`: \`singbox_repo = Leadaxe/sing-box-lx\`, \`singbox_ref = lx\`,
+  NDK **r28c** (в CI форка именно он; прежний \`r28\` — другой архив), кэш AAR v3.
+  Отдельный шаг возвращает \`with_clash_api\` в теги \`build_libbox\`: форк его намеренно не
+  включает, а приложению он нужен для метрик (пинг и скорость).
+- \`SingBoxConfigBuilder.xhttp()\`: маппинг ссылки в \`transport\` по спецификации форка
+  (\`SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/URL_PARSING.md\`) — \`path\` (с обрезкой
+  query-хвоста вида \`/path?ed=2048\`), \`host\`, \`mode\`, \`x_padding_bytes\`, \`no_grpc_header\`,
+  placement-поля (\`session_*\`, \`seq_*\`, \`uplink_*\`), \`x_padding_*\`,
+  \`sc_max_each_post_bytes\` и \`sc_min_posts_interval_ms\` (числа из \`extra\` приводятся к
+  строке «min-max»). Источники — плоские параметры ссылки и \`extra\` (URL-encoded JSON,
+  приоритет у extra), ключи конфига — snake_case.
+- для XHTTP \`flow\` не выставляется вовсе: vision с ним несовместим, а панели иногда
+  оставляют его в ссылке.
 
-Сессия связывается по случайному UUID в **path** (не в query — так меньше проблем с
-посредниками), `seq` считается с нуля; сервер умеет переупорядочивать POST-ы.
-
-**Режимы** (`mode`): `auto`, `packet-up` (самый совместимый), `stream-up`, `stream-one`.
-
-**Параметры**: `path`, `host`, `mode`, `extra` (JSON со всеми тонкими настройками),
-`alpn=h2|h3`, `security=tls|reality`, `sni`, `fp`, `pbk`, `sid`.
-Внутри `extra`: `sessionIDPlacement`/`sessionIDKey`/`sessionIDLength`,
-`seqPlacement`/`seqKey`, `uplinkDataPlacement` и `uplinkChunkSize`, `uplinkHTTPMethod`,
-`xPaddingBytes` + `xPaddingObfsMode`/`xPaddingKey`/`xPaddingHeader`/`xPaddingPlacement`,
-`scMaxEachPostBytes`, `scMinPostsIntervalMs`, `scMaxBufferedPosts`, `scStreamUpServerSecs`,
-XMUX (`maxConcurrency`, `maxConnections`, `cMaxReuseTimes`, `hMaxRequestTimes`,
-`hKeepAlivePeriod`) и серверные `serverMaxHeaderBytes`, `noSSEHeader`.
-
-**Главное:** **sing-box 1.14.1 XHTTP не умеет вообще** — в `option/v2ray_transport.go`
-перечислены только `http`, `ws`, `quic`, `grpc`, `httpupgrade`; типа `xhttp`/
-`splithttp` нет ни в одном файле ядра. Поэтому `CoreConfig.Unsupported` для XHTTP-узлов —
-честный отказ, а не заглушка.
-
-**Варианты, если XHTTP-узлы нужны** (по росту цены):
-
-1. **Использовать Reality+Vision узлы** — в подписке владельца их шесть
-   (`VLESS · TCP · Reality`), они полностью поддержаны.
-2. **Собрать libbox из форка** с клиентским XHTTP: `Leadaxe/sing-box-lx` (ветка `lx`,
-   build tag `with_xhttp`) или `shtorm-7/sing-box-extended` (`transport/v2rayxhttp`).
-   В workflow `libbox.yml` достаточно поменять `singbox_repo`/`singbox_ref`.
-3. **Патчить upstream самим** — это отдельный транспорт, дни работы.
-
-Чего делать не нужно: «эмулировать» XHTTP через `httpupgrade`/`http` — это другой
-протокол, сервер его не поймёт.
+**Откат, если форк подведёт** (сломает Reality или саму сборку): вернуть в \`libbox.yml\`
+\`SagerNet/sing-box\` и \`v1.14.1\`, поднять \`cache_version\`. XHTTP тогда снова станет честным
+\`CoreConfig.Unsupported\`; патч \`with_clash_api\` при этом не нужен — в upstream он уже в
+тегах libbox.
 
 ## 3. Порядок действий
 
