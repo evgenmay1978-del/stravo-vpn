@@ -263,15 +263,19 @@ object SingBoxConfigBuilder {
         flag("noGRPCHeader", "no_grpc_header")?.let { transport.put("no_grpc_header", it) }
 
         // Вторая волна параметров XHTTP (placement, ключи, обфускация padding).
+        // Панели пишут имена Xray (sessionIDPlacement, sessionIDKey, sessionIDLength),
+        // спецификация ядра — sessionPlacement/sessionKey; понимаем оба написания,
+        // иначе узел за CDN остаётся без размещения session и seq.
         val mapped = mapOf(
-            "session_placement" to arrayOf("sessionPlacement"),
-            "session_key" to arrayOf("sessionKey"),
+            "session_placement" to arrayOf("sessionPlacement", "sessionIDPlacement"),
+            "session_key" to arrayOf("sessionKey", "sessionIDKey"),
+            "session_length" to arrayOf("sessionLength", "sessionIDLength"),
+            "session_table" to arrayOf("sessionTable", "sessionIDTable"),
             "seq_placement" to arrayOf("seqPlacement"),
             "seq_key" to arrayOf("seqKey"),
             "uplink_data_placement" to arrayOf("uplinkDataPlacement"),
             "uplink_data_key" to arrayOf("uplinkDataKey"),
             "uplink_http_method" to arrayOf("uplinkHTTPMethod"),
-            "x_padding_obfs_mode" to arrayOf("xPaddingObfsMode"),
             "x_padding_key" to arrayOf("xPaddingKey"),
             "x_padding_header" to arrayOf("xPaddingHeader"),
             "x_padding_placement" to arrayOf("xPaddingPlacement"),
@@ -280,6 +284,7 @@ object SingBoxConfigBuilder {
         for ((jsonKey, urlKeys) in mapped) {
             text(*urlKeys)?.let { transport.put(jsonKey, it) }
         }
+        // Флаг ставится отдельно: ядро ждёт bool, а строка «true» ломает конфиг.
         flag("xPaddingObfsMode", "x_padding_obfs_mode")?.let { transport.put("x_padding_obfs_mode", it) }
 
         // Диапазоны вида «3000-4000» или одиночное число; в extra числа приходят как 30.0.
