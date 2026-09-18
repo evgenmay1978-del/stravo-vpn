@@ -54,6 +54,12 @@
     <string name="profile_support">Поддержка</string>
     <string name="profile_security_note">Ключи подписки хранятся в защищённом хранилище Android и никогда не показываются на экране.</string>
     <string name="profile_section_soon">Раздел включится вместе с серверной частью подписки</string>
+    <string name="profile_remove">Удалить подписку</string>
+    <string name="profile_remove_sub">Ключи узлов и настройки будут удалены с телефона</string>
+    <string name="profile_remove_title">Удалить подписку?</string>
+    <string name="profile_remove_body">Ключи узлов и настройки подписки будут удалены с телефона, туннель выключится. Ссылку можно добавить заново в любой момент.</string>
+    <string name="profile_remove_confirm">Удалить</string>
+    <string name="profile_remove_cancel">Отмена</string>
 
     <string name="connect_tv_title">Подключить ТВ</string>
     <string name="connect_tv_sub">Подписка появится на телевизоре автоматически</string>
