@@ -17,10 +17,19 @@ object SubscriptionLocations {
         VpnLocation(
             id = node.id,
             country = known?.country ?: label.ifEmpty { node.protocolLabel },
-            city = known?.city ?: subtitleOf(node),
+            // Город — отдельно от протокола. Раньше протокол клался в поле города и
+            // пропадал у узлов, где каталог знал город: «Нидерланды · Амстердам» без
+            // «VLESS · TCP · Reality». Теперь строка показывает и город, и протокол.
+            city = known?.city ?: "",
             flag = known?.flag ?: flag ?: DEFAULT_FLAG,
             recommended = false,
             aliases = emptyList(),
+            protocol = subtitleOf(node),
+            limitation = if (node.supportedByCore) {
+                null
+            } else {
+                "ядро не поддерживает " + node.transport.displayName
+            },
         )
     }
 
