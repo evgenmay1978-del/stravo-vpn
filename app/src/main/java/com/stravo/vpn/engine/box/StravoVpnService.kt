@@ -133,7 +133,14 @@ class StravoVpnService : VpnService(), PlatformInterface {
         val variant = container.coreTuning.variant()
         val directMode = container.settings.settings.value.coreDirectMode
         trace.record("конфиг ядра: " + variant.label + (if (directMode) ", прямой режим" else ""))
-        val config = when (val built = SingBoxConfigBuilder.build(link, variant, directMode)) {
+        val config = when (
+            val built = SingBoxConfigBuilder.build(
+                link = link,
+                variant = variant,
+                directMode = directMode,
+                apiSecret = container.coreApiToken.value,
+            )
+        ) {
             is CoreConfig.Ready -> built.json
 
             is CoreConfig.Unsupported -> {
