@@ -6,12 +6,14 @@
 - Репозиторий: `evgenmay1978-del/stravo-vpn`, ветка `main`.
 - Приложение: `com.stravo.vpn`, minSdk 23, targetSdk 36, один APK для телефона и Android TV.
 - Сборка: только GitHub Actions (`Android build`), локально не собираем.
-- Состояние на утро 18.09.2026: **найдена и исправлена причина «VPN не работает вообще»** —
-  современный REALITY-сервер отбрасывает наш ClientHello, потому что в нём нет гибридной
-  пост-квантовой доли ключа X25519MLKEM768 (раздел 1). Правка в `SingBoxConfigBuilder`.
-- На устройстве эта правка ещё **не проверена**: нужен журнал после установки свежей сборки.
-  Признак успеха — строки `outbound/vless[proxy]: outbound connection to <ip>:443`
-  и `dns: exchanged … NOERROR`, а не `reality verification failed`.
+- Состояние на 18.09.2026: **REALITY починен и подтверждён на устройстве** (см. раздел 1):
+  в журнале владельца появились `XtlsPadding`, `Xtls Unpadding`, `dns: exchanged … NOERROR`.
+  Осталась вторая, независимая проблема: **через туннель не идёт TCP** — UDP (DNS, QUIC)
+  доходит до ядра, а TCP-соединения в обработчик не попадают (раздел 1a). Причина —
+  сетевой стек TUN: в `mixed`/`system` TCP обрабатывает системный стек. По умолчанию
+  теперь `gvisor`.
+- Проверка правки стека на устройстве ещё не сделана: нужен журнал после установки
+  свежей сборки.
 
 ---
 
@@ -49,7 +51,7 @@ TLS-рукопожатие начинается, но REALITY-подписи в 
 ядро: outbound/vless[proxy]: outbound connection to <ip>:443
 ```
 
-## 1. Причина «VPN не работает» и что исправлено (18.09.2026)
+## 1. Причина «VPN не работает»: REALITY (исправлено 18.09.2026, подтверждено владельцем)
 
 ### Что случилось
 
@@ -118,6 +120,70 @@ v2rayNG) отправляют PQ-долю всегда (`if ecdhe == nil { ecdhe
 ушедших в `Builder` (пустой список `route_address` означает «весь трафик» — 0.0.0.0/0 и ::/0,
 и в журнале это 2, а не 0; прежняя формулировка путала при разборе).
 
+### Подтверждение от владельца (журнал 06:37, после установки сборки с правкой)
+
+```
+TUN поднят: mtu 1500, адреса 2, маршрутов 2, имя tun
+outbound/vless[proxy]: XtlsPadding 50 235 0
+outbound/vless[proxy]: Xtls Unpadding new block 21 16 padding 115 0
+dns: exchanged www.google.com NOERROR 232
+dns: exchanged wapmixx.ru NOERROR 600
+```
+Ни одной строки `reality verification failed`. Рукопожатие проходит, DNS идёт через узел.
+
+## 1a. Вторая причина: TCP не доходит до обработчика — виноват стек TUN (правка 18.09)
+
+**Симптом.** После починки REALITY страницы всё ещё не открываются. В журнале (06:44,
+окно 25 секунд, YouTube и Kimi в работе):
+
+```
+34 × router: pre-match[0] => sniff                 ← судятся новые потоки
+ 5 × inbound/tun[tun-in]: inbound packet connection from/to   ← это UDP, он доходит
+ 6 × router: sniffed packet protocol: quic … => route(block-quic)   ← QUIC блокируется как задумано
+ 0 × inbound connection from / inbound connection to           ← TCP-соединений НЕТ НИ ОДНОГО
+ 0 × outbound connection to <ip>:443
+```
+
+**Что это значит.** `pre-match[0] => sniff` для TCP печатает `Router.PreMatch`
+(`route/route.go`): при не-UDP потоке правило `sniff` сразу возвращает `PreMatchContinue`.
+Дальше `ForwardDispatcher.judgeAndInstall` ставит вердикт `ActionAccept` и **не** забирает
+пакет — он уходит в `Mixed.processIPv4` → `System.processIPv4TCP`, то есть в **системный
+стек**: пакет переписывается (src = второй адрес TUN, dst = адрес TUN + NAT-порт) и
+возвращается в TUN, чтобы ядро отдало его слушающему сокету, откуда sing-box создаёт
+`inbound connection`. Именно этого шага и не происходит: SYN-ы судятся и исчезают,
+`inbound connection from` не появляется ни разу. UDP при этом идёт другим путём — в `mixed`
+он инжектится в gVisor и работает (DNS, QUIC-блокировка).
+
+Проверено по исходникам: `docs/configuration/inbound/tun.md` — `mixed` = «Mixed `system` TCP
+stack and `gvisor` UDP stack»; `sing-tun/stack.go` → `NewStack("mixed") = NewMixed`,
+`stack_mixed.go: processIPv4` → TCP в `System.processIPv4TCP`, UDP в gVisor.
+Клиенты, которые на этих же узлах работают (INCY, Happ, v2rayNG на Xray), используют
+tun с gVisor — конфиг v2rayNG (`assets/v2ray_config_with_tun.json`) поля `stack` не задаёт,
+то есть берётся gVisor по умолчанию.
+
+**Что исправлено.**
+
+- `SingBoxConfigBuilder.stackOf(variant)` — стек TUN теперь берётся из варианта ядра,
+  по умолчанию **`gvisor`** (TCP и UDP через gVisor: соединение сразу попадает в
+  `NewConnectionEx` и уходит в outbound). `mixed` и `system` остались как варианты для
+  сравнения; `mv`/gVisor в сборке libbox есть (`cmd/internal/build_libbox` кладёт тег
+  `with_gvisor`), так что пересобирать ядро не нужно.
+- `CoreVariant` переразмечен на 5 вариантов: `1/5 · gVisor` (по умолчанию), `2/5 · mixed`
+  (как было), `3/5 · системный стек`, `4/5 · DNS напрямую`, `5/5 · локальный прокси`.
+  Переключение — в настройках, без новой сборки; сохранённый старый вариант не находится
+  (`BASE` переименован) и честно падает в gVisor.
+- Вариант «DNS напрямую» больше не пускает весь трафик мимо узла (это делал прежний
+  `directResolver`): теперь он меняет только detour DNS, а «Прямой режим» — по-прежнему
+  весь трафик.
+- `CoreTrace.MAX_LINES`: 160 → 400 строк. Окно журнала в 25 секунд оказалось мало для
+  разбора: половина интересного вытеснялась.
+
+**Что смотреть в следующем журнале (признак успеха):**
+`inbound connection from <ip>:<port>` → `inbound connection to <ip>:443` →
+`outbound/vless[proxy]: outbound connection to <ip>:443` → страницы открываются.
+Если и с gVisor не появится `inbound connection from` — значит TCP не доходит до TUN
+(разбирать маршруты и режим приложений), а не стек.
+
 ## 2. Что проверено и **не** является причиной
 
 - **TUN и маршруты в порядке.** `openTun` при `auto_route` и пустом списке `route_address`
@@ -127,8 +193,12 @@ v2rayNG) отправляют PQ-долю всегда (`if ecdhe == nil { ecdhe
 - **Сеть по умолчанию ядру отдаётся** (`updated default interface rmnet_data0`), свой `tun0`
   отбрасывается — иначе ядро уходило бы в себя.
 - **MTU 1500 и блокировка QUIC** (`network udp, port 443 -> outbound block-quic`) совпадают
-  с рабочими клиентами на этих узлах (v2rayNG, конфиги панели) и оставлены. На
-  `reality verification failed` они не влияют: ошибка возникает раньше, на TLS.
+  с рабочими клиентами на этих узлах (v2rayNG, конфиги панели) и оставлены. Блокировка QUIC
+  в журнале владельца работает как задумано (`sniffed packet protocol: quic … => route(block-quic)`),
+  ошибка `connection: listen packet connection … block-quic: operation not permitted` —
+  шум самого block-outbound, пакеты всё равно не выпускаются.
+- **Системный стек TUN (не путать с «сетью по умолчанию»)** — не «не проверено», а измерено:
+  TCP-соединений через него не появляется вовсе (раздел 1a).
 - **Конфиг валиден для 1.14.1**: `sniff` и `hijack-dns` — правилами в `route.rules`,
   `address`/`route_address` вместо legacy-полей, `default_domain_resolver` вида `{"server":…}`.
 - **XHTTP ядро 1.14.1 не умеет** — это отдельный честный отказ `CoreConfig.Unsupported`,
@@ -209,16 +279,19 @@ XMUX (`maxConcurrency`, `maxConnections`, `cMaxReuseTimes`, `hMaxRequestTimes`,
 1. Собрать и поставить свежую сборку (раздел 4), добавить подписку (установка APK часто
    стирает данные приложения — см. про keystore).
 2. Включить VPN, открыть пару сайтов.
-3. Настройки → «Сохранить/Скопировать журнал ядра» → проверить, что вместо
-   `reality verification failed` появились `XtlsPadding`, `dns: exchanged … NOERROR`
-   и `outbound connection to <ip>:443`.
-4. Если REALITY по-прежнему падает — сверить с панелью `pbk`, `sid`, `sni` узла и версию
-   Xray на узле (PQ-долю требуют v26.9.8+). Клиенты Xray на тех же узлах работают —
-   значит дело в нашем конфиге, а не в узле.
-5. Если REALITY проходит, а страницы всё равно не открываются — переходить к гипотезам
-   про стек и маршруты: вариант ядра «2/4 · системный стек», «3/4 · DNS напрямую»,
-   «4/4 · локальный прокси» (SOCKS на 127.0.0.1:10808 без TUN).
-6. Никогда не проверять туннель «на живую» из этого же телефона, если по нему идёт сессия:
+3. Настройки → «Сохранить журнал ядра» (файл `stravo-core.log` в «Загрузках»; буфер обмена
+   Android фоновому приложению не отдаёт, поэтому журнал забираем файлом).
+4. Смотреть по порядку:
+   - `XtlsPadding` / `dns: exchanged … NOERROR` — REALITY и узел живы (уже подтверждено);
+   - `inbound connection from <ip>:<port>` → `outbound connection to <ip>:443` — TCP доходит
+     до обработчика и уходит в узел (это и проверяет правку стека, раздел 1a);
+   - если TCP-строк нет вовсе — переключить «Вариант ядра» в настройках (2/5 mixed, 3/5
+     системный) и повторить: правка стека проверяется без новой сборки.
+5. Если с gVisor `inbound connection from` появится, а ответов нет — сверять с панелью
+   `pbk`, `sid`, `sni`, `flow`; клиенты Xray на тех же узлах работают.
+6. Если и `inbound connection` нет — разбирать маршруты и режим приложений (должно быть
+   «Все», см. раздел 2), а не ядро.
+7. Никогда не проверять туннель «на живую» из этого же телефона, если по нему идёт сессия:
    при нерабочем туннеле связь пропадает — владельцу приходится выключать VPN вручную.
 
 ## 4. Инфраструктура
