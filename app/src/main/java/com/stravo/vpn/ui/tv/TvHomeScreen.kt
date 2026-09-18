@@ -100,7 +100,9 @@ fun TvHomeScreen(
             TvInfoCard(
                 iconRes = R.drawable.ic_globe,
                 title = stringResource(id = R.string.card_location),
-                subtitle = state.location.country + " · " + state.location.city,
+                subtitle = listOf(state.location.country, state.location.subtitle)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · "),
                 onClick = { onNavigate(Destination.LOCATIONS) },
             )
             TvInfoCard(
