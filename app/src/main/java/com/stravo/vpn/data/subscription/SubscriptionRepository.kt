@@ -27,6 +27,10 @@ class SubscriptionRepository(context: Context) {
     private val _subscription = MutableStateFlow(stored.subscription)
     private val _nodes = MutableStateFlow(stored.nodes)
 
+    /** Версия конвертера, которой собраны сохранённые узлы, и время импорта. */
+    private var importVersion: Int = stored.version
+    private var importedAt: Long = stored.importedAt
+
     val subscription: StateFlow<Subscription> = _subscription.asStateFlow()
 
     /** Узлы текущей подписки: имя, протокол, транспорт. Без хостов и ключей. */
@@ -45,7 +49,22 @@ class SubscriptionRepository(context: Context) {
             activeUntil = activeUntil,
             isActive = nodes.isNotEmpty(),
         )
+        importVersion = CONVERTER_VERSION
+        importedAt = System.currentTimeMillis()
         persist()
+    }
+
+    /**
+     * Пора ли пересобрать узлы из источника: разбор ссылок изменился вместе с
+     * приложением ([CONVERTER_VERSION]) или данные старше [REFRESH_AFTER_MS].
+     *
+     * Само обновление делает [com.stravo.vpn.ui.state.StravoViewModel] при старте:
+     * репозиторий только отвечает на вопрос и ничего не ходит в сеть.
+     */
+    fun needsRefresh(now: Long = System.currentTimeMillis()): Boolean {
+        if (_nodes.value.isEmpty()) return false
+        if (importVersion < CONVERTER_VERSION) return true
+        return importedAt <= 0L || now - importedAt > REFRESH_AFTER_MS
     }
 
     fun clear() {
@@ -64,11 +83,14 @@ class SubscriptionRepository(context: Context) {
             .put("plan", subscription.planName)
             .put("until", subscription.activeUntil ?: JSONObject.NULL)
             .put("nodes", encodeNodes(nodes))
+            .put("version", CONVERTER_VERSION)
+            .put("time", System.currentTimeMillis())
         prefs.edit().putString(KEY_STATE, root.toString()).commit()
     }
 
     private fun read(): Stored {
-        val raw = prefs.getString(KEY_STATE, null) ?: return Stored(Subscription.None, emptyList())
+        val raw = prefs.getString(KEY_STATE, null)
+            ?: return Stored(Subscription.None, emptyList(), 0, 0L)
         return try {
             val root = JSONObject(raw)
             val nodes = decodeNodes(root.optJSONArray("nodes"))
@@ -82,9 +104,11 @@ class SubscriptionRepository(context: Context) {
                     Subscription.None
                 },
                 nodes = nodes,
+                version = root.optInt("version", 0),
+                importedAt = root.optLong("time", 0L),
             )
         } catch (error: Exception) {
-            Stored(Subscription.None, emptyList())
+            Stored(Subscription.None, emptyList(), 0, 0L)
         }
     }
 
@@ -127,12 +151,28 @@ class SubscriptionRepository(context: Context) {
     private inline fun <reified T : Enum<T>> enumOf(name: String, fallback: T): T =
         enumValues<T>().firstOrNull { it.name == name } ?: fallback
 
-    private class Stored(val subscription: Subscription, val nodes: List<SubscriptionNode>)
+    private class Stored(
+        val subscription: Subscription,
+        val nodes: List<SubscriptionNode>,
+        val version: Int,
+        val importedAt: Long,
+    )
 
-    private companion object {
-        const val DEFAULT_PLAN = "STRAVO VPN"
-        const val KEY_STATE = "stravo.subscription.state"
-        const val PREFS = "stravo.subscription"
+    companion object {
+        /**
+         * Версия разбора ссылок панели. Поднимается, когда меняется
+         * [com.stravo.vpn.data.subscription.PanelSubscription] или
+         * [com.stravo.vpn.engine.box.SingBoxConfigBuilder]: сохранённые узлы после
+         * такого изменения нужно пересобрать из источника, иначе в конфиг годами
+         * уходят старые параметры (так CDN-узлы отвечали 405).
+         */
+        const val CONVERTER_VERSION = 1
+
+        /** Через сколько обновлять подписку из источника при старте приложения. */
+        private const val REFRESH_AFTER_MS = 6 * 60 * 60 * 1000L
+        private const val DEFAULT_PLAN = "STRAVO VPN"
+        private const val KEY_STATE = "stravo.subscription.state"
+        private const val PREFS = "stravo.subscription"
     }
 }
 
