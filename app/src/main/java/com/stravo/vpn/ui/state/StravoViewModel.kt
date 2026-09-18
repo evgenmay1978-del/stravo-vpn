@@ -99,7 +99,16 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         }
         scope.launch {
             container.subscriptions.nodes.collect { nodes ->
-                _home.update { it.copy(subscriptionNodes = nodes) }
+                _home.update { state ->
+                    val next = state.copy(subscriptionNodes = nodes)
+                    // Узел мог исчезнуть или сменить идентификатор после обновления
+                    // подписки: выбор, которого больше нет, честно сбрасываем на «Авто»,
+                    // иначе «Подключить» отвечало бы «нет ключа узла».
+                    val selection = next.location
+                    val stillThere = selection.id == LocationsCatalog.AUTO.id ||
+                        nodes.any { it.id == selection.id }
+                    if (stillThere) next else next.copy(location = LocationsCatalog.AUTO)
+                }
             }
         }
         scope.launch {
@@ -114,6 +123,39 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         }
         scope.launch {
             container.pairing.state.collect { state -> _pairing.value = state }
+        }
+        // Подписка могла устареть: панель меняет параметры узлов (например, метод
+        // отправки XHTTP), а сохранённые ссылки остаются прежними. Обновляем тихо,
+        // из сохранённого источника; неудача не трогает уже добавленную подписку.
+        scope.launch { refreshSubscriptionIfStale() }
+    }
+
+    /**
+     * Тихое обновление подписки при старте, если её пора пересобрать (см.
+     * [com.stravo.vpn.data.subscription.SubscriptionRepository.needsRefresh]).
+     *
+     * Ничего не показывает поверх интерфейса: успех и неудача попадают в журнал
+     * ядра одной честной строкой, а узлы при неудаче остаются прежними.
+     */
+    private suspend fun refreshSubscriptionIfStale() {
+        val importer = container.subscriptionImporter
+        if (importer.sourceUrl == null) return
+        if (!container.subscriptions.needsRefresh()) return
+        when (val outcome = importer.refresh()) {
+            is ImportOutcome.Success -> {
+                container.subscriptions.applyImport(
+                    planName = outcome.planName,
+                    activeUntil = outcome.activeUntil,
+                    nodes = outcome.nodes,
+                )
+                container.coreTrace.record("подписка обновлена: узлов " + outcome.nodes.size)
+                _home.update { it.copy(coreLog = coreLogLines()) }
+            }
+
+            is ImportOutcome.Failure ->
+                container.coreTrace.record("подписка не обновилась: панель недоступна, узлы прежние")
+
+            null -> Unit
         }
     }
 
@@ -236,6 +278,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
 
     fun removeSubscription() {
         container.subscriptions.nodes.value.forEach { node -> container.secretStore.remove(node.id) }
+        container.subscriptionImporter.forgetSource()
         container.subscriptions.clear()
         _home.update {
             it.copy(
