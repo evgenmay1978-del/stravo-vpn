@@ -62,6 +62,8 @@ class CoreTrace(context: Context) {
         const val STEP_FOREGROUND = "сервис вышел на передний план"
         const val STEP_SETUP = "ядро настроено (Libbox.setup)"
         const val STEP_CONFIG = "конфиг проверен"
+        /** Ядро без локального API метрик: конфиг поднят без блока clash_api. */
+        const val STEP_NO_METRICS = "ядро без API метрик (with_clash_api): конфиг без пинга и скорости"
         const val STEP_SERVER = "сервер команд создан"
         const val STEP_STARTED = "ядро запущено"
         const val STEP_TUN = "TUN поднят"
