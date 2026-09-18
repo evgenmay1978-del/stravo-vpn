@@ -31,7 +31,7 @@
 | **Подписка**: импорт по ссылке, ключу (VLESS, AnyTLS, Hysteria2, Trojan, Shadowsocks) и QR | готово |
 | Разбор узлов подписки: протокол, транспорт (включая **XHTTP**), Reality/TLS — без хостов и ключей в UI | готово |
 | Хранение секретов: AES-256-GCM, ключ в Android Keystore, без бэкапа и логов | готово |
-| **Ядро туннеля (VpnService / протоколы)** | **подключено**: sing-box (libbox) — `StravoVpnService` + TUN, VLESS/AnyTLS/Hysteria2/Trojan/Shadowsocks. Транспорт XHTTP ядро этой сборки не умеет и честно об этом сообщает |
+| **Ядро туннеля (VpnService / протоколы)** | **подключено**: sing-box (libbox) — `StravoVpnService` + TUN, VLESS/AnyTLS/Hysteria2/Trojan/Shadowsocks и XHTTP (ядро из форка sing-box-lx) |
 | **Pairing-API на стороне сервиса** | **отсутствует** — `PairingBackend` объявлен, заглушка возвращает «не настроено» |
 
 Подключение **не имитируется таймером**: состояние приходит только от ядра (libbox), а если
@@ -59,8 +59,9 @@
 Каталог протоколов — domain/model/VpnProtocol.kt: VLESS (TCP, WebSocket, HTTP Upgrade,
 **XHTTP**, gRPC, QUIC), AnyTLS, Hysteria2, Trojan, Shadowsocks и служебный WebRTC.
 Транспорт и защита (TLS/Reality) берутся из параметров ключа, а не угадываются.
-Ядро — sing-box v1.14.1 (libbox): XHTTP в нём нет (см. docs/IMPLEMENTATION.md, раздел 1c),
-поэтому узел с этим транспортом даёт честную ошибку «транспорт не поддерживается ядром».
+Ядро — sing-box из форка sing-box-lx (база 1.14.1, теги `with_xhttp` и `with_clash_api`,
+см. docs/IMPLEMENTATION.md, раздел 1i): XHTTP поддержан, а настройки узла из панели
+(`mode`, `uplinkHTTPMethod`, размещение session/seq, padding) переносятся в конфиг целиком.
 
 Границы безопасности:
 
