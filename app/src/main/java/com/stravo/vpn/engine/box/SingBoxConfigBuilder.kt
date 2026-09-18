@@ -11,7 +11,7 @@ sealed interface CoreConfig {
     /** Конфиг готов: [json] уходит только в ядро. */
     data class Ready(val json: String) : CoreConfig
 
-    /** Транспорт разобран в подписке, но это ядро его не умеет (например, XHTTP). */
+    /** Транспорт разобран в подписке, но эта сборка ядра его не умеет. */
     data class Unsupported(val transport: String) : CoreConfig
 
     /** Ссылку не удалось разобрать: отдавать ядру нечего. */
@@ -21,9 +21,9 @@ sealed interface CoreConfig {
 /**
  * Собирает JSON sing-box из ссылки узла подписки.
  *
- * Поддерживаются VLESS (TCP, WebSocket, HTTP Upgrade, gRPC, QUIC), AnyTLS, Hysteria2,
- * Trojan и Shadowsocks — то, что закрывает libbox. Транспорт XHTTP ядру не отдаётся:
- * вместо тихого отказа возвращается [CoreConfig.Unsupported].
+ * Поддерживаются VLESS (TCP, XHTTP, WebSocket, HTTP Upgrade, gRPC, QUIC), AnyTLS,
+ * Hysteria2, Trojan и Shadowsocks — то, что закрывает libbox. Если транспорта нет
+ * в сборке ядра, возвращается честный [CoreConfig.Unsupported], а не тихий отказ.
  *
  * Конфиг никогда не логируется и не попадает в UI-состояние.
  */
@@ -52,7 +52,11 @@ object SingBoxConfigBuilder {
     private const val TUN_IPV6 = "fdfe:dcba:9876::1/126"
 
     /** Транспорты, которых нет в этой сборке ядра (docs/IMPLEMENTATION.md, раздел 1c). */
-    private val unsupportedTransports = setOf("xhttp", "splithttp")
+    /**
+     * Транспорты, которых нет даже в сборке ядра из форка. XHTTP здесь больше нет:
+     * его закрывает sing-box-lx с тегом `with_xhttp` (см. `libbox.yml`).
+     */
+    private val unsupportedTransports = emptySet<String>()
 
     /**
      * [variant] выбирает диагностический вариант сборки: когда туннель поднимается,
@@ -100,7 +104,13 @@ object SingBoxConfigBuilder {
             .put("server", link.host)
             .put("server_port", link.port)
             .put("uuid", uuid)
-        link.query["flow"]?.takeIf { it.isNotBlank() }?.let { outbound.put("flow", it) }
+        // XHTTP несовместим с xtls-rprx-vision: ядро форка ждёт пустой flow, а панели
+        // иногда оставляют его в ссылке по инерции.
+        val transport = (link.query["type"] ?: link.query["net"] ?: "").lowercase()
+        val xtls = transport != "xhttp" && transport != "splithttp"
+        if (xtls) {
+            link.query["flow"]?.takeIf { it.isNotBlank() }?.let { outbound.put("flow", it) }
+        }
         applyTls(link, outbound, default = false)
         applyTransport(link, outbound)
         return outbound
@@ -201,9 +211,87 @@ object SingBoxConfigBuilder {
                 outbound.put("transport", transport)
             }
 
+            "xhttp", "splithttp" -> outbound.put("transport", xhttp(link))
+
             "quic" -> outbound.put("transport", JSONObject().put("type", "quic"))
             else -> Unit
         }
+    }
+
+    /**
+     * XHTTP — транспорт Xray («splithttp»), который умеет только ядро из форка
+     * sing-box-lx (тег сборки `with_xhttp`, см. `.github/workflows/libbox.yml`).
+     *
+     * Поля приходят из двух мест: плоские параметры ссылки (`path`, `mode`, `host`, …)
+     * и параметр `extra` — это URL-encoded JSON с тонкими настройками (Xray-стиль,
+     * camelCase). Ключи конфига — snake_case, camelCase ядро не понимает.
+     * Порядок и имена полей сверены со спецификацией форка
+     * (SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/URL_PARSING.md).
+     */
+    private fun xhttp(link: Link): JSONObject {
+        val extra = runCatching { JSONObject(link.query["extra"] ?: "") }.getOrElse { JSONObject() }
+        val transport = JSONObject().put("type", "xhttp")
+
+        fun text(vararg names: String): String? {
+            for (name in names) {
+                extra.optString(name).takeIf { it.isNotBlank() && it != "null" }?.let { return it }
+                link.query[name.lowercase()]?.takeIf { it.isNotBlank() }?.let { return it }
+            }
+            return null
+        }
+
+        fun flag(vararg names: String): Boolean? {
+            val raw = text(*names) ?: return null
+            return when (raw.trim().lowercase()) {
+                "1", "true", "yes" -> true
+                "0", "false", "no" -> false
+                else -> null
+            }
+        }
+
+        // path приходит с query-хвостом («/GaMeOpTiMiZeR?ed=2048») — хвост не часть пути.
+        text("path")?.substringBefore('?')?.takeIf { it.isNotBlank() }?.let { transport.put("path", it) }
+        text("host")?.let { transport.put("host", it) }
+        text("mode")?.let { transport.put("mode", it.lowercase()) }
+        text("xPaddingBytes", "x_padding_bytes")?.let { transport.put("x_padding_bytes", it) }
+        flag("noGRPCHeader", "no_grpc_header")?.let { transport.put("no_grpc_header", it) }
+
+        // Вторая волна параметров XHTTP (placement, ключи, обфускация padding).
+        val mapped = mapOf(
+            "session_placement" to arrayOf("sessionPlacement"),
+            "session_key" to arrayOf("sessionKey"),
+            "seq_placement" to arrayOf("seqPlacement"),
+            "seq_key" to arrayOf("seqKey"),
+            "uplink_data_placement" to arrayOf("uplinkDataPlacement"),
+            "uplink_data_key" to arrayOf("uplinkDataKey"),
+            "uplink_http_method" to arrayOf("uplinkHTTPMethod"),
+            "x_padding_obfs_mode" to arrayOf("xPaddingObfsMode"),
+            "x_padding_key" to arrayOf("xPaddingKey"),
+            "x_padding_header" to arrayOf("xPaddingHeader"),
+            "x_padding_placement" to arrayOf("xPaddingPlacement"),
+            "x_padding_method" to arrayOf("xPaddingMethod"),
+        )
+        for ((jsonKey, urlKeys) in mapped) {
+            text(*urlKeys)?.let { transport.put(jsonKey, it) }
+        }
+        flag("xPaddingObfsMode", "x_padding_obfs_mode")?.let { transport.put("x_padding_obfs_mode", it) }
+
+        // Диапазоны вида «3000-4000» или одиночное число; в extra числа приходят как 30.0.
+        text("uplinkChunkSize", "uplink_chunk_size")?.let { transport.put("uplink_chunk_size", range(it)) }
+        text("scMaxEachPostBytes", "sc_max_each_post_bytes")?.let {
+            transport.put("sc_max_each_post_bytes", range(it))
+        }
+        text("scMinPostsIntervalMs", "sc_min_posts_interval_ms")?.let {
+            transport.put("sc_min_posts_interval_ms", range(it))
+        }
+
+        extra.optJSONObject("headers")?.let { transport.put("headers", it) }
+        return transport
+    }
+
+    /** «30.0» → «30», «3000-4000» → без изменений: ядро ждёт диапазон строкой. */
+    private fun range(raw: String): String = raw.split('-').joinToString("-") { part ->
+        part.trim().substringBefore('.').takeIf { it.isNotBlank() } ?: part.trim()
     }
 
     private fun applyTls(link: Link, outbound: JSONObject, default: Boolean) {
