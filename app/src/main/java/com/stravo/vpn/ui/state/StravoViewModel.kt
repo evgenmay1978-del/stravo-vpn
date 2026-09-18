@@ -71,9 +71,25 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             scope.launch {
                 engineState.collect { snapshot ->
                     _home.update {
-                        it.copy(connection = snapshot.state, coreLog = coreLogLines())
+                        it.copy(
+                            connection = snapshot.state,
+                            connectedLocationId = snapshot.locationId,
+                            coreLog = coreLogLines(),
+                        )
+                    }
+                    // Метрики собираем только у поднятого туннеля: у выключенного API
+                    // ядра не отвечает, и экран честно показывает длинное тире.
+                    if (snapshot.state is ConnectionState.Connected) {
+                        container.tunnelStats.start(scope)
+                    } else {
+                        container.tunnelStats.stop()
                     }
                 }
+            }
+        }
+        scope.launch {
+            container.tunnelStats.stats.collect { stats ->
+                _home.update { it.copy(stats = stats) }
             }
         }
         scope.launch {
