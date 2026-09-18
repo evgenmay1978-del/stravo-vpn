@@ -328,13 +328,23 @@ private fun SummaryCard(
     }
 }
 
-/** «Авто · Автоматический сервер» без висящего разделителя у пустого города. */
+/**
+ * Строка локации в карточке: «Страна · Город · Протокол».
+ *
+ * Пока туннель поднят, показывается узел, который в нём реально работает, а не
+ * выбранный в списке: смена локации на ходу ядро не перезапускает, и раньше карточка
+ * показывала новый узел как подключённый. Если выбор разошёлся с туннелем — сказано прямо.
+ */
 private fun locationSummary(state: HomeUiState): String {
-    val location = state.location
-    if (location.id == "auto") return location.city
-    return listOf(location.country, location.city)
-        .filter { it.isNotBlank() }
-        .joinToString(" · ")
+    val tunnel = state.tunnelLocation
+    val location = tunnel ?: state.location
+    val parts = ArrayList<String>(3)
+    if (location.country.isNotBlank()) parts.add(location.country)
+    val subtitle = location.subtitle
+    if (subtitle.isNotBlank()) parts.add(subtitle)
+    val line = parts.joinToString(" · ")
+    val selectionDiffers = tunnel != null && state.location.id != tunnel.id
+    return if (selectionDiffers) line + " · выбран другой узел" else line
 }
 
 @Composable
