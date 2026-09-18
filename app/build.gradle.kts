@@ -30,6 +30,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Тот же ключ, что и у release: иначе debug- и release-APK нельзя
+            // поставить друг поверх друга, а данные приложения при этом теряются.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
