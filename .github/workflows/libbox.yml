@@ -4,6 +4,14 @@ name: libbox (sing-box Android core)
 # база — upstream sing-box 1.14.1, плюс клиентский транспорт XHTTP (тег with_xhttp),
 # которого в upstream нет даже в 1.15.0-alpha. Ниже шаг возвращает with_clash_api:
 # форк намеренно его не включает, а приложению он нужен для метрик (пинг/скорость).
+#
+# Ловушка, из-за которой 18.09.2026 владелец получил сборку с «VPN включается и сразу
+# выключается»: форк упоминает with_clash_api в комментарии, поэтому проверка
+# «grep -q with_clash_api» решала, что тег уже есть, и патч не применялся. Ядро
+# собиралось без API метрик, а конфиг приложения с experimental.clash_api ядро
+# отвергает целиком («clash api is not included in this build») — падал не транспорт,
+# а весь запуск. Теперь проверяется сам тег в списке сборки, а после сборки теги
+# в libbox.so проверяются отдельным шагом.
 # Триггеры: ручной запуск и push, затрагивающий только этот файл,
 # чтобы случайно не пересобирать ядро на каждый коммит приложения.
 on:
@@ -37,7 +45,7 @@ on:
       cache_version:
         description: "Инкремент для сброса кэша AAR"
         required: false
-        default: "3"
+        default: "4"
         type: string
   # Вызывается из android.yml и release.yml: любой сборке приложения нужно ядро.
   workflow_call:
@@ -64,7 +72,7 @@ on:
         type: string
       cache_version:
         required: false
-        default: "3"
+        default: "4"
         type: string
   push:
     paths:
@@ -85,12 +93,12 @@ jobs:
       - name: Параметры сборки
         id: params
         env:
-          IN_REPO: ${{ inputs.singbox_repo || 'SagerNet/sing-box' }}
-          IN_REF: ${{ inputs.singbox_ref || 'v1.14.1' }}
+          IN_REPO: ${{ inputs.singbox_repo || 'Leadaxe/sing-box-lx' }}
+          IN_REF: ${{ inputs.singbox_ref || 'lx' }}
           IN_GO: ${{ inputs.go_version || '1.26.8' }}
           IN_GOMOBILE: ${{ inputs.gomobile_version || 'v0.1.13' }}
           IN_ABI: ${{ inputs.abi_target || 'android/arm64,android/arm' }}
-          IN_CACHE: ${{ inputs.cache_version || '3' }}
+          IN_CACHE: ${{ inputs.cache_version || '4' }}
         run: |
           set -euo pipefail
           ABI_SLUG="$(printf '%s' "$IN_ABI" | tr '/,' '--')"
@@ -145,14 +153,22 @@ jobs:
         working-directory: sing-box
         run: |
           set -euo pipefail
-          grep -q 'with_clash_api' cmd/internal/build_libbox/main.go && {
+          FILE=cmd/internal/build_libbox/main.go
+          # Ищем тег в кавычках, а не любое упоминание: форк объясняет в комментарии,
+          # почему with_clash_api выключен, и прежняя проверка на это попадалась —
+          # ядро собиралось без API метрик, а конфиг с ним ядро отвергает целиком.
+          if grep -q '"with_clash_api"' "$FILE"; then
             echo "with_clash_api уже в тегах, патч не нужен"
-            exit 0
-          }
-          # Форк намеренно не включает with_clash_api (свой протокол команд), но
-          # приложению он нужен: через локальный API ядра берутся пинг и скорость.
-          sed -i 's/sharedTags = append(sharedTags, "with_gvisor"/sharedTags = append(sharedTags, "with_gvisor", "with_clash_api"/' cmd/internal/build_libbox/main.go
-          grep -n 'with_clash_api' cmd/internal/build_libbox/main.go
+          else
+            # Форк намеренно не включает with_clash_api (свой протокол команд), но
+            # приложению он нужен: через локальный API ядра берутся пинг и скорость.
+            sed -i 's/append(sharedTags, "with_gvisor"/append(sharedTags, "with_gvisor", "with_clash_api"/' "$FILE"
+            grep -q '"with_clash_api"' "$FILE" || {
+              echo "::error::не удалось добавить with_clash_api в теги: строка sharedTags изменилась, патч нужно обновить"
+              exit 1
+            }
+          fi
+          grep -n 'sharedTags = append(sharedTags, "with_gvisor"' "$FILE" || true
 
       - name: Setup Go ${{ env.GO_VERSION }}
         if: steps.aar-cache.outputs.cache-hit != 'true'
@@ -209,6 +225,31 @@ jobs:
           cp libbox-legacy.aar "$GITHUB_WORKSPACE/app/libs/libbox-legacy.aar"
           ls -la "$GITHUB_WORKSPACE/app/libs"
           unzip -l "$GITHUB_WORKSPACE/app/libs/libbox.aar"
+
+      - name: Проверить теги собранного ядра
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/aarcheck"
+          mkdir -p "$RUNNER_TEMP/aarcheck"
+          unzip -o -q app/libs/libbox.aar -d "$RUNNER_TEMP/aarcheck"
+          SO="$(find "$RUNNER_TEMP/aarcheck" -name libbox.so | head -1)"
+          TAGS="$(strings -a "$SO" | grep -m1 -- '-tags=' || true)"
+          echo "теги ядра: $TAGS"
+          case "$TAGS" in
+            *with_clash_api*) ;;
+            *)
+              echo "::error::ядро собрано без with_clash_api: конфиг с experimental.clash_api ядро отвергнет целиком, и VPN будет выключаться сразу после включения"
+              exit 1
+              ;;
+          esac
+          case "$TAGS" in
+            *with_xhttp*) ;;
+            *)
+              echo "::error::ядро собрано без with_xhttp: узлы XHTTP не заработают"
+              exit 1
+              ;;
+          esac
 
       - name: Upload libbox-aar
         uses: actions/upload-artifact@v4
