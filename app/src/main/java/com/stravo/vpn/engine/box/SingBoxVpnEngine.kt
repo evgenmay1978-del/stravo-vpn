@@ -42,6 +42,8 @@ class SingBoxVpnEngine(
             .setAction(StravoVpnService.ACTION_START)
             .putExtra(StravoVpnService.EXTRA_NODE_ID, nodeId)
             .putExtra(StravoVpnService.EXTRA_LOCATION_ID, location.id)
+            // Подпись узла для журнала: «Германия · VLESS · TCP · Reality». Без хостов и ключей.
+            .putExtra(StravoVpnService.EXTRA_LOCATION_LABEL, location.subtitle)
         try {
             ContextCompat.startForegroundService(context, intent)
         } catch (error: Exception) {
