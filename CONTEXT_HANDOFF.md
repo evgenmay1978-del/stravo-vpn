@@ -10,11 +10,15 @@
   отпечаток uTLS (раздел 1), затем стек TUN `gvisor` (раздел 1a). Поверх этого сделаны
   метрики главного экрана (раздел 1b), понятные подписи локаций и ядро из форка с XHTTP
   (раздел 2b).
-- Последняя поломка: после перехода на форк ядро собралось **без API метрик**, и VPN
-  выключался через секунду после включения (раздел 1d) — исправлено в CI и в
-  приложении; нужна проверка на устройстве.
-- Открыто: поднять туннель на сборке с ядром из форка (раздел 3), проверить плитки
-  «Пинг / Загрузка / Отдача» и XHTTP-узлы CDN.
+- 18.09.2026, вторая поломка: VPN включался и сразу выключался — ядро из форка собралось
+  **без API метрик** (раздел 1d). Исправлено в CI (проверка тегов в `libbox.so`) и в
+  приложении (метрики больше не условие запуска); журнал владельца 08:34 это подтвердил:
+  ядро поднимается, DNS идёт в узел.
+- 18.09.2026, третья: XHTTP-узлы CDN отвечали `405 Method Not Allowed`, потому что
+  настройки XHTTP из панели не доезжали из подписки в конфиг (раздел 1e) — исправлено в
+  `PanelSubscription` и в сборщике конфига; нужна проверка на устройстве.
+- Открыто: проверить на устройстве XHTTP-узлы CDN (раздел 1e) и плитки «Пинг / Загрузка /
+  Отдача» (раздел 1b).
 
 ---
 
@@ -273,6 +277,47 @@ with_clash_api в теги сборки ядра» проверял тег та�
 **Правило на будущее:** необязательная возможность ядра (метрики, API, телеметрия) не
 должна стоять в конфиге безусловным блоком — иначе её отсутствие в сборке гасит весь
 туннель.
+
+## 1e. XHTTP за CDN: 405 Method Not Allowed (18.09.2026)
+
+**Симптом.** Туннель на XHTTP-узле поднимается, но трафик не идёт: в журнале пачками
+
+    ERROR router: process DNS packet: dial UDP connection: v2ray-xhttp: unexpected upload status: 405 Method Not Allowed
+    xmux: breaker tripped, new-transport backoff 3s
+
+**Причина — конвертер подписки, а не ядро.** Панель отдаёт `?format=xray` массивом
+конфигов, а `PanelSubscription.xrayStreamParams` переносил в share-ссылку только `path`,
+`host` и `mode` из `xhttpSettings`. Остальное терялось, и ядро уходило на умолчания:
+uplink **POST** (CDN пропускает только GET/HEAD/OPTIONS → 405), session и seq в **пути**
+(панель ждёт их в query: `?auth=<session>&chunk_id=<seq>`), payload — мимо `body`.
+
+Что требует подписка владельца (её `extra` внутри `xhttpSettings`):
+
+    {"mode":"packet-up","uplinkHTTPMethod":"GET","uplinkDataPlacement":"body",
+     "sessionIDPlacement":"query","sessionIDKey":"auth","sessionIDLength":16,
+     "seqPlacement":"query","seqKey":"chunk_id"}
+
+**Что исправлено.**
+- `PanelSubscription`: `extra` панели переносится в ссылку как есть, плоские поля — по
+  таблице `XHTTP_LINK_PARAMS` (имена Xray → имена спецификации ядра:
+  `sessionIDPlacement` → `sessionPlacement`, `sessionIDKey` → `sessionKey`, …);
+- `SingBoxConfigBuilder.xhttp()`: понимает оба написания (Xray и ядра), поэтому
+  `session_placement=query`, `session_key=auth`, `session_length=16`, `seq_*` и
+  `uplink_http_method=GET` попадают в конфиг; `x_padding_obfs_mode` ставится только как
+  bool (строка «true» ломала конфиг).
+
+**Проверка без устройства.** Та же подписка прогоняется через эти таблицы в Node: транспорт
+получается `{"type":"xhttp","mode":"packet-up","session_placement":"query","session_key":"auth",
+"session_length":"16","seq_placement":"query","seq_key":"chunk_id","uplink_data_placement":"body",
+"uplink_http_method":"GET"}` для всех четырёх CDN-узлов (path и host на месте).
+
+**Признак успеха в журнале:** `xmux: opened connection` без `unexpected upload status`,
+дальше `inbound connection to <ip>:443` → `outbound/vless[proxy]: outbound connection to
+<ip>:443`.
+
+**Урок.** Поля, которые панель кладёт в поток «подписка → ссылка → конфиг», нужно
+переносить целиком: молчаливое «в ссылку попадут только path/host/mode» превращается в
+умолчания ядра и 405 от CDN, а выглядит как «ядро не умеет XHTTP».
 
 ## 2. Что проверено и **не** является причиной
 
