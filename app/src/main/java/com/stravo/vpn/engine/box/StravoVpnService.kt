@@ -91,6 +91,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
         val nodeId = intent?.getStringExtra(EXTRA_NODE_ID)
         val locationId = intent?.getStringExtra(EXTRA_LOCATION_ID) ?: nodeId
+        val label = intent?.getStringExtra(EXTRA_LOCATION_LABEL)
         if (nodeId == null) {
             publishError(NODE_MISSING_REASON, locationId)
             stopSelf()
@@ -99,7 +100,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         startInForeground()
         trace.record(CoreTrace.STEP_FOREGROUND)
         if (currentNodeId == nodeId && commandServer != null) return START_NOT_STICKY
-        startTunnel(nodeId, locationId)
+        startTunnel(nodeId, locationId, label)
         return START_NOT_STICKY
     }
 
@@ -120,7 +121,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
     private val trace: CoreTrace
         get() = (application as StravoApplication).container.coreTrace
 
-    private fun startTunnel(nodeId: String, locationId: String?) {
+    private fun startTunnel(nodeId: String, locationId: String?, label: String?) {
         currentNodeId = nodeId
         val container = (application as StravoApplication).container
         val link = container.subscriptionImporter.configFor(nodeId)
@@ -167,8 +168,16 @@ class StravoVpnService : VpnService(), PlatformInterface {
                 as? CoreConfig.Ready)?.json
 
         // Что именно ушло в ядро — одной строкой без секретов: по ней разбирается
-        // отказ узла (например, «405 Method Not Allowed» от CDN).
-        SingBoxConfigBuilder.describe(config)?.let { trace.record("транспорт: " + it) }
+        // отказ узла (например, «405 Method Not Allowed» от CDN). Ту же схему
+        // сохраняем как контекст запуска: он переживает вытеснение журнала и попадает
+        // в шапку выгружаемого файла.
+        val transport = SingBoxConfigBuilder.describe(config)
+        transport?.let { trace.record("транспорт: " + it) }
+        trace.recordContext(
+            node = label,
+            core = variant.label + if (directMode) " · прямой режим" else "",
+            transport = transport,
+        )
 
         setState(ConnectionState.Connecting, locationId, null)
         serverThread = Thread(
@@ -400,19 +409,16 @@ class StravoVpnService : VpnService(), PlatformInterface {
                 routesAdded += 2
             }
             // Android запрещает смешивать allow и disallow: список или один, или другой.
-            val include = options.getIncludePackage().toList()
+            // Своё приложение в туннель не заводим: его запросы (обновление подписки)
+            // уходят в собственный туннель и висят, пока туннель не поедет, — а Android
+            // не даёт смешивать allow и disallow, поэтому имя вычищается из списка
+            // «только выбранные» до добавления.
+            val include = options.getIncludePackage().toList().filterNot { it == packageName }
             val exclude = options.getExcludePackage().toList()
             if (include.isNotEmpty()) {
                 for (name in include) {
                     try {
                         builder.addAllowedApplication(name)
-                    } catch (_: Exception) {
-                    }
-                }
-                // Своё приложение в списке «только выбранные» — исключаем явно.
-                if (include.contains(packageName)) {
-                    try {
-                        builder.addDisallowedApplication(packageName)
                     } catch (_: Exception) {
                     }
                 }
@@ -916,6 +922,9 @@ class StravoVpnService : VpnService(), PlatformInterface {
         const val ACTION_STOP = "com.stravo.vpn.action.STOP"
         const val EXTRA_NODE_ID = "com.stravo.vpn.extra.NODE_ID"
         const val EXTRA_LOCATION_ID = "com.stravo.vpn.extra.LOCATION_ID"
+
+        /** Подпись узла для журнала («Германия · VLESS · TCP · Reality»), без хостов и ключей. */
+        const val EXTRA_LOCATION_LABEL = "com.stravo.vpn.extra.LOCATION_LABEL"
 
         private const val SESSION_NAME = "STRAVO VPN"
         /** Имена TUN-интерфейсов Android: их нельзя отдавать ядру как маршрут наружу. */
