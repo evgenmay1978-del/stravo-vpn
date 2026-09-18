@@ -34,6 +34,14 @@ object SingBoxConfigBuilder {
     private const val TAG_BLOCK = "block-quic"
     private const val TAG_SOCKS = "socks-in"
     private const val LOCAL_PROXY_PORT = 10808
+    private const val LOOPBACK = "127.0.0.1"
+
+    /**
+     * Порт локального API ядра (Clash API) — только петлевой адрес. Через него
+     * приложение берёт пинг и скорость для главного экрана: `GET /traffic` отдаёт
+     * байты в секунду, `GET /proxies/proxy/delay` — задержку узла.
+     */
+    const val CLASH_API_PORT = 19090
     /**
      * Единственный отпечаток uTLS 1.8.7 с гибридной долей ключа X25519MLKEM768.
      * Без неё современный REALITY-сервер считает клиента «странным» и не пускает.
@@ -57,6 +65,7 @@ object SingBoxConfigBuilder {
         link: String,
         variant: CoreVariant = CoreVariant.GVISOR,
         directMode: Boolean = false,
+        apiSecret: String = "",
     ): CoreConfig {
         val value = link.trim()
         val scheme = value.substringBefore("://", "").lowercase()
@@ -77,7 +86,7 @@ object SingBoxConfigBuilder {
             else -> return CoreConfig.Broken
         }
 
-        return CoreConfig.Ready(assemble(outbound, variant, directMode).toString())
+        return CoreConfig.Ready(assemble(outbound, variant, directMode, apiSecret).toString())
     }
 
     // --- Протоколы --------------------------------------------------------
@@ -260,6 +269,7 @@ object SingBoxConfigBuilder {
         outbound: JSONObject,
         variant: CoreVariant,
         directMode: Boolean,
+        apiSecret: String,
     ): JSONObject {
         // Вариант «DNS напрямую» оставляет резолвер в сети оператора: если с ним
         // страницы открываются, значит трафик до узла не доходит из-за DNS-петли.
@@ -344,6 +354,19 @@ object SingBoxConfigBuilder {
                     .put(JSONObject().put("type", "block").put("tag", TAG_BLOCK)),
             )
             .put("route", route)
+            // Локальный API ядра — единственный честный источник метрик: он отдаёт
+            // скорость (байт/с по туннелю) и задержку проверки узла. Слушает только
+            // петлевой адрес; ключ обязателен, потому что петлевой адрес на Android
+            // общий для всех приложений.
+            .put(
+                "experimental",
+                JSONObject().put(
+                    "clash_api",
+                    JSONObject()
+                        .put("external_controller", LOOPBACK + ":" + CLASH_API_PORT)
+                        .put("secret", apiSecret),
+                ),
+            )
     }
 
     // --- Разбор ссылки ----------------------------------------------------
