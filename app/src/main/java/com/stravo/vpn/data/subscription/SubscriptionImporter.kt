@@ -55,18 +55,18 @@ class SubscriptionImporter(private val secrets: SecretStore) {
         if (value.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.EMPTY)
 
         val source = when (val parsed = SubscriptionLinkParser.parse(value)) {
-            is ParsedLink.Node -> Source(listOf(parsed.secretConfig), null, null)
+            is ParsedLink.Node -> Source(listOf(parsed.secretConfig), null, null, null)
 
             is ParsedLink.SubscriptionUrl -> {
                 val remote = fetch(parsed.url) ?: return@withContext ImportOutcome.Failure(ImportError.NETWORK)
-                Source(linksFrom(remote.body), remote.planName, remote.activeUntil)
+                Source(linksFrom(remote.body), remote.planName, remote.activeUntil, parsed.url)
             }
 
             is ParsedLink.Unknown -> {
                 // Вставили тело подписки целиком: строки, base64 или JSON-конфиг Xray.
                 val lines = linksFrom(value)
                 if (lines.size > 1) {
-                    Source(lines, null, null)
+                    Source(lines, null, null, null)
                 } else {
                     return@withContext ImportOutcome.Failure(
                         error = ImportError.UNKNOWN_LINK,
@@ -95,6 +95,13 @@ class SubscriptionImporter(private val secrets: SecretStore) {
         for ((id, config) in configs) {
             if (!secrets.put(id, config)) return@withContext ImportOutcome.Failure(ImportError.SECRET_STORE)
         }
+
+        // Источник запоминаем только у успешного импорта: по нему подписка обновляется
+        // без повторного ввода ссылки. Панель может менять параметры узлов (например,
+        // метод отправки XHTTP), и сохранённые ссылки без обновления остаются старыми.
+        // Ручной ключ и вставленное тело источником не считаются — иначе автообновление
+        // подменило бы их подпиской.
+        rememberSource(source.sourceUrl)
 
         ImportOutcome.Success(
             planName = source.planName,
@@ -174,11 +181,46 @@ class SubscriptionImporter(private val secrets: SecretStore) {
         }
     }
 
-    private class Source(val links: List<String>, val planName: String?, val activeUntil: String?)
+    /** Ссылка подписки, из которой пришли узлы: секрет, живёт только в хранилище. */
+    val sourceUrl: String? get() = secrets.get(SOURCE_ID)
+
+    /**
+     * Обновление подписки из сохранённого источника — без повторного ввода ссылки.
+     * null означает, что источника нет: подписку вводили ключом или телом целиком.
+     */
+    suspend fun refresh(): ImportOutcome? {
+        val url = sourceUrl ?: return null
+        return import(url)
+    }
+
+    /** Забыть источник: вызывается при удалении подписки. */
+    fun forgetSource() {
+        secrets.remove(SOURCE_ID)
+    }
+
+    private fun rememberSource(url: String?) {
+        if (url.isNullOrBlank()) {
+            secrets.remove(SOURCE_ID)
+        } else {
+            secrets.put(SOURCE_ID, url)
+        }
+    }
+
+    private class Source(
+        val links: List<String>,
+        val planName: String?,
+        val activeUntil: String?,
+        val sourceUrl: String?,
+    )
 
     private class Remote(val body: String, val planName: String?, val activeUntil: String?)
 
     private companion object {
+        /**
+         * Ключ источника в защищённом хранилище. Идентификаторы узлов — короткие
+         * хеши, поэтому имя с точками не может с ними столкнуться.
+         */
+        const val SOURCE_ID = "stravo.subscription.source"
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 20_000
         const val MAX_BODY_CHARS = 512 * 1024
