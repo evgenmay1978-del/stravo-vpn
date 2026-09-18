@@ -206,8 +206,9 @@ tun с gVisor — конфиг v2rayNG (`assets/v2ray_config_with_tun.json`) п�
 **Локации.** Протокол узла раньше клался в поле «город» и пропадал у узлов, где каталог знал
 город («Нидерланды · Амстердам» без «VLESS · TCP · Reality»). Теперь у `VpnLocation` есть
 `protocol` и `limitation`, а `subtitle` собирает «город · протокол · ограничение»; так же
-выглядят список, карточка на главной и ТВ-экраны. Узлы XHTTP помечены «ядро не поддерживает
-XHTTP» — честно, а не как рабочие. Поиск в списке ищет и по протоколу.
+выглядят список, карточка на главной и ТВ-экраны. Пометка «ядро не поддерживает XHTTP» снята:
+ядро из форка этот транспорт умеет (раздел 2b), а настройки CDN доезжают до конфига (раздел 1e).
+Поиск в списке ищет и по протоколу.
 
 **Карточка «Локация».** При поднятом туннеле показывает узел, который реально работает
 (`connectedLocationId` из снимка сервиса), а не выбранный в списке; при расхождении
@@ -304,7 +305,12 @@ uplink **POST** (CDN пропускает только GET/HEAD/OPTIONS → 405)
 - `SingBoxConfigBuilder.xhttp()`: понимает оба написания (Xray и ядра), поэтому
   `session_placement=query`, `session_key=auth`, `session_length=16`, `seq_*` и
   `uplink_http_method=GET` попадают в конфиг; `x_padding_obfs_mode` ставится только как
-  bool (строка «true» ломала конфиг).
+  bool (строка «true» ломала конфиг);
+- `SingBoxConfigBuilder.vless()`: строка `encryption` из ссылки переносится в outbound.
+  Все четыре CDN-узла панели идут с пост-квантовым шифрованием VLESS
+  (`mlkem768x25519plus.native.0rtt.<ключ>`, ~1600 символов). Ядро форка его умеет
+  (SPEC 032, ресурс `mlkem768x25519plus` есть в `libbox.so`), upstream sing-box — нет.
+  Без переноса узел не пустил бы клиента даже с правильным HTTP-методом.
 
 **Проверка без устройства.** Та же подписка прогоняется через эти таблицы в Node: транспорт
 получается `{"type":"xhttp","mode":"packet-up","session_placement":"query","session_key":"auth",
@@ -379,7 +385,8 @@ stream-one, иначе packet-up), \`packet-up\`, \`stream-up\`, \`stream-one\`.
 
 **Как включено.**
 - \`.github/workflows/libbox.yml\`: \`singbox_repo = Leadaxe/sing-box-lx\`, \`singbox_ref = lx\`,
-  NDK **r28c** (в CI форка именно он; прежний \`r28\` — другой архив), кэш AAR v3.
+  NDK **r28c** (в CI форка именно он; прежний \`r28\` — другой архив), кэш AAR **v4**
+  (в v3 лежало ядро без \`with_clash_api\`; версия поднимается при смене тегов сборки).
   Отдельный шаг возвращает \`with_clash_api\` в теги \`build_libbox\`: форк его намеренно не
   включает, а приложению он нужен для метрик (пинг и скорость).
 - \`SingBoxConfigBuilder.xhttp()\`: маппинг ссылки в \`transport\` по спецификации форка
@@ -389,13 +396,18 @@ stream-one, иначе packet-up), \`packet-up\`, \`stream-up\`, \`stream-one\`.
   \`sc_max_each_post_bytes\` и \`sc_min_posts_interval_ms\` (числа из \`extra\` приводятся к
   строке «min-max»). Источники — плоские параметры ссылки и \`extra\` (URL-encoded JSON,
   приоритет у extra), ключи конфига — snake_case.
+- \`SingBoxConfigBuilder.vless()\`: строка \`encryption\` из ссылки переносится в outbound —
+  пост-квантовое шифрование VLESS (\`mlkem768x25519plus.<appearance>.<rtt>.<ключ>\`), которым
+  панель закрывает CDN-узлы. Клиентскую часть форк умеет (SPEC 032), upstream — нет;
 - для XHTTP \`flow\` не выставляется вовсе: vision с ним несовместим, а панели иногда
   оставляют его в ссылке.
 
 **Откат, если форк подведёт** (сломает Reality или саму сборку): вернуть в \`libbox.yml\`
 \`SagerNet/sing-box\` и \`v1.14.1\`, поднять \`cache_version\`. XHTTP тогда снова станет честным
 \`CoreConfig.Unsupported\`; патч \`with_clash_api\` при этом не нужен — в upstream он уже в
-тегах libbox.
+тегах libbox. Пост-квантовое шифрование VLESS (\`encryption\`) upstream тоже не умеет: конфиг
+узла за CDN будет отвергнут на \`checkConfig\` с понятной ошибкой — это ожидаемо, а не новая
+поломка.
 
 ## 3. Порядок действий
 
