@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.stravo.vpn.R
 import com.stravo.vpn.domain.model.VpnLocation
 import com.stravo.vpn.ui.components.StravoScreenHeader
@@ -57,7 +58,9 @@ fun LocationsScreen(
         locations.filter { location ->
             val matchesQuery = query.isBlank() ||
                 location.country.contains(query, ignoreCase = true) ||
-                location.city.contains(query, ignoreCase = true)
+                location.city.contains(query, ignoreCase = true) ||
+                // Поиск по протоколу: «reality», «xhttp», «tls» — так узел находится сразу.
+                location.subtitle.contains(query, ignoreCase = true)
             val matchesFilter = !recommendedOnly || location.recommended || location.id == state.location.id
             matchesQuery && matchesFilter
         }
@@ -156,7 +159,17 @@ private fun LocationRow(
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(text = location.country, style = StravoType.BodyStrong, color = palette.textPrimary)
-            Text(text = location.city, style = StravoType.Caption, color = palette.textSecondary)
+            // Город и протокол всегда вместе: иначе у части узлов строка была пустой.
+            val subtitle = location.subtitle
+            if (subtitle.isNotBlank()) {
+                Text(
+                    text = subtitle,
+                    style = StravoType.Caption,
+                    color = palette.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         if (selected) {
             Text(
