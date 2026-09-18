@@ -99,6 +99,40 @@ object SingBoxConfigBuilder {
         return CoreConfig.Ready(assemble(outbound, variant, directMode, apiSecret).toString())
     }
 
+    /**
+     * Короткая сводка транспорта для журнала ядра: что именно ушло в конфиг.
+     *
+     * Без хостов, путей и ключей — только схема (тип, режим, метод отправки,
+     * размещение session/seq/payload, включено ли шифрование). Нужна, чтобы отказ
+     * узла разбирался по журналу, а не догадками: «405 Method Not Allowed» от CDN
+     * означает ровно одно — какой метод отправки был в конфиге.
+     */
+    fun describe(configJson: String): String? = runCatching {
+        val outbound = JSONObject(configJson).optJSONArray("outbounds")?.optJSONObject(0)
+            ?: return@runCatching null
+        val parts = ArrayList<String>()
+        if (outbound.optString("encryption").isNotBlank()) parts.add("шифрование VLESS")
+        outbound.optJSONObject("transport")?.let { transport ->
+            if (transport.optString("type") != "xhttp") return@let
+            parts.add("xhttp")
+            transport.optString("mode").takeIf { it.isNotBlank() }?.let { parts.add("режим " + it) }
+            method(transport).let { parts.add("uplink " + it) }
+            placement(transport, "session_placement", "session в пути").let { parts.add(it) }
+            placement(transport, "seq_placement", "seq в пути").let { parts.add(it) }
+            transport.optString("uplink_data_placement").takeIf { it.isNotBlank() }
+                ?.let { parts.add("payload " + it) }
+            if (transport.optBoolean("x_padding_obfs_mode")) parts.add("padding obfs")
+        }
+        outbound.optString("type") + if (parts.isEmpty()) "" else " · " + parts.joinToString(", ")
+    }.getOrNull()
+
+    private fun method(transport: JSONObject): String =
+        transport.optString("uplink_http_method").takeIf { it.isNotBlank() } ?: "POST (по умолчанию)"
+
+    private fun placement(transport: JSONObject, key: String, fallback: String): String =
+        transport.optString(key).takeIf { it.isNotBlank() }?.let { key.substringBefore('_') + " " + it }
+            ?: fallback
+
     // --- Протоколы --------------------------------------------------------
 
     private fun vless(link: Link): JSONObject? {
