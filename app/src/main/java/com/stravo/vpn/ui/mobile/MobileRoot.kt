@@ -94,6 +94,7 @@ fun MobileRoot(
                             viewModel.clearImportState()
                             navigator.push(Destination.ADD_SUBSCRIPTION)
                         },
+                        onRemoveSubscription = { viewModel.onEvent(HomeEvent.SubscriptionRemoved) },
                         onBack = { navigator.back() },
                     )
 
