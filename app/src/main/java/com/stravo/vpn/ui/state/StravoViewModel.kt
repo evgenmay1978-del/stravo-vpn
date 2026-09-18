@@ -48,13 +48,31 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Сохраняет журнал ядра файлом в «Загрузки». Возвращает имя файла или null. */
     fun saveCoreLog(): String? =
-        container.coreLogExporter.export(container.coreTrace.logLines())
+        container.coreLogExporter.export(logToExport())
 
     /** Копирует журнал ядра в буфер обмена: так его видно даже без файла. */
     fun copyCoreLog(): Int {
-        val lines = container.coreTrace.logLines()
+        val lines = logToExport()
         container.clipboard.copy(lines.joinToString("\n"))
         return lines.size
+    }
+
+    /**
+     * Журнал с шапкой: время, узел, вариант ядра, транспорт и последний шаг.
+     *
+     * Сам журнал в памяти вытесняется по 400 строк, поэтому хвост ядра без шапки не
+     * говорит, на каком узле он снят; шапка берётся из [CoreTrace.lastContext] и
+     * секретов не содержит.
+     */
+    private fun logToExport(): List<String> {
+        val trace = container.coreTrace
+        val header = ArrayList<String>()
+        header.add("STRAVO VPN · журнал ядра · " + LOG_TIME_FORMAT.format(java.util.Date()))
+        trace.lastContext()?.let { header.add(it) }
+        trace.interruptedStep()?.let { header.add("последний шаг: " + it) }
+        trace.lastCoreMessage()?.let { header.add("последнее сообщение ядра: " + it) }
+        header.add("")
+        return header + trace.logLines()
     }
 
     /** Текущий диагностический вариант ядра и его подпись для настроек. */
@@ -277,6 +295,9 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun removeSubscription() {
+        // Ядро держит конфиг удаляемого узла в памяти: честнее выключить туннель,
+        // чем оставлять его работающим без ключа в хранилище.
+        scope.launch { container.vpnEngine.disconnect() }
         container.subscriptions.nodes.value.forEach { node -> container.secretStore.remove(node.id) }
         container.subscriptionImporter.forgetSource()
         container.subscriptions.clear()
@@ -358,6 +379,9 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         /** Сколько последних строк журнала ядра показываем на главном экране. */
         const val CORE_LOG_LINES = 40
+
+        /** Время в шапке выгружаемого журнала. */
+        private val LOG_TIME_FORMAT = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.US)
 
         const val STATS_PLACEHOLDER: String = VpnStats.PLACEHOLDER
         val CONNECTED_STATE: ConnectionState = ConnectionState.Connected
