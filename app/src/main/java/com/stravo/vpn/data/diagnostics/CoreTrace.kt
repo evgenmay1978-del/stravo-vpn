@@ -87,7 +87,9 @@ class CoreTrace(context: Context) {
         private const val KEY_STEP = "step"
         private const val KEY_TIME = "time"
         private const val KEY_MESSAGE = "message"
-        private const val MAX_LINES = 160
+        // 400 строк: при разборе «туннель поднялся, а трафик не идёт» нужен не только
+        // хвост, но и окно в несколько десятков секунд реальной работы приложений.
+        private const val MAX_LINES = 400
         private const val MAX_LINE = 400
         private const val MAX_MESSAGE = 400
     }
