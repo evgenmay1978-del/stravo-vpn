@@ -110,6 +110,14 @@ object SingBoxConfigBuilder {
             .put("server", link.host)
             .put("server_port", link.port)
             .put("uuid", uuid)
+        // Пост-квантовое шифрование VLESS (Xray): строка
+        // «mlkem768x25519plus.<native|xorpub|random>.<0rtt|1rtt>.<ключ>…» живёт внутри
+        // VLESS, под транспортом и независимо от TLS. Ядро из форка его умеет
+        // (SPEC 032), upstream sing-box — нет; панели включают его на узлах за CDN,
+        // и без переноса строки такой узел клиента не пускает.
+        link.query["encryption"]
+            ?.takeIf { it.isNotEmpty() && !it.equals("none", ignoreCase = true) }
+            ?.let { outbound.put("encryption", it) }
         // XHTTP несовместим с xtls-rprx-vision: ядро форка ждёт пустой flow, а панели
         // иногда оставляют его в ссылке по инерции.
         val transport = (link.query["type"] ?: link.query["net"] ?: "").lowercase()
