@@ -304,6 +304,9 @@ class StravoVpnService : VpnService(), PlatformInterface {
         // Маршруты читаем заранее: они нужны и в билдер, и в честной строке диагностики.
         val inet4Routes = options.getInet4RouteAddress().toList()
         val inet6Routes = options.getInet6RouteAddress().toList()
+        // Сколько маршрутов реально ушло в билдер: пустой список из конфига означает
+        // «весь трафик» (0.0.0.0/0 и ::/0), и в журнале это должно быть видно как 2, а не 0.
+        var routesAdded = 0
         if (autoRoute) {
             // Ядро подменяет DNS своим адресом (hijack); без адресов на TUN Android
             // пойдёт в DNS оператора, который через туннель недоступен.
@@ -320,26 +323,31 @@ class StravoVpnService : VpnService(), PlatformInterface {
                     for (route in inet4Routes) {
                         try {
                             builder.addRoute(route.address(), route.prefix())
+                            routesAdded++
                         } catch (_: IllegalArgumentException) {
                         }
                     }
                 } else if (inet4.isNotEmpty()) {
                     builder.addRoute("0.0.0.0", 0)
+                    routesAdded++
                 }
                 if (inet6Routes.isNotEmpty()) {
                     for (route in inet6Routes) {
                         try {
                             builder.addRoute(route.address(), route.prefix())
+                            routesAdded++
                         } catch (_: IllegalArgumentException) {
                         }
                     }
                 } else if (inet6.isNotEmpty()) {
                     builder.addRoute("::", 0)
+                    routesAdded++
                 }
             } else {
                 // До Android 13 excludeRoute недоступен: отдаём весь трафик в туннель.
                 builder.addRoute("0.0.0.0", 0)
                 builder.addRoute("::", 0)
+                routesAdded += 2
             }
             // Android запрещает смешивать allow и disallow: список или один, или другой.
             val include = options.getIncludePackage().toList()
@@ -382,7 +390,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
             trace.record(
                 CoreTrace.STEP_TUN + ": mtu " + mtu +
                     ", адреса " + (inet4 + inet6).size +
-                    ", маршрутов " + (if (autoRoute) inet4Routes.size + inet6Routes.size else 0) +
+                    ", маршрутов " + routesAdded +
                         ", адрес ядра " + options.getDNSServerAddress().toList().joinToString(",") +
                     ", имя " + (myInterface ?: "неизвестно"),
             )
