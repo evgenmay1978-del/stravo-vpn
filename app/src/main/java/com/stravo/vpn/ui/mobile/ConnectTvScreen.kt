@@ -57,9 +57,9 @@ fun ConnectTvScreen(
 
     val steps = listOf(
         stringResource(id = R.string.connect_tv_step_1),
-        stringResource(id = R.string.connect_tv_step_2),
-        stringResource(id = R.string.connect_tv_step_3),
-        stringResource(id = R.string.connect_tv_step_4),
+        stringResource(id = R.string.subscription_tv_step_2),
+        stringResource(id = R.string.subscription_tv_step_3),
+        stringResource(id = R.string.subscription_tv_step_4),
     )
 
     Column(
@@ -70,7 +70,7 @@ fun ConnectTvScreen(
     ) {
         StravoScreenHeader(
             title = stringResource(id = R.string.connect_tv_title),
-            subtitle = stringResource(id = R.string.connect_tv_sub),
+            subtitle = stringResource(id = R.string.subscription_tv_quick_connect),
             onBack = onBack,
             modifier = Modifier.padding(top = StravoTokens.SpaceMd),
         )
@@ -105,25 +105,6 @@ fun ConnectTvScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
-        if (!pairing.backendConfigured) {
-            Text(
-                text = stringResource(id = R.string.pairing_backend_missing),
-                style = StravoType.Caption,
-                color = palette.textSecondary,
-            )
-            Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
-        }
-
-        PencilButton(
-            text = stringResource(id = R.string.connect_tv_scan),
-            onClick = onScan,
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = painterResource(id = R.drawable.ic_scan),
-            iconTint = palette.accent,
-        )
-
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
-
         PencilButton(
             text = stringResource(id = R.string.connect_tv_open_bot),
             style = com.stravo.vpn.ui.components.PencilButtonStyle.Secondary,
@@ -151,7 +132,7 @@ fun ConnectTvScreen(
 
         if (showHelp) {
             Text(
-                text = stringResource(id = R.string.connect_tv_help_body),
+                text = stringResource(id = R.string.subscription_login_help),
                 style = StravoType.Caption,
                 color = palette.textSecondary,
             )
@@ -159,7 +140,7 @@ fun ConnectTvScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
         Text(
-            text = stringResource(id = R.string.pairing_security_note),
+            text = stringResource(id = R.string.subscription_tv_intro),
             style = StravoType.Tiny,
             color = palette.textSecondary,
         )

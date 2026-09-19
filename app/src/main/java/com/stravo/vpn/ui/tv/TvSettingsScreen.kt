@@ -16,7 +16,10 @@ import com.stravo.vpn.BuildConfig
 import com.stravo.vpn.R
 import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.mobile.appsModeLabel
-import com.stravo.vpn.ui.components.StravoToggle
+import com.stravo.vpn.ui.settings.NetworkCheckRow
+import com.stravo.vpn.ui.settings.NotificationSettingsRow
+import com.stravo.vpn.ui.settings.SelectedProtocolRow
+import com.stravo.vpn.ui.state.HomeEvent
 import com.stravo.vpn.ui.state.StravoViewModel
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
@@ -31,6 +34,7 @@ fun TvSettingsScreen(
 ) {
     val palette = LocalStravoPalette.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val state by viewModel.home.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -42,41 +46,9 @@ fun TvSettingsScreen(
             color = palette.textPrimary,
             modifier = Modifier.padding(bottom = StravoTokens.SpaceSm),
         )
-        StravoSettingRow(
-            iconRes = R.drawable.ic_settings,
-            title = stringResource(id = R.string.settings_protocol),
-            subtitle = settings.protocol,
-        )
-        StravoSettingRow(
-            iconRes = R.drawable.ic_bell,
-            title = stringResource(id = R.string.settings_notifications),
-            trailing = {
-                StravoToggle(
-                    checked = settings.notifications,
-                    onCheckedChange = { value -> viewModel.updateSettings { it.copy(notifications = value) } },
-                )
-            },
-        )
-        StravoSettingRow(
-            iconRes = R.drawable.ic_quick_connect,
-            title = stringResource(id = R.string.settings_autoconnect),
-            trailing = {
-                StravoToggle(
-                    checked = settings.autoConnect,
-                    onCheckedChange = { value -> viewModel.updateSettings { it.copy(autoConnect = value) } },
-                )
-            },
-        )
-        StravoSettingRow(
-            iconRes = R.drawable.ic_network,
-            title = stringResource(id = R.string.settings_network_check),
-            trailing = {
-                StravoToggle(
-                    checked = settings.networkCheck,
-                    onCheckedChange = { value -> viewModel.updateSettings { it.copy(networkCheck = value) } },
-                )
-            },
-        )
+        SelectedProtocolRow(state)
+        NotificationSettingsRow()
+        NetworkCheckRow(state, onCheck = { viewModel.onEvent(HomeEvent.ProbeClick) })
         StravoSettingRow(
             iconRes = R.drawable.ic_network,
             title = stringResource(id = R.string.settings_apps),

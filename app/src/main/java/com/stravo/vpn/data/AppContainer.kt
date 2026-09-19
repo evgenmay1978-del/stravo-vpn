@@ -14,6 +14,8 @@ import com.stravo.vpn.data.secret.SecretStore
 import com.stravo.vpn.data.settings.SettingsRepository
 import com.stravo.vpn.data.subscription.SubscriptionImporter
 import com.stravo.vpn.data.subscription.SubscriptionRepository
+import com.stravo.vpn.data.subscription.SubscriptionAccountAccess
+import com.stravo.vpn.platform.DeviceType
 import com.stravo.vpn.domain.engine.UnavailableVpnEngine
 import com.stravo.vpn.domain.engine.VpnConfigProvider
 import com.stravo.vpn.domain.engine.VpnEngine
@@ -31,13 +33,16 @@ class AppContainer(context: Context) {
 
     val profiles: ProfileRepository = ProfileRepository()
 
-    /** Подписка переживает перезапуск: план, дата и безопасные карточки узлов. */
-    val subscriptions: SubscriptionRepository = SubscriptionRepository(appContext)
-
     /** Полные конфиги узлов подписки: только Keystore, только по запросу ядра. */
     val secretStore: SecretStore = SecretStore(appContext)
 
-    val subscriptionImporter: SubscriptionImporter = SubscriptionImporter(secretStore)
+    val subscriptions: SubscriptionRepository = SubscriptionRepository(appContext, secretStore)
+
+    val accountAccess = SubscriptionAccountAccess(appContext)
+
+    val subscriptionImporter: SubscriptionImporter = SubscriptionImporter(
+        secretStore, DeviceType.formFactorOf(appContext), accountAccess,
+    ).also { it.migrateSource(subscriptions.nodes.value) }
 
     val pairing: PairingRepository = PairingRepository()
 

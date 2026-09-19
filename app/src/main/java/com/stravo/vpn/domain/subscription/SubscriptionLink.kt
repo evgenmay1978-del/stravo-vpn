@@ -3,6 +3,8 @@ package com.stravo.vpn.domain.subscription
 import com.stravo.vpn.domain.model.VpnSecurity
 import com.stravo.vpn.domain.model.VpnTransport
 
+enum class SubscriptionService { ORDINARY, CDN, UNKNOWN }
+
 /**
  * Безопасная карточка узла подписки. В ней НЕТ хоста, UUID, пароля и полного конфига —
  * только то, что можно показывать и логировать.
@@ -14,6 +16,7 @@ data class SubscriptionNode(
     val protocolLabel: String,
     val transport: VpnTransport,
     val security: VpnSecurity,
+    val service: SubscriptionService = SubscriptionService.UNKNOWN,
 ) {
     val transportLabel: String get() = transport.displayName
     val securityLabel: String? get() = security.displayName.takeIf { security != VpnSecurity.NONE }

@@ -142,8 +142,8 @@ fun ProfileScreen(
                 PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
                 StravoSettingRow(
                     iconRes = R.drawable.ic_delete,
-                    title = stringResource(id = R.string.profile_remove),
-                    subtitle = stringResource(id = R.string.profile_remove_sub),
+                    title = stringResource(id = R.string.subscription_remove_all),
+                    subtitle = stringResource(id = R.string.subscription_remove_all_hint),
                     onClick = { confirmRemoval = true },
                 )
             }
@@ -151,7 +151,7 @@ fun ProfileScreen(
             StravoSettingRow(
                 iconRes = R.drawable.ic_tv,
                 title = stringResource(id = R.string.profile_connect_tv),
-                subtitle = stringResource(id = R.string.profile_connect_tv_sub),
+                subtitle = stringResource(id = R.string.subscription_tv_quick_connect),
                 onClick = onConnectTv,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
@@ -190,14 +190,14 @@ fun ProfileScreen(
             onDismissRequest = { confirmRemoval = false },
             title = {
                 Text(
-                    text = stringResource(id = R.string.profile_remove_title),
+                    text = stringResource(id = R.string.subscription_remove_all_title),
                     style = StravoType.BodyStrong,
                     color = palette.textPrimary,
                 )
             },
             text = {
                 Text(
-                    text = stringResource(id = R.string.profile_remove_body),
+                    text = stringResource(id = R.string.subscription_remove_all_body),
                     style = StravoType.Caption,
                     color = palette.textSecondary,
                 )

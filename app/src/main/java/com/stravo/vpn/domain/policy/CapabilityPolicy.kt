@@ -2,12 +2,19 @@ package com.stravo.vpn.domain.policy
 
 import com.stravo.vpn.domain.model.FormFactor
 import com.stravo.vpn.domain.model.NetworkMode
+import com.stravo.vpn.domain.subscription.SubscriptionService
 
 /**
  * Единственный источник правды о том, что доступно на конкретном форм-факторе.
  * Логика fail-closed: всё, что не разрешено явно, запрещено.
  */
 object CapabilityPolicy {
+
+    fun permits(service: SubscriptionService, formFactor: FormFactor): Boolean = when (service) {
+        SubscriptionService.ORDINARY -> true
+        SubscriptionService.CDN -> formFactor.isPhone
+        SubscriptionService.UNKNOWN -> false
+    }
 
     fun availableModes(formFactor: FormFactor): List<NetworkMode> = when (formFactor) {
         FormFactor.PHONE -> listOf(NetworkMode.NORMAL_VPN, NetworkMode.FREE_INTERNET)

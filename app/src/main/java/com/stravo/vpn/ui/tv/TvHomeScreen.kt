@@ -113,7 +113,7 @@ fun TvHomeScreen(
             )
             PencilButton(
                 text = stringResource(id = R.string.cta_quick_connect),
-                subtitle = stringResource(id = R.string.tv_quick_connect_sub),
+                subtitle = stringResource(id = R.string.subscription_tv_quick_connect),
                 onClick = onOpenConnectPhone,
                 modifier = Modifier
                     .fillMaxWidth()

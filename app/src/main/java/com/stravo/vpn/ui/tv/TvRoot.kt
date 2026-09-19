@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stravo.vpn.R
+import com.stravo.vpn.ui.mobile.AddSubscriptionScreen
 import com.stravo.vpn.core.StravoConfig
 import com.stravo.vpn.ui.components.BrandMark
 import com.stravo.vpn.ui.mobile.AppsScreen
@@ -97,8 +98,11 @@ fun TvRoot(
                             )
                             Destination.LOCATIONS -> TvLocationsScreen(state, viewModel::onEvent)
                             Destination.PROFILE -> TvProfileScreen(state)
-                            Destination.CONNECT_TV, Destination.ADD_SUBSCRIPTION -> TvConnectScreen(
-                                viewModel, onDone = { navigator.select(Destination.HOME) },
+                            Destination.CONNECT_TV, Destination.ADD_SUBSCRIPTION -> AddSubscriptionScreen(
+                                state = state,
+                                onEvent = viewModel::onEvent,
+                                onScan = {},
+                                onBack = { navigator.select(Destination.HOME) },
                             )
                             Destination.SETTINGS -> TvSettingsScreen(
                                 viewModel, onOpenApps = { navigator.select(Destination.APPS) },
