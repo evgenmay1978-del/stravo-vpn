@@ -143,8 +143,10 @@ fun StravoSettingRow(
     trailing: @Composable (() -> Unit)? = null,
 ) {
     val palette = LocalStravoPalette.current
+    var keyboardFocused by remember { mutableStateOf(false) }
+    val hasFocus = focused || keyboardFocused
     val scale by animateFloatAsState(
-        targetValue = if (focused) StravoTokens.FocusScale else 1f,
+        targetValue = if (hasFocus) StravoTokens.FocusScale else 1f,
         animationSpec = tween(durationMillis = 140),
         label = "rowFocusScale",
     )
@@ -156,7 +158,7 @@ fun StravoSettingRow(
             .scale(scale)
             .clip(shape)
             .then(
-                if (focused) {
+                if (hasFocus) {
                     Modifier.border(StravoTokens.FocusBorder, palette.accent, shape)
                 } else {
                     Modifier
@@ -164,7 +166,8 @@ fun StravoSettingRow(
             )
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+                    Modifier.onFocusChanged { keyboardFocused = it.isFocused }
+                        .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
                 } else {
                     Modifier
                 },

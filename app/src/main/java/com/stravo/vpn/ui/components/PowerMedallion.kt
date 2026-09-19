@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -80,10 +81,10 @@ fun PowerMedallion(
             ) else Modifier),
     ) {
         DraftingRings(
-            Modifier.size(size), palette.textPrimary, palette.accent,
+            Modifier.matchParentSize().clipToBounds(), palette.textPrimary, palette.accent,
             accentAlpha = if (focused) 0.9f else 0.25f, baseAlpha = 0.22f,
         )
-        Canvas(Modifier.size(size)) {
+        Canvas(Modifier.matchParentSize().clipToBounds()) {
             val c = center
             val r = this.size.minDimension * 0.367f
             drawCircle(

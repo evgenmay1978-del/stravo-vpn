@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -290,40 +291,34 @@ private fun SummaryCard(
 ) {
     val palette = LocalStravoPalette.current
     StravoCard(
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 78.dp),
         onClick = onClick,
         padding = StravoTokens.SpaceMd,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(palette.panelSoft)
-                .border(1.dp, palette.outline.copy(alpha = 0.28f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(id = iconRes),
-                contentDescription = null,
-                tint = palette.textPrimary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = StravoTokens.SpaceSm)) {
-        Text(
-            text = title,
-            style = StravoType.BodyStrong,
-            color = palette.textPrimary,
-        )
-        Text(
-            text = subtitle,
-            style = StravoType.Caption,
-            color = palette.textSecondary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        }
+            Box(
+                modifier = Modifier.size(30.dp).clip(CircleShape)
+                    .background(palette.panelSoft)
+                    .border(1.dp, palette.outline.copy(alpha = 0.28f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(id = iconRes),
+                    contentDescription = null,
+                    tint = palette.textPrimary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = StravoTokens.SpaceSm)) {
+                Text(text = title, style = StravoType.BodyStrong, color = palette.textPrimary)
+                Text(
+                    text = subtitle,
+                    style = StravoType.Caption,
+                    color = palette.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

@@ -1,6 +1,9 @@
 package com.stravo.vpn.ui.mobile
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -70,12 +74,15 @@ fun ProfileScreen(
 
         StravoCard(modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_crown),
-                    contentDescription = null,
-                    tint = palette.textPrimary,
-                    modifier = Modifier.size(34.dp),
-                )
+                Box(Modifier.size(44.dp).background(Color(0xFFE9D8AD), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_crown),
+                        contentDescription = null,
+                        tint = Color(0xFF725727),
+                        modifier = Modifier.size(25.dp),
+                    )
+                }
                 Column(
                     modifier = Modifier
                         .weight(1f)

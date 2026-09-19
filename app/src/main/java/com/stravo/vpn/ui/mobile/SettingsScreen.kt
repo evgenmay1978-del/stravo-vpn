@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.stravo.vpn.BuildConfig
@@ -54,6 +55,7 @@ fun SettingsScreen(
     // Результат выгрузки журнала: имя файла в «Загрузках».
     var logStatus by remember { mutableStateOf<String?>(null) }
     var copyStatus by remember { mutableStateOf<String?>(null) }
+    var diagnosticsExpanded by rememberSaveable { mutableStateOf(false) }
 
     val protocols = StravoConfig.PROTOCOLS
     val languages = listOf("Русский", "English")
@@ -152,6 +154,19 @@ fun SettingsScreen(
                 subtitle = "v" + BuildConfig.VERSION_NAME,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+        }
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
+            StravoSettingRow(
+                iconRes = R.drawable.ic_network,
+                title = stringResource(R.string.diagnostics_title),
+                onClick = { diagnosticsExpanded = !diagnosticsExpanded },
+                trailing = {
+                    Text(if (diagnosticsExpanded) "−" else "+",
+                        style = StravoType.BodyStrong, color = palette.textSecondary)
+                },
+            )
+            if (diagnosticsExpanded) {
             // Диагностика ядра: варианты сборки конфига и прямой режим без узла.
             // Нужны, пока туннель поднимается, а трафик не идёт.
             StravoSettingRow(
@@ -193,6 +208,7 @@ fun SettingsScreen(
             )
         }
 
+        }
         Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
         Text(
             text = stringResource(id = R.string.settings_footer),
