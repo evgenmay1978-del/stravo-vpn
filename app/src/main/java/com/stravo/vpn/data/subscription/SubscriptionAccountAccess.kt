@@ -65,17 +65,6 @@ class SubscriptionAccountAccess(context: Context) {
         }
     }
 
-    /** The two Maestro subscriptions share a token; their server-side access gates stay separate. */
-    fun companionSubscription(source: String): String? {
-        val uri = maestroSubscription(source) ?: return null
-        val isCdn = uri.pathSegments.first() == "cdn-sub"
-        if (!isCdn && DeviceType.formFactorOf(appContext).isTv) return null
-        val prefix = if (isCdn) "sub" else "cdn-sub"
-        return uri.buildUpon()
-            .encodedPath("/$prefix/" + uri.encodedPath.orEmpty().trimEnd('/').substringAfterLast('/'))
-            .build().toString()
-    }
-
     private fun maestroSubscription(source: String): Uri? {
         val uri = Uri.parse(source)
         val api = Uri.parse(StravoConfig.ACCOUNT_API_BASE)

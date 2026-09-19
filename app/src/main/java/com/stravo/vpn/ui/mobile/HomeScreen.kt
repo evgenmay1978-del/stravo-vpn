@@ -129,7 +129,7 @@ fun HomeScreen(
             SummaryCard(
                 iconRes = R.drawable.ic_profile,
                 title = stringResource(id = R.string.card_profile),
-                subtitle = state.subscription.planName,
+                subtitle = subscriptionTitle(state),
                 onClick = onOpenProfile,
                 modifier = Modifier.weight(1f),
             )

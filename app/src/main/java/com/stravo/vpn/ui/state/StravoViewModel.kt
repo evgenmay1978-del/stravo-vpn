@@ -185,7 +185,6 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                     activeUntil = outcome.activeUntil,
                     nodes = outcome.nodes,
                 )
-                refreshPending = refreshPending || outcome.refreshPending
                 container.coreTrace.record("подписка обновлена: узлов " + outcome.nodes.size)
                 _home.update { it.copy(coreLog = coreLogLines()) }
             }
@@ -308,7 +307,6 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                             activeUntil = outcome.activeUntil,
                             nodes = outcome.nodes,
                         )
-                        if (outcome.refreshPending) container.subscriptions.markRefreshPending()
                         _home.update {
                             it.copy(
                                 importState = SubscriptionImportState.Done(outcome.nodes.size),

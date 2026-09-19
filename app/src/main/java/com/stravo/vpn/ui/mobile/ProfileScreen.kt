@@ -33,6 +33,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.stravo.vpn.R
+import com.stravo.vpn.domain.subscription.SubscriptionService
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.StravoCard
@@ -247,8 +248,16 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun subscriptionTitle(state: HomeUiState): String =
-    if (state.subscription.isActive) state.subscription.planName else stringResource(id = R.string.profile_no_subscription)
+internal fun subscriptionTitle(state: HomeUiState): String {
+    val ordinary = state.subscriptionNodes.any { it.service == SubscriptionService.ORDINARY }
+    val cdn = state.subscriptionNodes.any { it.service == SubscriptionService.CDN }
+    return stringResource(when {
+        ordinary && cdn -> R.string.subscription_two_sources
+        ordinary -> R.string.subscription_ordinary_source
+        cdn -> R.string.subscription_cdn_source
+        else -> R.string.profile_no_subscription
+    })
+}
 
 @Composable
 private fun subscriptionSubtitle(state: HomeUiState): String {

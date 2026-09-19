@@ -43,6 +43,9 @@
 
     <string name="profile_title">Профиль</string>
     <string name="profile_no_subscription">Подписка не подключена</string>
+    <string name="subscription_ordinary_source">Обычная VPN-подписка</string>
+    <string name="subscription_cdn_source">CDN-подписка</string>
+    <string name="subscription_two_sources">2 подписки: VPN и CDN</string>
     <string name="profile_active">активна</string>
     <string name="profile_valid_until">Действует до %1$s</string>
     <string name="profile_connect_hint">Подключите подписку через Telegram-бота</string>
