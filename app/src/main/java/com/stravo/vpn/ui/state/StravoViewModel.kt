@@ -10,6 +10,7 @@ import com.stravo.vpn.domain.model.ConnectionState
 import com.stravo.vpn.domain.model.FormFactor
 import com.stravo.vpn.domain.model.LocationsCatalog
 import com.stravo.vpn.domain.model.NetworkMode
+import com.stravo.vpn.domain.subscription.SubscriptionService
 import com.stravo.vpn.domain.model.VpnProfile
 import com.stravo.vpn.domain.model.VpnStats
 import com.stravo.vpn.domain.policy.CapabilityPolicy
@@ -122,7 +123,21 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         scope.launch {
             container.subscriptions.nodes.collect { nodes ->
                 _home.update { state ->
-                    val next = state.copy(subscriptionNodes = nodes)
+                    var next = state.copy(subscriptionNodes = nodes)
+                    // A raw CDN key has no ordinary companion URL. Select its real
+                    // service instead of reporting that an imported profile is missing.
+                    if (nodes.isNotEmpty() && next.availableNodes.isEmpty() &&
+                        !state.connection.isActive && !state.connection.isBusy) {
+                        val mode = if (nodes.any { it.service == SubscriptionService.ORDINARY }) {
+                            NetworkMode.NORMAL_VPN
+                        } else if (state.formFactor.isPhone && nodes.any { it.service == SubscriptionService.CDN }) {
+                            NetworkMode.FREE_INTERNET
+                        } else state.mode
+                        next = next.copy(mode = mode, location = LocationsCatalog.AUTO)
+                    }
+                    if (next.availableNodes.isNotEmpty() && state.notice == Notice.SUBSCRIPTION_REQUIRED) {
+                        next = next.copy(connection = ConnectionState.Disconnected, notice = null)
+                    }
                     // Узел мог исчезнуть или сменить идентификатор после обновления
                     // подписки: выбор, которого больше нет, честно сбрасываем на «Авто»,
                     // иначе «Подключить» отвечало бы «нет ключа узла».
@@ -170,6 +185,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                     activeUntil = outcome.activeUntil,
                     nodes = outcome.nodes,
                 )
+                refreshPending = refreshPending || outcome.refreshPending
                 container.coreTrace.record("подписка обновлена: узлов " + outcome.nodes.size)
                 _home.update { it.copy(coreLog = coreLogLines()) }
             }
@@ -292,6 +308,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                             activeUntil = outcome.activeUntil,
                             nodes = outcome.nodes,
                         )
+                        if (outcome.refreshPending) container.subscriptions.markRefreshPending()
                         _home.update {
                             it.copy(
                                 importState = SubscriptionImportState.Done(outcome.nodes.size),

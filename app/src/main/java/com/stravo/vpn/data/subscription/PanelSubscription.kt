@@ -111,6 +111,11 @@ object PanelSubscription {
         reality?.optString("shortId")?.takeIf { it.isNotBlank() }?.let { params["sid"] = it }
         reality?.optString("spiderX")?.takeIf { it.isNotBlank() }?.let { params["spx"] = it }
         if (tls?.optBoolean("allowInsecure") == true) params["allowinsecure"] = "1"
+        tls?.optJSONArray("alpn")?.let { alpn ->
+            (0 until alpn.length()).mapNotNull { index ->
+                alpn.optString(index).takeIf { it.isNotBlank() && it != NULL_TEXT }
+            }.joinToString(",").takeIf { it.isNotBlank() }?.let { params["alpn"] = it }
+        }
 
         when (stream.optString("network").lowercase()) {
             "ws" -> {

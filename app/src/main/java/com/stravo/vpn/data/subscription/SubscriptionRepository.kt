@@ -77,7 +77,7 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
      * репозиторий только отвечает на вопрос и ничего не ходит в сеть.
      */
     fun needsRefresh(now: Long = System.currentTimeMillis()): Boolean {
-        if (_nodes.value.isEmpty()) return false
+        if (_nodes.value.isEmpty()) return true
         if (importVersion < CONVERTER_VERSION) return true
         return importedAt <= 0L || now - importedAt > REFRESH_AFTER_MS
     }
@@ -215,7 +215,7 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
          * такого изменения нужно пересобрать из источника, иначе в конфиг годами
          * уходят старые параметры (так CDN-узлы отвечали 405).
          */
-        const val CONVERTER_VERSION = 2
+        const val CONVERTER_VERSION = 3
 
         /** Через сколько обновлять подписку из источника при старте приложения. */
         private const val REFRESH_AFTER_MS = 6 * 60 * 60 * 1000L

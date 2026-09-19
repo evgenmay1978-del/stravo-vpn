@@ -326,6 +326,12 @@ object SingBoxConfigBuilder {
         for ((jsonKey, urlKeys) in mapped) {
             text(*urlKeys)?.let { transport.put(jsonKey, it) }
         }
+        // Xray 26.7.28 uses UUIDs when the session alphabet or length is absent.
+        // The embedded fork rejects a half-pair, so keep its same UUID default.
+        if (transport.optString("session_table").isBlank() || transport.optString("session_length").isBlank()) {
+            transport.remove("session_table")
+            transport.remove("session_length")
+        }
         // Флаг ставится отдельно: ядро ждёт bool, а строка «true» ломает конфиг.
         flag("xPaddingObfsMode", "x_padding_obfs_mode")?.let { transport.put("x_padding_obfs_mode", it) }
 

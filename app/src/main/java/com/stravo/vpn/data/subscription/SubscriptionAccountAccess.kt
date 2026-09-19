@@ -65,12 +65,30 @@ class SubscriptionAccountAccess(context: Context) {
         }
     }
 
-    /** Override the sharer's device marker only on this service's public subscription routes. */
-    fun subscriptionUrl(source: String): String {
+    /** The two Maestro subscriptions share a token; their server-side access gates stay separate. */
+    fun companionSubscription(source: String): String? {
+        val uri = maestroSubscription(source) ?: return null
+        val isCdn = uri.pathSegments.first() == "cdn-sub"
+        if (!isCdn && DeviceType.formFactorOf(appContext).isTv) return null
+        val prefix = if (isCdn) "sub" else "cdn-sub"
+        return uri.buildUpon()
+            .encodedPath("/$prefix/" + uri.encodedPath.orEmpty().trimEnd('/').substringAfterLast('/'))
+            .build().toString()
+    }
+
+    private fun maestroSubscription(source: String): Uri? {
         val uri = Uri.parse(source)
         val api = Uri.parse(StravoConfig.ACCOUNT_API_BASE)
-        if (uri.host != api.host || uri.port != api.port || uri.scheme != "https" ||
-            !(uri.path.orEmpty().startsWith("/sub/") || uri.path.orEmpty().startsWith("/cdn-sub/"))) return source
+        return uri.takeIf {
+            it.scheme == "https" && it.host == api.host && it.port == api.port &&
+                it.userInfo == null && it.pathSegments.size == 2 &&
+                it.pathSegments.first() in setOf("sub", "cdn-sub") && it.pathSegments.last().isNotBlank()
+        }
+    }
+
+    /** Override the sharer's device marker only on this service's public subscription routes. */
+    fun subscriptionUrl(source: String): String {
+        val uri = maestroSubscription(source) ?: return source
         val builder = uri.buildUpon().clearQuery()
         uri.queryParameterNames.filter { it !in setOf("device", "platform") }.forEach { name ->
             uri.getQueryParameters(name).forEach { builder.appendQueryParameter(name, it) }

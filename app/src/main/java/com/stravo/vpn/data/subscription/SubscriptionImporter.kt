@@ -39,6 +39,7 @@ sealed interface ImportOutcome {
         val planName: String?,
         val activeUntil: String?,
         val nodes: List<SubscriptionNode>,
+        val refreshPending: Boolean = false,
     ) : ImportOutcome
 
     /** [reason] и [token] уточняют ошибку: что именно не распознано (обычно схема). */
@@ -68,21 +69,41 @@ class SubscriptionImporter(
     ): ImportOutcome = withContext(Dispatchers.IO) {
         val value = raw.trim()
         if (value.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.EMPTY)
+        var missingOrdinary = false
 
-        val source = when (val parsed = SubscriptionLinkParser.parse(value)) {
-            is ParsedLink.Node -> Source(listOf(parsed.secretConfig), null, null, null)
+        val sources = when (val parsed = SubscriptionLinkParser.parse(value)) {
+            is ParsedLink.Node -> listOf(Source(listOf(parsed.secretConfig), null, null, null))
 
             is ParsedLink.SubscriptionUrl -> {
-                val remote = fetch(parsed.url) ?: return@withContext ImportOutcome.Failure(ImportError.NETWORK)
-                Source(linksFrom(remote.body), remote.planName, remote.activeUntil, parsed.url,
-                    SubscriptionServiceClassifier.isCdnSource(parsed.url) || remote.isCdn)
+                val urls = mutableListOf(parsed.url)
+                accountAccess.companionSubscription(parsed.url)?.let { companion ->
+                    val service = if (SubscriptionServiceClassifier.isCdnSource(companion))
+                        SubscriptionService.CDN else SubscriptionService.ORDINARY
+                    val saved = secrets.get(sourceKey(service))
+                    // Refreshing one account must not overwrite a separately imported source.
+                    if (servicesToRefresh == null || saved == null || saved == parsed.url) urls.add(companion)
+                }
+                val loaded = urls.mapNotNull { url ->
+                    if (formFactor.isTv && SubscriptionServiceClassifier.isCdnSource(url)) null
+                    else {
+                        val remote = fetch(url)
+                        if (remote == null && !SubscriptionServiceClassifier.isCdnSource(url)) missingOrdinary = true
+                        remote?.let {
+                            Source(linksFrom(it.body), it.planName, it.activeUntil, url,
+                                SubscriptionServiceClassifier.isCdnSource(url) || it.isCdn,
+                                isCompanion = url != parsed.url)
+                        }
+                    }
+                }
+                // A CDN denial (no paid GB) must not prevent loading the ordinary subscription.
+                loaded.ifEmpty { return@withContext ImportOutcome.Failure(ImportError.NETWORK) }
             }
 
             is ParsedLink.Unknown -> {
                 // Вставили тело подписки целиком: строки, base64 или JSON-конфиг Xray.
                 val lines = linksFrom(value)
                 if (lines.isNotEmpty() && lines.any { SubscriptionLinkParser.parse(it) is ParsedLink.Node }) {
-                    Source(lines, null, null, null)
+                    listOf(Source(lines, null, null, null))
                 } else {
                     return@withContext ImportOutcome.Failure(
                         error = ImportError.UNKNOWN_LINK,
@@ -93,27 +114,30 @@ class SubscriptionImporter(
             }
         }
 
-        if (source.links.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.EMPTY_PAYLOAD)
-        if (source.links.size > MAX_NODES) return@withContext ImportOutcome.Failure(ImportError.TOO_MANY_NODES)
+        val linkCount = sources.sumOf { it.links.size }
+        if (linkCount == 0) return@withContext ImportOutcome.Failure(ImportError.EMPTY_PAYLOAD)
+        if (linkCount > MAX_NODES) return@withContext ImportOutcome.Failure(ImportError.TOO_MANY_NODES)
         if (!secrets.isAvailable) return@withContext ImportOutcome.Failure(ImportError.SECRET_STORE)
 
-        val nodes = ArrayList<SubscriptionNode>(source.links.size)
+        val nodes = ArrayList<SubscriptionNode>(linkCount)
         val configs = LinkedHashMap<String, String>()
-        for (link in source.links) {
+        val sourceByService = LinkedHashMap<SubscriptionService, String?>()
+        for (source in sources) for (link in source.links) {
             val parsed = SubscriptionLinkParser.parse(link)
             if (parsed !is ParsedLink.Node) continue
             val service = if (source.isCdn) SubscriptionService.CDN
                 else SubscriptionServiceClassifier.classify(parsed.secretConfig)
             if (!CapabilityPolicy.permits(service, formFactor)) continue
-            if (servicesToRefresh != null && service !in servicesToRefresh) continue
+            if (servicesToRefresh != null && service !in servicesToRefresh && !source.isCompanion) continue
             if (configs.containsKey(parsed.node.id)) continue
             configs[parsed.node.id] = parsed.secretConfig
             nodes.add(parsed.node.copy(service = service))
+            sourceByService[service] = source.sourceUrl
         }
         if (nodes.isEmpty()) return@withContext ImportOutcome.Failure(
-            if (formFactor.isTv && source.links.any {
+            if (formFactor.isTv && sources.any { source -> source.links.any {
                 source.isCdn || SubscriptionServiceClassifier.classify(it) == SubscriptionService.CDN
-            }) ImportError.TV_CDN_ONLY else ImportError.NO_NODES,
+            } }) ImportError.TV_CDN_ONLY else ImportError.NO_NODES,
         )
 
         for ((id, config) in configs) {
@@ -125,14 +149,16 @@ class SubscriptionImporter(
         // метод отправки XHTTP), и сохранённые ссылки без обновления остаются старыми.
         // Ручной ключ и вставленное тело источником не считаются — иначе автообновление
         // подменило бы их подпиской.
-        if (!rememberSources(source.sourceUrl, nodes.map { it.service }.toSet())) {
+        if (!rememberSources(sourceByService)) {
             return@withContext ImportOutcome.Failure(ImportError.SECRET_STORE)
         }
 
+        val source = sources.firstOrNull { !it.isCdn } ?: sources.first()
         ImportOutcome.Success(
             planName = source.planName,
             activeUntil = source.activeUntil,
             nodes = nodes,
+            refreshPending = missingOrdinary,
         )
     }
 
@@ -229,9 +255,9 @@ class SubscriptionImporter(
         SubscriptionService.entries.forEach { secrets.remove(sourceKey(it)) }
     }
 
-    private fun rememberSources(url: String?, services: Set<SubscriptionService>): Boolean {
-        val previous = services.associateWith { secrets.get(sourceKey(it)) }
-        for (service in services) {
+    private fun rememberSources(sources: Map<SubscriptionService, String?>): Boolean {
+        val previous = sources.keys.associateWith { secrets.get(sourceKey(it)) }
+        for ((service, url) in sources) {
             if (url.isNullOrBlank()) secrets.remove(sourceKey(service))
             else if (!secrets.put(sourceKey(service), url)) {
                 previous.forEach { (kind, value) ->
@@ -248,7 +274,7 @@ class SubscriptionImporter(
     fun migrateSource(nodes: List<SubscriptionNode>) {
         val old = secrets.get(SOURCE_ID) ?: return
         val services = nodes.map { it.service }.filter { it != SubscriptionService.UNKNOWN }.toSet()
-        if (services.isNotEmpty()) rememberSources(old, services)
+        if (services.isNotEmpty()) rememberSources(services.associateWith { old })
     }
 
     private fun sourceKey(service: SubscriptionService): String = "$SOURCE_ID.${service.name}"
@@ -259,6 +285,7 @@ class SubscriptionImporter(
         val activeUntil: String?,
         val sourceUrl: String?,
         val isCdn: Boolean = false,
+        val isCompanion: Boolean = false,
     )
 
     private class Remote(val body: String, val planName: String?, val activeUntil: String?, val isCdn: Boolean)
