@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="service_share_title">Поделиться сервисом</string>
+    <string name="service_share_subtitle">Отправить публичную ссылку на Telegram-бота</string>
+    <string name="service_share_text">STRAVO VPN для Android и Android TV. Подключение и поддержка в Telegram: %1$s</string>
+    <string name="service_share_unavailable">Не удалось открыть меню «Поделиться»</string>
+</resources>

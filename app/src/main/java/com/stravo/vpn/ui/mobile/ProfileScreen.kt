@@ -1,5 +1,8 @@
 package com.stravo.vpn.ui.mobile
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
@@ -54,7 +57,9 @@ fun ProfileScreen(
 ) {
     val palette = LocalStravoPalette.current
     val context = LocalContext.current
-    val notAvailable = stringResource(id = R.string.profile_section_soon)
+    val shareTitle = stringResource(R.string.service_share_title)
+    val shareText = stringResource(R.string.service_share_text, BotLinks.supportHttps())
+    val shareUnavailable = stringResource(R.string.service_share_unavailable)
     // Удаление подписки необратимо для ключей на устройстве — сначала спрашиваем.
     var confirmRemoval by remember { mutableStateOf(false) }
 
@@ -157,9 +162,23 @@ fun ProfileScreen(
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_share,
-                title = stringResource(id = R.string.profile_invite),
-                subtitle = notAvailable,
-                onClick = { },
+                title = shareTitle,
+                subtitle = stringResource(R.string.service_share_subtitle),
+                onClick = {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, shareText)
+                    }
+                    try {
+                        context.startActivity(Intent.createChooser(send, shareTitle).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
+                    } catch (_: SecurityException) {
+                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
+                    }
+                },
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(

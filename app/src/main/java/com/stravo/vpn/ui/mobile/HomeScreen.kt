@@ -189,8 +189,7 @@ fun HomeScreen(
             subtitle = stringResource(id = R.string.tv_quick_connect_sub),
             onClick = {
                 when (BotLinkLauncher.openQuickConnect(context, state.formFactor)) {
-                    BotLaunchResult.Telegram, BotLaunchResult.Browser ->
-                        onEvent(HomeEvent.NoticeShown(com.stravo.vpn.ui.state.Notice.PAIRING_BACKEND_MISSING))
+                    BotLaunchResult.Telegram, BotLaunchResult.Browser -> Unit
 
                     is BotLaunchResult.ManualCopy -> {
                         BotLinkLauncher.copyToClipboard(context, BotLinks.quickConnectHttps(state.formFactor))
