@@ -17,6 +17,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -38,8 +44,10 @@ fun StravoCard(
 ) {
     val palette = LocalStravoPalette.current
     val shape = RoundedCornerShape(radius)
+    var keyboardFocused by remember { mutableStateOf(false) }
+    val hasFocus = focused || keyboardFocused
     val scale by animateFloatAsState(
-        targetValue = if (focused) StravoTokens.FocusScale else 1f,
+        targetValue = if (hasFocus) StravoTokens.FocusScale else 1f,
         animationSpec = tween(durationMillis = 140),
         label = "cardFocusScale",
     )
@@ -48,18 +56,21 @@ fun StravoCard(
     Box(
         modifier = modifier
             .scale(scale)
+            .shadow(if (hasFocus) 10.dp else 3.dp, shape,
+                ambientColor = Color(0xFF4A4435), spotColor = Color(0xFF4A4435))
             .clip(shape)
-            .background(palette.panel)
+            .background(Brush.verticalGradient(listOf(palette.panel, palette.background)))
             .border(
-                width = if (focused) StravoTokens.FocusBorder else 1.dp,
-                color = if (focused) palette.accent else palette.outline.copy(alpha = 0.30f),
+                width = if (hasFocus) StravoTokens.FocusBorder else 0.8.dp,
+                color = if (hasFocus) palette.accent else palette.outline.copy(alpha = 0.22f),
                 shape = shape,
             )
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(
+                    Modifier.onFocusChanged { keyboardFocused = it.isFocused }.clickable(
                         interactionSource = interaction,
                         indication = null,
+                        role = Role.Button,
                         onClick = onClick,
                     )
                 } else {
@@ -67,14 +78,11 @@ fun StravoCard(
                 },
             ),
     ) {
-        if (focused) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .padding(6.dp)
-                    .border(1.dp, palette.outline.copy(alpha = 0.55f), RoundedCornerShape(radius - 6.dp)),
-            )
-        }
+        Box(
+            modifier = Modifier.matchParentSize().padding(3.dp)
+                .border(0.6.dp, if (hasFocus) palette.accent.copy(alpha = 0.35f)
+                    else Color.White.copy(alpha = 0.72f), RoundedCornerShape(radius - 3.dp)),
+        )
         Column(modifier = Modifier.padding(padding), content = content)
     }
 }

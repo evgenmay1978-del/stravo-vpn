@@ -56,9 +56,9 @@ fun TvHomeScreen(
     }
 
     Row(
-        modifier = modifier.fillMaxSize().padding(start = StravoTokens.Space2Xl),
+        modifier = modifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(StravoTokens.Space2Xl),
+        horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceLg),
     ) {
         Column(
             modifier = Modifier.weight(1.2f),
@@ -68,7 +68,7 @@ fun TvHomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
-                val size = minOf(maxWidth * 0.62f, 360.dp)
+                val size = minOf(maxWidth * 0.94f, 300.dp)
                 PowerMedallion(
                     state = state.connection,
                     size = size,
@@ -80,7 +80,7 @@ fun TvHomeScreen(
             Text(
                 text = connectionLabel(state.connection),
                 style = StravoType.StatusLabel,
-                color = if (state.connection is ConnectionState.Error) palette.accent else palette.textPrimary,
+                color = if (state.connection is ConnectionState.Error) com.stravo.vpn.ui.theme.StravoColors.Danger else palette.textPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = StravoTokens.SpaceLg),
             )
@@ -113,7 +113,7 @@ fun TvHomeScreen(
             )
             PencilButton(
                 text = stringResource(id = R.string.cta_quick_connect),
-                subtitle = stringResource(id = R.string.tv_quick_connect_sub),
+                subtitle = stringResource(id = R.string.subscription_tv_quick_connect),
                 onClick = onOpenConnectPhone,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -121,7 +121,7 @@ fun TvHomeScreen(
                 radius = StravoTokens.ButtonRadiusTv,
                 leadingIcon = painterResource(id = R.drawable.ic_quick_connect),
                 trailingIcon = painterResource(id = R.drawable.ic_send),
-                iconTint = palette.accent,
+                iconTint = androidx.compose.ui.graphics.Color(0xFFB8DECA),
             )
             Spacer(modifier = Modifier.height(StravoTokens.SpaceXs))
         }

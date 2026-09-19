@@ -13,6 +13,7 @@ import com.stravo.vpn.domain.policy.CapabilityPolicy
 import com.stravo.vpn.domain.subscription.SubscriptionLocations
 import com.stravo.vpn.domain.subscription.SubscriptionNode
 import com.stravo.vpn.domain.subscription.Unrecognized
+import com.stravo.vpn.domain.subscription.SubscriptionService
 
 /** Состояние добавления подписки. */
 sealed interface SubscriptionImportState {
@@ -58,6 +59,11 @@ data class HomeUiState(
 
     val isTv: Boolean get() = formFactor.isTv
 
+    val availableNodes: List<SubscriptionNode> get() = subscriptionNodes.filter {
+        CapabilityPolicy.permits(it.service, formFactor) && it.service ==
+            (if (mode == NetworkMode.FREE_INTERNET) SubscriptionService.CDN else SubscriptionService.ORDINARY)
+    }
+
     /**
      * Локации для выбора. Пока подписки нет — витрина каталога; после импорта
      * показываются реальные серверы подписки (только страна, город и протокол).
@@ -65,11 +71,11 @@ data class HomeUiState(
     val locations: List<VpnLocation> = if (subscriptionNodes.isEmpty()) {
         LocationsCatalog.all
     } else {
-        listOf(LocationsCatalog.AUTO) + SubscriptionLocations.from(subscriptionNodes)
+        listOf(LocationsCatalog.AUTO) + SubscriptionLocations.from(availableNodes)
     }
 
     fun nodeFor(locationId: String): SubscriptionNode? =
-        subscriptionNodes.firstOrNull { it.id == locationId }
+        availableNodes.firstOrNull { it.id == locationId }
 
     /**
      * Автоматический сервер: у пункта «Авто» своего узла нет — берём первый из подписки.
@@ -77,7 +83,7 @@ data class HomeUiState(
      */
     fun nodeForLocation(): SubscriptionNode? =
         if (location.id == LocationsCatalog.AUTO.id) {
-            subscriptionNodes.firstOrNull()
+            availableNodes.firstOrNull()
         } else {
             nodeFor(location.id)
         }
@@ -114,6 +120,7 @@ sealed interface HomeEvent {
     data class NoticeShown(val notice: Notice) : HomeEvent
     data object NoticeConsumed : HomeEvent
     data class SubscriptionSubmitted(val raw: String) : HomeEvent
+    data class LoginSubmitted(val login: String) : HomeEvent
     data object SubscriptionImportCleared : HomeEvent
     data object SubscriptionRemoved : HomeEvent
 }

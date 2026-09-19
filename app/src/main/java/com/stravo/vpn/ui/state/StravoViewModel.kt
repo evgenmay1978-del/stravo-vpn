@@ -13,6 +13,7 @@ import com.stravo.vpn.domain.model.NetworkMode
 import com.stravo.vpn.domain.model.VpnProfile
 import com.stravo.vpn.domain.model.VpnStats
 import com.stravo.vpn.domain.policy.CapabilityPolicy
+import com.stravo.vpn.platform.DeviceType
 import com.stravo.vpn.engine.box.CoreVariant
 import com.stravo.vpn.pairing.PairingState
 import com.stravo.vpn.pairing.PairingStatus
@@ -28,13 +29,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class StravoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val container = (application as StravoApplication).container
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val subscriptionMutex = Mutex()
 
-    private val _home = MutableStateFlow(HomeUiState())
+    private val _home = MutableStateFlow(HomeUiState(formFactor = DeviceType.formFactorOf(application)))
     val home: StateFlow<HomeUiState> = _home.asStateFlow()
 
     private val _pairing = MutableStateFlow(PairingState())
@@ -124,7 +128,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                     // иначе «Подключить» отвечало бы «нет ключа узла».
                     val selection = next.location
                     val stillThere = selection.id == LocationsCatalog.AUTO.id ||
-                        nodes.any { it.id == selection.id }
+                        next.availableNodes.any { it.id == selection.id }
                     if (stillThere) next else next.copy(location = LocationsCatalog.AUTO)
                 }
             }
@@ -155,11 +159,11 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
      * Ничего не показывает поверх интерфейса: успех и неудача попадают в журнал
      * ядра одной честной строкой, а узлы при неудаче остаются прежними.
      */
-    private suspend fun refreshSubscriptionIfStale() {
+    private suspend fun refreshSubscriptionIfStale() = subscriptionMutex.withLock {
         val importer = container.subscriptionImporter
-        if (importer.sourceUrl == null) return
-        if (!container.subscriptions.needsRefresh()) return
-        when (val outcome = importer.refresh()) {
+        if (!container.subscriptions.needsRefresh()) return@withLock
+        var refreshPending = false
+        for (source in importer.sourceUrls) when (val outcome = importer.refresh(source)) {
             is ImportOutcome.Success -> {
                 container.subscriptions.applyImport(
                     planName = outcome.planName,
@@ -170,21 +174,24 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                 _home.update { it.copy(coreLog = coreLogLines()) }
             }
 
-            is ImportOutcome.Failure ->
+            is ImportOutcome.Failure -> {
+                refreshPending = true
                 container.coreTrace.record("подписка не обновилась: панель недоступна, узлы прежние")
-
-            null -> Unit
+            }
         }
+        if (refreshPending) container.subscriptions.markRefreshPending()
     }
 
     private var _profilesProtocolHint: String = "Авто (рекомендуется)"
 
     fun setFormFactor(formFactor: FormFactor) {
         _home.update {
-            it.copy(
+            val next = it.copy(
                 formFactor = formFactor,
                 mode = CapabilityPolicy.normalizes(it.mode, formFactor),
             )
+            if (next.locations.any { location -> location.id == next.location.id }) next
+                else next.copy(location = LocationsCatalog.AUTO)
         }
     }
 
@@ -202,11 +209,19 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                 _home.update { it.copy(location = location) }
             }
 
-            is HomeEvent.ModeSelected -> _home.update {
-                it.copy(mode = CapabilityPolicy.normalizes(event.mode, it.formFactor))
+            is HomeEvent.ModeSelected -> {
+                val mode = CapabilityPolicy.normalizes(event.mode, _home.value.formFactor)
+                if (mode != _home.value.mode) {
+                    scope.launch {
+                        val connection = _home.value.connection
+                        if (connection.isActive || connection.isBusy) container.vpnEngine.disconnect()
+                        _home.update { it.copy(mode = mode, location = LocationsCatalog.AUTO) }
+                    }
+                }
             }
 
             is HomeEvent.SubscriptionSubmitted -> importSubscription(event.raw)
+            is HomeEvent.LoginSubmitted -> importSubscription(event.login, isLogin = true)
             HomeEvent.SubscriptionImportCleared -> clearImportState()
             HomeEvent.SubscriptionRemoved -> removeSubscription()
         }
@@ -215,19 +230,24 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     private fun toggleConnection(forceConnect: Boolean = false) {
         val current = _home.value
         val shouldConnect = forceConnect || !current.connection.isActive
-        if (shouldConnect && current.formFactor.isPhone && !current.subscription.isActive && current.profile == null) {
+        if (shouldConnect && current.nodeForLocation() == null) {
             // Подключать нечего: сначала подписка, потом ядро. Без выдуманного успеха.
-            _home.update { it.copy(notice = Notice.SUBSCRIPTION_REQUIRED) }
+            val reason = if (current.mode == NetworkMode.FREE_INTERNET) {
+                "Добавьте CDN-подписку для режима «Свободный интернет»"
+            } else {
+                "Добавьте обычную VPN-подписку или войдите по Maestro login"
+            }
+            _home.update { it.copy(notice = Notice.SUBSCRIPTION_REQUIRED, connection = ConnectionState.Error(reason)) }
             return
         }
         scope.launch {
             if (shouldConnect) {
-                val node = current.nodeForLocation()
-                val profile = current.profile ?: VpnProfile(
-                    id = node?.id ?: "default",
-                    title = node?.name ?: current.subscription.planName,
-                    protocolHint = node?.let { it.protocolLabel + " · " + it.transportLabel }
-                        ?: _profilesProtocolHint,
+                val node = current.nodeForLocation() ?: return@launch
+                if (!CapabilityPolicy.permits(node.service, current.formFactor)) return@launch
+                val profile = VpnProfile(
+                    id = node.id,
+                    title = node.name,
+                    protocolHint = node.protocolLabel + " · " + node.transportLabel,
                 )
                 container.vpnEngine.connect(profile, current.connectedLocation(node))
             } else {
@@ -258,33 +278,37 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
      * Добавление подписки. Сырая ссылка живёт только внутри импортёра и защищённого
      * хранилища: в состояние UI попадают лишь безопасные карточки узлов.
      */
-    fun importSubscription(raw: String) {
+    fun importSubscription(raw: String, isLogin: Boolean = false) {
         if (_home.value.importState is SubscriptionImportState.Loading) return
         _home.update { it.copy(importState = SubscriptionImportState.Loading) }
         scope.launch {
-            when (val outcome = container.subscriptionImporter.import(raw)) {
-                is ImportOutcome.Success -> {
-                    container.subscriptions.applyImport(
-                        planName = outcome.planName,
-                        activeUntil = outcome.activeUntil,
-                        nodes = outcome.nodes,
-                    )
-                    _home.update {
+            subscriptionMutex.withLock {
+                val outcome = if (isLogin) container.accountAccess.claim(raw, container.subscriptionImporter)
+                    else container.subscriptionImporter.import(raw)
+                when (outcome) {
+                    is ImportOutcome.Success -> {
+                        container.subscriptions.applyImport(
+                            planName = outcome.planName,
+                            activeUntil = outcome.activeUntil,
+                            nodes = outcome.nodes,
+                        )
+                        _home.update {
+                            it.copy(
+                                importState = SubscriptionImportState.Done(outcome.nodes.size),
+                                notice = Notice.SUBSCRIPTION_ADDED,
+                            )
+                        }
+                    }
+
+                    is ImportOutcome.Failure -> _home.update {
                         it.copy(
-                            importState = SubscriptionImportState.Done(outcome.nodes.size),
-                            notice = Notice.SUBSCRIPTION_ADDED,
+                            importState = SubscriptionImportState.Failed(
+                                error = outcome.error,
+                                reason = outcome.reason,
+                                token = outcome.token,
+                            ),
                         )
                     }
-                }
-
-                is ImportOutcome.Failure -> _home.update {
-                    it.copy(
-                        importState = SubscriptionImportState.Failed(
-                            error = outcome.error,
-                            reason = outcome.reason,
-                            token = outcome.token,
-                        ),
-                    )
                 }
             }
         }
@@ -297,16 +321,20 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     fun removeSubscription() {
         // Ядро держит конфиг удаляемого узла в памяти: честнее выключить туннель,
         // чем оставлять его работающим без ключа в хранилище.
-        scope.launch { container.vpnEngine.disconnect() }
-        container.subscriptions.nodes.value.forEach { node -> container.secretStore.remove(node.id) }
-        container.subscriptionImporter.forgetSource()
-        container.subscriptions.clear()
-        _home.update {
-            it.copy(
-                importState = SubscriptionImportState.Idle,
-                location = LocationsCatalog.AUTO,
-                notice = Notice.SUBSCRIPTION_REMOVED,
-            )
+        scope.launch {
+            subscriptionMutex.withLock {
+                container.vpnEngine.disconnect()
+                container.subscriptions.nodes.value.forEach { node -> container.secretStore.remove(node.id) }
+                container.subscriptionImporter.forgetSource()
+                container.subscriptions.clear()
+                _home.update {
+                    it.copy(
+                        importState = SubscriptionImportState.Idle,
+                        location = LocationsCatalog.AUTO,
+                        notice = Notice.SUBSCRIPTION_REMOVED,
+                    )
+                }
+            }
         }
     }
 

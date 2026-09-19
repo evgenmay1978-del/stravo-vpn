@@ -23,6 +23,10 @@ import com.stravo.vpn.data.diagnostics.CoreTrace
 import com.stravo.vpn.data.settings.VpnAppMode
 import com.stravo.vpn.domain.engine.VpnConnectionSnapshot
 import com.stravo.vpn.domain.model.ConnectionState
+import com.stravo.vpn.domain.policy.CapabilityPolicy
+import com.stravo.vpn.domain.subscription.SubscriptionService
+import com.stravo.vpn.domain.subscription.SubscriptionServiceClassifier
+import com.stravo.vpn.platform.DeviceType
 import io.nekohasekai.libbox.BridgeOptions
 import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.CommandServer
@@ -129,6 +133,14 @@ class StravoVpnService : VpnService(), PlatformInterface {
         container.coreLogReader.publish()
         if (link == null) {
             publishError(KEY_MISSING_REASON, locationId)
+            return
+        }
+        val formFactor = DeviceType.formFactorOf(this)
+        val service = container.subscriptions.nodes.value.firstOrNull { it.id == nodeId }?.service
+            ?: SubscriptionService.UNKNOWN
+        if (!CapabilityPolicy.permits(service, formFactor) ||
+            (formFactor.isTv && SubscriptionServiceClassifier.classify(link) == SubscriptionService.CDN)) {
+            publishError("Этот узел недоступен на устройстве. На TV нужен обычный VPN.", locationId)
             return
         }
         val variant = container.coreTuning.variant()

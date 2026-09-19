@@ -5,8 +5,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -31,18 +35,26 @@ fun PaperCanvas(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val palette = LocalStravoPalette.current
-    Box(modifier = modifier.background(palette.background)) {
+    BoxWithConstraints(modifier = modifier.background(palette.background)) {
         if (showTexture) {
             Image(
                 painter = painterResource(id = R.drawable.paper_texture),
                 contentDescription = null,
                 modifier = Modifier.matchParentSize().clipToBounds(),
                 contentScale = ContentScale.Crop,
-                alpha = if (palette.isDark) 0.05f else 0.16f,
+                alpha = if (palette.isDark) 0.05f else 0.22f,
             )
         }
         if (showContours) {
-            ContourSketch(modifier = Modifier.matchParentSize())
+            ContourSketch(modifier = Modifier.matchParentSize(), alpha = 0.055f)
+            Image(
+                painter = painterResource(R.drawable.graphite_landscape),
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth().height(minOf(maxWidth * 0.48f, maxHeight * 0.55f)),
+                contentScale = ContentScale.FillBounds,
+                alpha = if (palette.isDark) 0.12f else 0.28f,
+            )
         }
         content()
     }

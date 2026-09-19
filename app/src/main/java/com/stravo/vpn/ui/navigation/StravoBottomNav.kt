@@ -2,6 +2,9 @@ package com.stravo.vpn.ui.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -34,8 +40,13 @@ fun StravoBottomNav(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(palette.panel)
-            .padding(vertical = StravoTokens.SpaceSm),
+            .background(palette.panel.copy(alpha = 0.96f))
+            .drawBehind {
+                drawLine(palette.outline.copy(alpha = 0.18f), Offset.Zero,
+                    Offset(size.width, 0f), 1.dp.toPx())
+            }
+            .selectableGroup()
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Destination.bottomBar.forEach { destination ->
@@ -45,11 +56,16 @@ fun StravoBottomNav(
                 modifier = Modifier
                     .weight(1f)
                     .height(StravoTokens.TouchTargetMin + 8.dp)
-                    .clickable(role = Role.Tab) { onSelect(destination) },
+                    .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(destination) }),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Box(modifier = Modifier.size(24.dp)) {
+                Box(
+                    modifier = Modifier.size(width = 46.dp, height = 29.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (selected) palette.accent.copy(alpha = 0.09f) else androidx.compose.ui.graphics.Color.Transparent),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
                         painter = painterResource(id = destination.iconRes),
                         contentDescription = null,

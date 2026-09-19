@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -19,6 +20,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +49,7 @@ import com.stravo.vpn.ui.components.PencilButtonStyle
 import com.stravo.vpn.ui.components.PowerMedallion
 import com.stravo.vpn.ui.components.StravoCard
 import com.stravo.vpn.ui.components.StravoStatRow
+import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.state.HomeEvent
 import com.stravo.vpn.ui.state.HomeUiState
 import com.stravo.vpn.ui.theme.LocalStravoPalette
@@ -65,6 +71,7 @@ fun HomeScreen(
 ) {
     val palette = LocalStravoPalette.current
     val context = LocalContext.current
+    var diagnosticsExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -77,10 +84,10 @@ fun HomeScreen(
 
         HomeHeader(onOpenSettings = onOpenSettings)
 
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceXs))
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val medallion = minOf(maxWidth * 0.56f, 214.dp)
+            val medallion = minOf(maxWidth * 0.68f, 248.dp)
             PowerMedallion(
                 state = state.connection,
                 size = medallion,
@@ -95,7 +102,7 @@ fun HomeScreen(
         Text(
             text = statusLabel(state.connection),
             style = StravoType.StatusLabel,
-            color = if (state.connection is ConnectionState.Error) palette.accent else palette.textPrimary,
+            color = if (state.connection is ConnectionState.Error) com.stravo.vpn.ui.theme.StravoColors.Danger else palette.textPrimary,
             textAlign = TextAlign.Center,
         )
         Text(
@@ -105,20 +112,6 @@ fun HomeScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = StravoTokens.SpaceSm, start = StravoTokens.SpaceLg, end = StravoTokens.SpaceLg),
         )
-
-        state.diagnostics?.let { message ->
-            Text(
-                text = message,
-                style = StravoType.Tiny,
-                color = palette.accentDeep,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(
-                    top = StravoTokens.SpaceMd,
-                    start = StravoTokens.SpaceLg,
-                    end = StravoTokens.SpaceLg,
-                ),
-            )
-        }
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
@@ -147,6 +140,7 @@ fun HomeScreen(
         StravoCard(
             modifier = Modifier.fillMaxWidth(),
             onClick = { onEvent(HomeEvent.ModeSelected(nextMode(state))) },
+            padding = StravoTokens.SpaceMd,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -184,41 +178,18 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
 
-        StravoCard(modifier = Modifier.fillMaxWidth()) {
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = StravoTokens.SpaceMd) {
             StravoStatRow(stats = state.stats)
         }
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
-
-        // Журнал ядра: пока туннель не возит трафик, это единственный способ
-        // увидеть, что именно сказало ядро (системный лог чужому uid недоступен).
-        CoreLogCard(
-            title = stringResource(id = R.string.diag_core_log),
-            lines = state.coreLog,
-        )
-        if (state.coreLog.isNotEmpty()) {
-            PencilButton(
-                text = stringResource(
-                    id = if (state.probing) R.string.diag_probe_running else R.string.diag_probe,
-                ),
-                onClick = { onEvent(HomeEvent.ProbeClick) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = StravoTokens.SpaceSm),
-                style = PencilButtonStyle.Secondary,
-                leadingIcon = painterResource(id = R.drawable.ic_network),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
         PencilButton(
             text = stringResource(id = R.string.cta_quick_connect),
             subtitle = stringResource(id = R.string.tv_quick_connect_sub),
             onClick = {
                 when (BotLinkLauncher.openQuickConnect(context, state.formFactor)) {
-                    BotLaunchResult.Telegram, BotLaunchResult.Browser ->
-                        onEvent(HomeEvent.NoticeShown(com.stravo.vpn.ui.state.Notice.PAIRING_BACKEND_MISSING))
+                    BotLaunchResult.Telegram, BotLaunchResult.Browser -> Unit
 
                     is BotLaunchResult.ManualCopy -> {
                         BotLinkLauncher.copyToClipboard(context, BotLinks.quickConnectHttps(state.formFactor))
@@ -232,7 +203,7 @@ fun HomeScreen(
             style = PencilButtonStyle.Primary,
             leadingIcon = painterResource(id = R.drawable.ic_quick_connect),
             trailingIcon = painterResource(id = R.drawable.ic_send),
-            iconTint = palette.accent,
+            iconTint = androidx.compose.ui.graphics.Color(0xFFB8DECA),
         )
 
         if (!state.subscription.isActive) {
@@ -245,7 +216,33 @@ fun HomeScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
+        StravoSettingRow(
+            iconRes = R.drawable.ic_network,
+            title = stringResource(R.string.diagnostics_title),
+            onClick = { diagnosticsExpanded = !diagnosticsExpanded },
+            trailing = {
+                Text(if (diagnosticsExpanded) "−" else "+",
+                    style = StravoType.BodyStrong, color = palette.textSecondary)
+            },
+        )
+        if (diagnosticsExpanded) {
+            state.diagnostics?.let { message ->
+                Text(message, style = StravoType.Caption, color = palette.textSecondary,
+                    modifier = Modifier.padding(bottom = StravoTokens.SpaceSm))
+            }
+            CoreLogCard(title = stringResource(R.string.diag_core_log), lines = state.coreLog)
+            if (state.coreLog.isNotEmpty()) {
+                PencilButton(
+                    text = stringResource(if (state.probing) R.string.diag_probe_running else R.string.diag_probe),
+                    onClick = { onEvent(HomeEvent.ProbeClick) },
+                    modifier = Modifier.fillMaxWidth().padding(top = StravoTokens.SpaceSm),
+                    style = PencilButtonStyle.Secondary,
+                    leadingIcon = painterResource(R.drawable.ic_network),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
     }
 }
 
@@ -253,24 +250,23 @@ fun HomeScreen(
 @Composable
 private fun HomeHeader(onOpenSettings: () -> Unit) {
     val palette = LocalStravoPalette.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
     ) {
-        BrandMark(size = 38.dp, withRing = true)
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = StravoTokens.SpaceMd),
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            BrandMark(size = 52.dp, withRing = false)
             Text(
                 text = stringResource(id = R.string.app_name),
-                style = StravoType.Wordmark.copy(fontSize = 20.sp, letterSpacing = 1.2.sp),
+                style = StravoType.Wordmark.copy(fontSize = 27.sp, letterSpacing = 1.1.sp),
                 color = palette.textPrimary,
+                modifier = Modifier.padding(top = 4.dp),
             )
             Text(
                 text = stringResource(id = R.string.tagline),
-                style = StravoType.Tiny.copy(letterSpacing = 2.4.sp),
+                style = StravoType.Tiny.copy(fontSize = 9.sp, letterSpacing = 2.5.sp),
                 color = palette.textSecondary,
             )
         }
@@ -278,6 +274,7 @@ private fun HomeHeader(onOpenSettings: () -> Unit) {
             iconRes = R.drawable.ic_settings,
             label = stringResource(id = R.string.settings_title),
             onClick = onOpenSettings,
+            modifier = Modifier.align(Alignment.TopEnd),
         )
     }
 }
@@ -293,38 +290,35 @@ private fun SummaryCard(
 ) {
     val palette = LocalStravoPalette.current
     StravoCard(
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 78.dp),
         onClick = onClick,
-        padding = StravoTokens.SpaceLg,
+        padding = StravoTokens.SpaceMd,
     ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(palette.panelSoft)
-                .border(1.dp, palette.outline.copy(alpha = 0.28f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(id = iconRes),
-                contentDescription = null,
-                tint = palette.textPrimary,
-                modifier = Modifier.size(18.dp),
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(30.dp).clip(CircleShape)
+                    .background(palette.panelSoft)
+                    .border(1.dp, palette.outline.copy(alpha = 0.28f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(id = iconRes),
+                    contentDescription = null,
+                    tint = palette.textPrimary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = StravoTokens.SpaceSm)) {
+                Text(text = title, style = StravoType.BodyStrong, color = palette.textPrimary)
+                Text(
+                    text = subtitle,
+                    style = StravoType.Caption,
+                    color = palette.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        Text(
-            text = title,
-            style = StravoType.BodyStrong,
-            color = palette.textPrimary,
-            modifier = Modifier.padding(top = StravoTokens.SpaceMd),
-        )
-        Text(
-            text = subtitle,
-            style = StravoType.Caption,
-            color = palette.textSecondary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

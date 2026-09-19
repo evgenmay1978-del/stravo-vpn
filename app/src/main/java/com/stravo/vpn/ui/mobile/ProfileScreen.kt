@@ -1,6 +1,12 @@
 package com.stravo.vpn.ui.mobile
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -50,7 +57,9 @@ fun ProfileScreen(
 ) {
     val palette = LocalStravoPalette.current
     val context = LocalContext.current
-    val notAvailable = stringResource(id = R.string.profile_section_soon)
+    val shareTitle = stringResource(R.string.service_share_title)
+    val shareText = stringResource(R.string.service_share_text, BotLinks.supportHttps())
+    val shareUnavailable = stringResource(R.string.service_share_unavailable)
     // Удаление подписки необратимо для ключей на устройстве — сначала спрашиваем.
     var confirmRemoval by remember { mutableStateOf(false) }
 
@@ -70,12 +79,15 @@ fun ProfileScreen(
 
         StravoCard(modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_crown),
-                    contentDescription = null,
-                    tint = palette.textPrimary,
-                    modifier = Modifier.size(34.dp),
-                )
+                Box(Modifier.size(44.dp).background(Color(0xFFE9D8AD), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_crown),
+                        contentDescription = null,
+                        tint = Color(0xFF725727),
+                        modifier = Modifier.size(25.dp),
+                    )
+                }
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -113,7 +125,7 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
-        Column(modifier = Modifier.fillMaxWidth()) {
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
             StravoSettingRow(
                 iconRes = R.drawable.ic_settings,
                 title = stringResource(id = R.string.profile_manage),
@@ -135,8 +147,8 @@ fun ProfileScreen(
                 PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
                 StravoSettingRow(
                     iconRes = R.drawable.ic_delete,
-                    title = stringResource(id = R.string.profile_remove),
-                    subtitle = stringResource(id = R.string.profile_remove_sub),
+                    title = stringResource(id = R.string.subscription_remove_all),
+                    subtitle = stringResource(id = R.string.subscription_remove_all_hint),
                     onClick = { confirmRemoval = true },
                 )
             }
@@ -144,15 +156,29 @@ fun ProfileScreen(
             StravoSettingRow(
                 iconRes = R.drawable.ic_tv,
                 title = stringResource(id = R.string.profile_connect_tv),
-                subtitle = stringResource(id = R.string.profile_connect_tv_sub),
+                subtitle = stringResource(id = R.string.subscription_tv_quick_connect),
                 onClick = onConnectTv,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_share,
-                title = stringResource(id = R.string.profile_invite),
-                subtitle = notAvailable,
-                onClick = { },
+                title = shareTitle,
+                subtitle = stringResource(R.string.service_share_subtitle),
+                onClick = {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, shareText)
+                    }
+                    try {
+                        context.startActivity(Intent.createChooser(send, shareTitle).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
+                    } catch (_: SecurityException) {
+                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
+                    }
+                },
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
@@ -183,14 +209,14 @@ fun ProfileScreen(
             onDismissRequest = { confirmRemoval = false },
             title = {
                 Text(
-                    text = stringResource(id = R.string.profile_remove_title),
+                    text = stringResource(id = R.string.subscription_remove_all_title),
                     style = StravoType.BodyStrong,
                     color = palette.textPrimary,
                 )
             },
             text = {
                 Text(
-                    text = stringResource(id = R.string.profile_remove_body),
+                    text = stringResource(id = R.string.subscription_remove_all_body),
                     style = StravoType.Caption,
                     color = palette.textSecondary,
                 )

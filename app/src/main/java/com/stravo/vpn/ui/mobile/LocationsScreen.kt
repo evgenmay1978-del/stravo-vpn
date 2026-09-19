@@ -3,6 +3,7 @@ package com.stravo.vpn.ui.mobile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -102,7 +103,10 @@ fun LocationsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(top = StravoTokens.SpaceSm),
+                .padding(top = StravoTokens.SpaceMd)
+                .clip(RoundedCornerShape(StravoTokens.CardRadiusMobile))
+                .background(palette.panel.copy(alpha = 0.92f))
+                .border(0.8.dp, palette.outline.copy(alpha = 0.18f), RoundedCornerShape(StravoTokens.CardRadiusMobile)),
         ) {
             items(items = visible, key = { it.id }) { location ->
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -142,14 +146,15 @@ private fun LocationRow(
     modifier = Modifier
         .fillMaxWidth()
         .clip(shape)
-        .clickable(role = Role.RadioButton, onClick = onClick)
-        .padding(vertical = StravoTokens.SpaceSm, horizontal = StravoTokens.SpaceSm),
+        .background(if (selected) palette.accent.copy(alpha = 0.08f) else androidx.compose.ui.graphics.Color.Transparent)
+        .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+        .padding(vertical = StravoTokens.SpaceMd, horizontal = StravoTokens.SpaceMd),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceMd),
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(32.dp)
                 .clip(CircleShape)
                 .background(palette.panelSoft)
                 .border(1.dp, palette.outline.copy(alpha = 0.25f), CircleShape),
@@ -189,7 +194,7 @@ private fun FilterChip(
     onClick: () -> Unit,
 ) {
     val palette = LocalStravoPalette.current
-    val shape = CircleShape
+    val shape = RoundedCornerShape(10.dp)
     Column(
         modifier = Modifier
             .clip(shape)
