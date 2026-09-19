@@ -113,7 +113,7 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
-        Column(modifier = Modifier.fillMaxWidth()) {
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
             StravoSettingRow(
                 iconRes = R.drawable.ic_settings,
                 title = stringResource(id = R.string.profile_manage),

@@ -12,12 +12,8 @@ fun StravoTheme(
     formFactor: FormFactor,
     content: @Composable () -> Unit,
 ) {
-    // Телефон — всегда бумага: макет STRAVO светлый, системная тёмная тема его не меняет.
-    // TV — всегда графитовая панель.
-    val palette = when (formFactor) {
-        FormFactor.TV -> StravoPalette.Dark
-        FormFactor.PHONE -> StravoPalette.Light
-    }
+    // Оба макета бумажные. Тёмная палитра применяется локально только к рельсу TV.
+    val palette = StravoPalette.Light
     val scheme = if (palette.isDark) {
         darkColorScheme(
             primary = palette.accent,

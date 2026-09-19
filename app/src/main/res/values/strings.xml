@@ -167,4 +167,5 @@
     <string name="settings_core_direct_sub">Трафик туннеля идёт напрямую, без узла</string>
     <string name="diag_probe_running">Проверяем туннель…</string>
     <string name="diag_core_log_hint">Шаги запуска и последние сообщения ядра без адресов и ключей</string>
+    <string name="diagnostics_title">Диагностика подключения</string>
 </resources>

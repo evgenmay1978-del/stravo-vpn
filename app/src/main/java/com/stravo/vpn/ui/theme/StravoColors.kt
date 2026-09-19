@@ -4,16 +4,16 @@ import androidx.compose.ui.graphics.Color
 
 /** Палитра из design_tokens.json: бумага, графит и один функциональный изумрудный акцент. */
 object StravoColors {
-    val Paper = Color(0xFFF2EADB)
-    val PaperLight = Color(0xFFF8F3E9)
-    val PaperDeep = Color(0xFFE4D9C6)
+    val Paper = Color(0xFFF3EFE5)
+    val PaperLight = Color(0xFFFCF9F1)
+    val PaperDeep = Color(0xFFE4DED0)
 
-    val Graphite = Color(0xFF1E2D31)
-    val GraphiteSecondary = Color(0xFF445156)
-    val GraphiteSoft = Color(0xFF7C878A)
+    val Graphite = Color(0xFF26332F)
+    val GraphiteSecondary = Color(0xFF626962)
+    val GraphiteSoft = Color(0xFF989D91)
 
-    val Emerald = Color(0xFF2FBF8F)
-    val EmeraldDeep = Color(0xFF17805D)
+    val Emerald = Color(0xFF246B54)
+    val EmeraldDeep = Color(0xFF174735)
 
     val TvBackground = Color(0xFF121B1D)
     val TvPanel = Color(0xFF1B2628)

@@ -20,6 +20,7 @@ import com.stravo.vpn.BuildConfig
 import com.stravo.vpn.R
 import com.stravo.vpn.core.StravoConfig
 import com.stravo.vpn.ui.components.StravoScreenHeader
+import com.stravo.vpn.ui.components.StravoCard
 import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.components.StravoToggle
 import com.stravo.vpn.ui.state.StravoViewModel
@@ -71,7 +72,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
-        Column(modifier = Modifier.fillMaxWidth()) {
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
             StravoSettingRow(
                 iconRes = R.drawable.ic_settings,
                 title = stringResource(id = R.string.settings_protocol),

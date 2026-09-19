@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -42,6 +43,7 @@ fun BrandMark(
     Box(
         modifier = modifier
             .size(size)
+            .shadow(if (withRing) 2.dp else 0.dp, CircleShape)
             .clip(CircleShape)
             .background(palette.panel)
             .then(if (withRing) Modifier.border(1.dp, palette.outline.copy(alpha = 0.35f), CircleShape) else Modifier),
@@ -49,7 +51,7 @@ fun BrandMark(
         SMarkImage(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(size * 0.10f),
+                .padding(size * 0.035f),
         )
     }
 }
@@ -107,8 +109,9 @@ fun IconAction(
     Box(
         modifier = modifier
             .size(StravoTokens.TouchTargetMin)
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, palette.outline.copy(alpha = 0.28f), RoundedCornerShape(16.dp))
+            .clip(CircleShape)
+            .background(palette.panel.copy(alpha = 0.65f))
+            .border(0.8.dp, palette.outline.copy(alpha = 0.18f), CircleShape)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

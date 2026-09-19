@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -148,7 +149,8 @@ fun TvConnectScreen(
         ) {
             Box(
                 modifier = Modifier
-                    .width(340.dp)
+                    .widthIn(max = 340.dp)
+                    .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(RoundedCornerShape(StravoTokens.CardRadiusTv))
                     .background(StravoColors.PaperLight)

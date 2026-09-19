@@ -40,6 +40,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stravo.vpn.R
 import com.stravo.vpn.core.StravoConfig
@@ -66,71 +67,56 @@ fun TvRoot(
 ) {
     val navigator = rememberSaveable(saver = StravoNavigator.saver()) { StravoNavigator() }
     val state by viewModel.home.collectAsStateWithLifecycle()
-
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
 
-    PaperCanvas(modifier = modifier.fillMaxSize(), showTexture = true) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(StravoTokens.ScreenPaddingTv),
-        ) {
-            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
+        val railWidth = (maxWidth * 0.23f).coerceIn(168.dp, 218.dp)
+        Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalStravoPalette provides com.stravo.vpn.ui.theme.StravoPalette.Dark,
+            ) {
                 TvRail(
                     current = navigator.current,
-                    onSelect = { destination -> navigator.select(destination) },
-                    modifier = Modifier.fillMaxHeight().width(250.dp),
+                    onSelect = { navigator.select(it) },
+                    modifier = Modifier.fillMaxHeight().width(railWidth)
+                        .background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(androidx.compose.ui.graphics.Color(0xFF263C31),
+                                androidx.compose.ui.graphics.Color(0xFF10241B)),
+                        )).padding(horizontal = 16.dp, vertical = 28.dp),
                 )
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    when (navigator.current) {
-                        Destination.HOME -> TvHomeScreen(
-                            state = state,
-                            onNavigate = { destination -> navigator.select(destination) },
-                            onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
-                            onEvent = viewModel::onEvent,
-                        )
-
-                        Destination.LOCATIONS -> TvLocationsScreen(
-                            state = state,
-                            onEvent = viewModel::onEvent,
-                        )
-
-                        Destination.PROFILE -> TvProfileScreen(state = state)
-
-                        Destination.CONNECT_TV -> TvConnectScreen(
-                            viewModel = viewModel,
-                            onDone = { navigator.select(Destination.HOME) },
-                        )
-
-                        Destination.SETTINGS -> TvSettingsScreen(
-                            viewModel = viewModel,
-                            onOpenApps = { navigator.select(Destination.APPS) },
-                        )
-
-                        // Раздельный туннель: тот же экран, что на телефоне — он весь на D-pad.
-                        Destination.APPS -> AppsScreen(
-                            viewModel = viewModel,
-                            onBack = { navigator.select(Destination.SETTINGS) },
-                        )
-
-                        // На TV подписка приходит переносом с телефона: отдельного ввода ссылки нет.
-                        Destination.ADD_SUBSCRIPTION -> TvConnectScreen(
-                            viewModel = viewModel,
-                            onDone = { navigator.select(Destination.HOME) },
-                        )
-
-                        // На TV сканера нет: камера и «Свободный интернет» — только телефон.
-                        Destination.SCANNER -> TvHomeScreen(
-                            state = state,
-                            onNavigate = { destination -> navigator.select(destination) },
-                            onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
-                            onEvent = viewModel::onEvent,
-                        )
+            }
+            PaperCanvas(Modifier.weight(1f).fillMaxHeight()) {
+                Column(Modifier.fillMaxSize().padding(StravoTokens.ScreenPaddingTv)) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        when (navigator.current) {
+                            Destination.HOME -> TvHomeScreen(
+                                state = state,
+                                onNavigate = { navigator.select(it) },
+                                onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
+                                onEvent = viewModel::onEvent,
+                            )
+                            Destination.LOCATIONS -> TvLocationsScreen(state, viewModel::onEvent)
+                            Destination.PROFILE -> TvProfileScreen(state)
+                            Destination.CONNECT_TV, Destination.ADD_SUBSCRIPTION -> TvConnectScreen(
+                                viewModel, onDone = { navigator.select(Destination.HOME) },
+                            )
+                            Destination.SETTINGS -> TvSettingsScreen(
+                                viewModel, onOpenApps = { navigator.select(Destination.APPS) },
+                            )
+                            Destination.APPS -> AppsScreen(
+                                viewModel, onBack = { navigator.select(Destination.SETTINGS) },
+                            )
+                            Destination.SCANNER -> TvHomeScreen(
+                                state = state,
+                                onNavigate = { navigator.select(it) },
+                                onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
+                                onEvent = viewModel::onEvent,
+                            )
+                        }
                     }
+                    TvProtocolStrip(Modifier.padding(top = StravoTokens.SpaceLg))
                 }
             }
-            TvProtocolStrip(modifier = Modifier.padding(top = StravoTokens.SpaceLg))
         }
     }
 }
@@ -144,18 +130,18 @@ private fun TvRail(
     val palette = LocalStravoPalette.current
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(StravoTokens.SpaceSm),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = StravoTokens.SpaceXl),
         ) {
-            BrandMark(size = 44.dp)
+            BrandMark(size = 36.dp, withRing = false)
             Text(
                 text = stringResource(id = R.string.app_name),
-                style = StravoType.BodyStrong,
+                style = StravoType.Wordmark.copy(fontSize = 15.sp, letterSpacing = 0.3.sp),
                 color = palette.textPrimary,
-                modifier = Modifier.padding(start = StravoTokens.SpaceMd),
+                modifier = Modifier.padding(start = StravoTokens.SpaceSm),
             )
         }
         Destination.tvRail.forEach { destination ->
@@ -189,7 +175,7 @@ private fun TvRailItem(
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = StravoTokens.SpaceLg, vertical = StravoTokens.SpaceMd),
+            .padding(horizontal = StravoTokens.SpaceMd, vertical = StravoTokens.SpaceMd),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val tint = if (selected || focused) palette.background else palette.textPrimary
