@@ -53,6 +53,7 @@ fun MobileRoot(
     val state by viewModel.home.collectAsStateWithLifecycle()
     val pairing by viewModel.pairing.collectAsStateWithLifecycle()
     var scanForSubscription by rememberSaveable { mutableStateOf(false) }
+    var showSubscriptions by rememberSaveable { mutableStateOf(false) }
     val palette = LocalStravoPalette.current
 
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
@@ -79,6 +80,7 @@ fun MobileRoot(
                         onOpenLocations = { navigator.select(Destination.LOCATIONS) },
                         onOpenProfile = { navigator.select(Destination.PROFILE) },
                         onOpenSettings = { navigator.select(Destination.SETTINGS) },
+                        onOpenSubscriptions = { showSubscriptions = true },
                     )
 
                     Destination.LOCATIONS -> LocationsScreen(
@@ -95,6 +97,7 @@ fun MobileRoot(
                             navigator.push(Destination.ADD_SUBSCRIPTION)
                         },
                         onRemoveSubscription = { viewModel.onEvent(HomeEvent.SubscriptionRemoved) },
+                        onManageSubscriptions = { showSubscriptions = true },
                         onBack = { navigator.back() },
                     )
 
@@ -164,6 +167,22 @@ fun MobileRoot(
                 onSelect = { destination -> navigator.select(destination) },
             )
         }
+    }
+    if (showSubscriptions) {
+        SubscriptionPicker(
+            state = state,
+            onRefresh = viewModel::refreshSubscriptions,
+            onSelect = { mode ->
+                viewModel.onEvent(HomeEvent.ModeSelected(mode))
+                showSubscriptions = false
+            },
+            onAdd = {
+                showSubscriptions = false
+                viewModel.clearImportState()
+                navigator.push(Destination.ADD_SUBSCRIPTION)
+            },
+            onDismiss = { showSubscriptions = false },
+        )
     }
 }
 

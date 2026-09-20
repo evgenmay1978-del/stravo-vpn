@@ -1,6 +1,7 @@
 package com.stravo.vpn.data.settings
 
 import android.content.Context
+import com.stravo.vpn.domain.model.NetworkMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +30,7 @@ data class StravoSettings(
      * переключателем сайты открываются, TUN, DNS и маршруты в порядке, а дело в узле.
      */
     val coreDirectMode: Boolean = false,
+    val selectedMode: NetworkMode = NetworkMode.NORMAL_VPN,
 )
 
 /**
@@ -56,6 +58,7 @@ class SettingsRepository(context: Context) {
             .putString(KEY_APP_MODE, next.appMode.name)
             .putString(KEY_APPS, next.apps.joinToString(","))
             .putBoolean(KEY_CORE_DIRECT, next.coreDirectMode)
+            .putString(KEY_SELECTED_MODE, next.selectedMode.name)
             .commit()
     }
 
@@ -76,6 +79,9 @@ class SettingsRepository(context: Context) {
             ?.toSet()
             ?: emptySet(),
         coreDirectMode = prefs.getBoolean(KEY_CORE_DIRECT, false),
+        selectedMode = NetworkMode.entries.firstOrNull {
+            it.name == prefs.getString(KEY_SELECTED_MODE, null)
+        } ?: NetworkMode.NORMAL_VPN,
     )
 
     private companion object {
@@ -89,6 +95,7 @@ class SettingsRepository(context: Context) {
         const val KEY_APP_MODE = "app_mode"
         const val KEY_APPS = "apps"
         const val KEY_CORE_DIRECT = "core_direct"
+        const val KEY_SELECTED_MODE = "selected_network_mode"
     }
 }
 

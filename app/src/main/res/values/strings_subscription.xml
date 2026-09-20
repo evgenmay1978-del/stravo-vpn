@@ -21,4 +21,21 @@
     <string name="subscription_remove_all_hint">Удалить с устройства обычный VPN и CDN</string>
     <string name="subscription_remove_all_title">Удалить все подписки?</string>
     <string name="subscription_remove_all_body">Туннель выключится. Ключи обычного VPN и CDN будут удалены с этого устройства. Подписки и оплаченные пакеты в сервисе сохранятся.</string>
+    <string name="subscription_picker_title">Выбрать подписку</string>
+    <string name="subscription_picker_hint">Выберите добавленную подписку для следующего подключения.</string>
+    <string name="subscription_picker_empty">Подписки пока не добавлены.</string>
+    <string name="subscription_picker_empty_mode">Подписка не добавлена · открыть список</string>
+    <string name="subscription_picker_open">Выбрать другую подписку</string>
+    <string name="subscription_picker_nodes">Серверов: %1$d</string>
+    <string name="subscription_picker_disconnect">При смене подписки текущее VPN-соединение отключится. Новое подключение запускается кнопкой на главной.</string>
+    <string name="subscription_picker_close">Закрыть</string>
+    <string name="subscription_expiry_unknown">Подписка добавлена · срок не указан источником</string>
+    <string name="subscription_refresh_action">Обновить подписки</string>
+    <string name="subscription_refresh_running">Обновление…</string>
+    <string name="subscription_refresh_done">Добавленные подписки обновлены</string>
+    <string name="subscription_refresh_failed">Часть подписок не обновилась. Для них сохранены прежние узлы.</string>
+    <string name="subscription_refresh_no_source">Для вставленного ключа нет ссылки обновления. Добавьте новую ссылку или ключ.</string>
+    <string name="locations_ping_measured">Последний пинг: %1$d мс</string>
+    <string name="locations_ping_unknown">Пинг: —</string>
+    <string name="locations_ping_hint">Пинг измеряется ядром при подключении к конкретному серверу. До измерения показано тире.</string>
 </resources>

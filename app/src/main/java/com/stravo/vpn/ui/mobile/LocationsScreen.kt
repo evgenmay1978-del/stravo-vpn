@@ -113,6 +113,7 @@ fun LocationsScreen(
                     LocationRow(
                         location = location,
                         selected = location.id == state.location.id,
+                        pingMs = state.measuredNodePings[location.id],
                         onClick = { onEvent(HomeEvent.LocationSelected(location.id)) },
                     )
                     PencilDivider(
@@ -126,7 +127,7 @@ fun LocationsScreen(
         }
 
         Text(
-            text = stringResource(id = R.string.locations_footer),
+            text = stringResource(id = R.string.locations_ping_hint),
             style = StravoType.Caption,
             color = palette.textSecondary,
             modifier = Modifier.padding(vertical = StravoTokens.SpaceMd),
@@ -138,6 +139,7 @@ fun LocationsScreen(
 private fun LocationRow(
     location: VpnLocation,
     selected: Boolean,
+    pingMs: Int?,
     onClick: () -> Unit,
 ) {
     val palette = LocalStravoPalette.current
@@ -176,13 +178,20 @@ private fun LocationRow(
                 )
             }
         }
-        if (selected) {
+        Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = stringResource(id = R.string.locations_selected),
+                text = if (pingMs == null) stringResource(R.string.locations_ping_unknown)
+                    else stringResource(R.string.locations_ping_measured, pingMs),
                 style = StravoType.Tiny,
-                color = palette.accent,
-                modifier = Modifier.padding(end = StravoTokens.SpaceLg),
+                color = palette.textSecondary,
             )
+            if (selected) {
+                Text(
+                    text = stringResource(id = R.string.locations_selected),
+                    style = StravoType.Tiny,
+                    color = palette.accent,
+                )
+            }
         }
     }
 }

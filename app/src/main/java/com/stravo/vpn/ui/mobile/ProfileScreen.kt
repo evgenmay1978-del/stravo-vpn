@@ -53,6 +53,7 @@ fun ProfileScreen(
     onConnectTv: () -> Unit,
     onAddSubscription: () -> Unit,
     onRemoveSubscription: () -> Unit,
+    onManageSubscriptions: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -78,7 +79,7 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
-        StravoCard(modifier = Modifier.fillMaxWidth()) {
+        StravoCard(modifier = Modifier.fillMaxWidth(), onClick = onManageSubscriptions) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).background(Color(0xFFE9D8AD), RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center) {
@@ -135,7 +136,7 @@ fun ProfileScreen(
                 } else {
                     stringResource(id = R.string.profile_manage_none)
                 },
-                onClick = onAddSubscription,
+                onClick = onManageSubscriptions,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
@@ -264,6 +265,8 @@ private fun subscriptionSubtitle(state: HomeUiState): String {
     val until = state.subscription.activeUntil
     return if (state.subscription.isActive && until != null) {
         stringResource(id = R.string.profile_valid_until, until)
+    } else if (state.subscription.isActive) {
+        stringResource(id = R.string.subscription_expiry_unknown)
     } else {
         stringResource(id = R.string.profile_connect_hint)
     }

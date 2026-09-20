@@ -37,6 +37,8 @@ data class HomeUiState(
     val subscriptionNodes: List<SubscriptionNode> = emptyList(),
     val mode: NetworkMode = NetworkMode.NORMAL_VPN,
     val stats: VpnStats = VpnStats.Empty,
+    val measuredNodePings: Map<String, Int> = emptyMap(),
+    val subscriptionRefresh: SubscriptionRefreshState = SubscriptionRefreshState.IDLE,
     val notice: Notice? = null,
     val importState: SubscriptionImportState = SubscriptionImportState.Idle,
     /** Одна строка о нештатном прошлом запуске (сбой ядра/приложения). Показывается один раз. */
@@ -108,6 +110,8 @@ enum class Notice {
     SUBSCRIPTION_REMOVED,
     SUBSCRIPTION_REQUIRED,
 }
+
+enum class SubscriptionRefreshState { IDLE, LOADING, UPDATED, FAILED, NO_SOURCE }
 
 /** Все побочные эффекты идут событиями — Compose не дёргает сервисы напрямую. */
 sealed interface HomeEvent {

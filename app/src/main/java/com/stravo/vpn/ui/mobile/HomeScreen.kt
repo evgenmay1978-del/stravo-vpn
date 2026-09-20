@@ -67,6 +67,7 @@ fun HomeScreen(
     onOpenLocations: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSubscriptions: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalStravoPalette.current
@@ -139,7 +140,7 @@ fun HomeScreen(
 
         StravoCard(
             modifier = Modifier.fillMaxWidth(),
-            onClick = { onEvent(HomeEvent.ModeSelected(nextMode(state))) },
+            onClick = onOpenSubscriptions,
             padding = StravoTokens.SpaceMd,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -363,14 +364,7 @@ private fun modeTitle(state: HomeUiState): String = when (state.mode) {
 }
 
 @Composable
-private fun modeSubtitle(state: HomeUiState): String = when (state.mode) {
-    NetworkMode.NORMAL_VPN -> stringResource(id = R.string.card_mode_sub)
-    NetworkMode.FREE_INTERNET -> stringResource(id = R.string.mode_free_internet_sub)
-}
-
-private fun nextMode(state: HomeUiState): NetworkMode {
-    val modes = CapabilityPolicy.availableModes(state.formFactor)
-    if (modes.size <= 1) return NetworkMode.NORMAL_VPN
-    val index = modes.indexOf(state.mode)
-    return modes[(index + 1) % modes.size]
-}
+private fun modeSubtitle(state: HomeUiState): String = stringResource(
+    if (state.availableNodes.isEmpty()) R.string.subscription_picker_empty_mode
+    else R.string.subscription_picker_open,
+)

@@ -19,6 +19,7 @@ import com.stravo.vpn.engine.box.CoreVariant
 import com.stravo.vpn.pairing.PairingState
 import com.stravo.vpn.pairing.PairingStatus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -39,7 +40,11 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val subscriptionMutex = Mutex()
 
-    private val _home = MutableStateFlow(HomeUiState(formFactor = DeviceType.formFactorOf(application)))
+    private val deviceFormFactor = DeviceType.formFactorOf(application)
+    private val _home = MutableStateFlow(HomeUiState(
+        formFactor = deviceFormFactor,
+        mode = CapabilityPolicy.normalizes(container.settings.settings.value.selectedMode, deviceFormFactor),
+    ))
     val home: StateFlow<HomeUiState> = _home.asStateFlow()
 
     private val _pairing = MutableStateFlow(PairingState())
@@ -112,7 +117,16 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         }
         scope.launch {
             container.tunnelStats.stats.collect { stats ->
-                _home.update { it.copy(stats = stats) }
+                _home.update { state ->
+                    val id = state.connectedLocationId
+                    val ping = stats.pingMs
+                    state.copy(
+                        stats = stats,
+                        measuredNodePings = if (state.connection.isActive && id != null && ping != null) {
+                            state.measuredNodePings + (id to ping)
+                        } else state.measuredNodePings,
+                    )
+                }
             }
         }
         scope.launch {
@@ -123,7 +137,10 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         scope.launch {
             container.subscriptions.nodes.collect { nodes ->
                 _home.update { state ->
-                    var next = state.copy(subscriptionNodes = nodes)
+                    var next = state.copy(
+                        subscriptionNodes = nodes,
+                        measuredNodePings = state.measuredNodePings.filterKeys { id -> nodes.any { it.id == id } },
+                    )
                     // A raw CDN key has no ordinary companion URL. Select its real
                     // service instead of reporting that an imported profile is missing.
                     if (nodes.isNotEmpty() && next.availableNodes.isEmpty() &&
@@ -174,11 +191,16 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
      * Ничего не показывает поверх интерфейса: успех и неудача попадают в журнал
      * ядра одной честной строкой, а узлы при неудаче остаются прежними.
      */
-    private suspend fun refreshSubscriptionIfStale() = subscriptionMutex.withLock {
+    private suspend fun refreshSubscriptionIfStale(force: Boolean = false) = subscriptionMutex.withLock {
         val importer = container.subscriptionImporter
-        if (!container.subscriptions.needsRefresh()) return@withLock
+        if (!force && !container.subscriptions.needsRefresh()) return@withLock
+        val sources = importer.sourceUrls
+        if (sources.isEmpty()) {
+            if (force) _home.update { it.copy(subscriptionRefresh = SubscriptionRefreshState.NO_SOURCE) }
+            return@withLock
+        }
         var refreshPending = false
-        for (source in importer.sourceUrls) when (val outcome = importer.refresh(source)) {
+        for (source in sources) when (val outcome = importer.refresh(source)) {
             is ImportOutcome.Success -> {
                 container.subscriptions.applyImport(
                     planName = outcome.planName,
@@ -195,6 +217,30 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         if (refreshPending) container.subscriptions.markRefreshPending()
+        if (force) _home.update {
+            it.copy(subscriptionRefresh = if (refreshPending) SubscriptionRefreshState.FAILED
+                else SubscriptionRefreshState.UPDATED)
+        }
+    }
+
+    fun refreshSubscriptions() {
+        if (_home.value.subscriptionRefresh == SubscriptionRefreshState.LOADING ||
+            _home.value.importState is SubscriptionImportState.Loading) return
+        _home.update { it.copy(subscriptionRefresh = SubscriptionRefreshState.LOADING) }
+        scope.launch {
+            try {
+                refreshSubscriptionIfStale(force = true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _home.update { it.copy(subscriptionRefresh = SubscriptionRefreshState.FAILED) }
+            } finally {
+                _home.update {
+                    if (it.subscriptionRefresh == SubscriptionRefreshState.LOADING)
+                        it.copy(subscriptionRefresh = SubscriptionRefreshState.IDLE) else it
+                }
+            }
+        }
     }
 
     private var _profilesProtocolHint: String = "Авто (рекомендуется)"
@@ -231,6 +277,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                         val connection = _home.value.connection
                         if (connection.isActive || connection.isBusy) container.vpnEngine.disconnect()
                         _home.update { it.copy(mode = mode, location = LocationsCatalog.AUTO) }
+                        container.settings.update { it.copy(selectedMode = mode) }
                     }
                 }
             }
