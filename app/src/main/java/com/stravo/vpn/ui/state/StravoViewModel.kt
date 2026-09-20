@@ -39,6 +39,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     private val container = (application as StravoApplication).container
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val subscriptionMutex = Mutex()
+    private var routingUpdate: Job? = null
 
     private val deviceFormFactor = DeviceType.formFactorOf(application)
     private val _home = MutableStateFlow(HomeUiState(
@@ -53,7 +54,17 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     val settings: StateFlow<StravoSettings> = container.settings.settings
 
     fun updateSettings(transform: (StravoSettings) -> StravoSettings) {
+        val before = settings.value
         container.settings.update(transform)
+        val after = settings.value
+        if (before.appMode != after.appMode || before.apps != after.apps) {
+            routingUpdate?.cancel()
+            routingUpdate = scope.launch {
+                delay(400)
+                val connection = container.vpnEngine.observeState().value.state
+                if (connection.isActive || connection.isBusy) toggleConnection(forceConnect = true)
+            }
+        }
     }
 
     /** Сохраняет журнал ядра файлом в «Загрузки». Возвращает имя файла или null. */
@@ -135,6 +146,11 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         scope.launch {
+            container.subscriptions.subscriptions.collect { plans ->
+                _home.update { it.copy(subscriptionPlans = plans) }
+            }
+        }
+        scope.launch {
             container.subscriptions.nodes.collect { nodes ->
                 _home.update { state ->
                     var next = state.copy(
@@ -203,8 +219,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         for (source in sources) when (val outcome = importer.refresh(source)) {
             is ImportOutcome.Success -> {
                 container.subscriptions.applyImport(
-                    planName = outcome.planName,
-                    activeUntil = outcome.activeUntil,
+                    subscription = outcome.subscription,
                     nodes = outcome.nodes,
                 )
                 container.coreTrace.record("подписка обновлена: узлов " + outcome.nodes.size)
@@ -267,7 +282,10 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
 
             is HomeEvent.LocationSelected -> {
                 val location = _home.value.locations.firstOrNull { it.id == event.locationId } ?: return
+                if (location.id == _home.value.location.id) return
+                val connection = container.vpnEngine.observeState().value.state
                 _home.update { it.copy(location = location) }
+                if (connection.isActive || connection.isBusy) toggleConnection(forceConnect = true)
             }
 
             is HomeEvent.ModeSelected -> {
@@ -350,8 +368,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
                 when (outcome) {
                     is ImportOutcome.Success -> {
                         container.subscriptions.applyImport(
-                            planName = outcome.planName,
-                            activeUntil = outcome.activeUntil,
+                            subscription = outcome.subscription,
                             nodes = outcome.nodes,
                         )
                         _home.update {

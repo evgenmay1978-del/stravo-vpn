@@ -52,12 +52,12 @@ class SingBoxVpnEngine(
     }
 
     override suspend fun disconnect() {
-        StravoVpnService.publish(VpnConnectionSnapshot())
         val intent = Intent(context, StravoVpnService::class.java).setAction(StravoVpnService.ACTION_STOP)
         try {
             context.startService(intent)
         } catch (error: Exception) {
             context.stopService(Intent(context, StravoVpnService::class.java))
+            StravoVpnService.publish(VpnConnectionSnapshot())
         }
     }
 

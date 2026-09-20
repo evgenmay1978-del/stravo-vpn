@@ -30,6 +30,8 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
     private val _subscription = MutableStateFlow(stored.subscription)
     private val _nodes = MutableStateFlow(stored.nodes)
     private val plans = stored.plans.toMutableMap()
+    private val _plans = MutableStateFlow(stored.plans)
+    val subscriptions: StateFlow<Map<SubscriptionService, Subscription>> = _plans.asStateFlow()
 
     /** Версия конвертера, которой собраны сохранённые узлы, и время импорта. */
     private var importVersion: Int = stored.version
@@ -51,17 +53,14 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
     }
 
     /** Результат реального импорта: подписка, дата окончания и узлы. */
-    fun applyImport(planName: String?, activeUntil: String?, nodes: List<SubscriptionNode>) {
+    fun applyImport(subscription: Subscription, nodes: List<SubscriptionNode>) {
         if (nodes.isEmpty()) return
         val services = nodes.map { it.service }.toSet()
         val incomingIds = nodes.map { it.id }.toSet()
         _nodes.value = _nodes.value.filter { it.service !in services && it.id !in incomingIds } + nodes
-        val imported = Subscription(
-            planName = planName?.takeIf { it.isNotBlank() } ?: DEFAULT_PLAN,
-            activeUntil = activeUntil,
-            isActive = nodes.isNotEmpty(),
-        )
+        val imported = subscription.copy(isActive = true)
         services.forEach { plans[it] = imported }
+        _plans.value = plans.toMap()
         _subscription.value = plans[SubscriptionService.ORDINARY]
             ?: plans[SubscriptionService.CDN] ?: imported
         importVersion = CONVERTER_VERSION
@@ -92,6 +91,7 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
         _nodes.value = emptyList()
         _subscription.value = Subscription.None
         plans.clear()
+        _plans.value = emptyMap()
         persist()
     }
 
@@ -108,7 +108,11 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
             .put("plans", JSONObject().apply {
                 plans.forEach { (service, plan) ->
                     put(service.name, JSONObject().put("plan", plan.planName)
-                        .put("until", plan.activeUntil ?: JSONObject.NULL))
+                        .put("until", plan.activeUntil ?: JSONObject.NULL)
+                        .put("description", plan.description ?: JSONObject.NULL)
+                        .put("announcement", plan.announcement ?: JSONObject.NULL)
+                        .put("usedBytes", plan.usedBytes ?: JSONObject.NULL)
+                        .put("totalBytes", plan.totalBytes ?: JSONObject.NULL))
                 }
             })
             .put("version", importVersion)
@@ -129,13 +133,18 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
                 val item = root.optJSONObject("plans")?.optJSONObject(service.name)
                 Subscription(
                     planName = item?.optString("plan")?.takeIf { it.isNotBlank() } ?: plan,
-                    activeUntil = item?.optString("until")?.takeIf { it.isNotBlank() && it != "null" } ?: until,
+                    activeUntil = if (item == null) until else item.optionalText("until"),
                     isActive = true,
+                    description = item?.optionalText("description"),
+                    announcement = item?.optionalText("announcement"),
+                    usedBytes = item?.takeUnless { it.isNull("usedBytes") }?.optLong("usedBytes"),
+                    totalBytes = item?.takeUnless { it.isNull("totalBytes") }?.optLong("totalBytes"),
                 )
             }
             Stored(
                 subscription = if (active) {
-                    Subscription(planName = plan, activeUntil = until, isActive = true)
+                    savedPlans[SubscriptionService.ORDINARY] ?: savedPlans[SubscriptionService.CDN]
+                        ?: Subscription(planName = plan, activeUntil = until, isActive = true)
                 } else {
                     Subscription.None
                 },
@@ -165,6 +174,9 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
         }
         return array
     }
+
+    private fun JSONObject.optionalText(key: String): String? =
+        optString(key).takeIf { it.isNotBlank() && it != "null" }
 
     private fun decodeNodes(array: JSONArray?): List<SubscriptionNode> {
         if (array == null) return emptyList()
@@ -215,7 +227,7 @@ class SubscriptionRepository(context: Context, private val secrets: SecretStore)
          * такого изменения нужно пересобрать из источника, иначе в конфиг годами
          * уходят старые параметры (так CDN-узлы отвечали 405).
          */
-        const val CONVERTER_VERSION = 3
+        const val CONVERTER_VERSION = 4
 
         /** Через сколько обновлять подписку из источника при старте приложения. */
         private const val REFRESH_AFTER_MS = 6 * 60 * 60 * 1000L

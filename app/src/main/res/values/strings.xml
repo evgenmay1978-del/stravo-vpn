@@ -92,7 +92,9 @@
     <string name="apps_mode_only">Только выбранные</string>
     <string name="apps_mode_except">Все, кроме выбранных</string>
     <string name="apps_search">Поиск приложения</string>
-    <string name="apps_show_system">Показывать системные</string>
+    <string name="apps_show_system">Показывать системные приложения</string>
+    <string name="subscription_traffic">Трафик: %1$s / %2$s</string>
+    <string name="subscription_unlimited">без лимита</string>
     <string name="apps_loading">Загружаем приложения…</string>
     <string name="settings_footer">STRAVO VPN · универсальная сборка для телефона и Android TV</string>
 

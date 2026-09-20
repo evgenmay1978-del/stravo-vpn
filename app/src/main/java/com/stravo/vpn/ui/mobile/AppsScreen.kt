@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -75,16 +77,16 @@ fun AppsScreen(
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
-    var showSystem by rememberSaveable { mutableStateOf(false) }
+    val showSystem = settings.showSystemApps
 
     var loaded by remember { mutableStateOf<List<TunnelApp>?>(null) }
     LaunchedEffect(Unit) {
         loaded = withContext(Dispatchers.IO) { loadApps(context) }
     }
     val allApps = loaded.orEmpty()
-    val visible = remember(query, showSystem, allApps) {
+    val visible = remember(query, showSystem, allApps, settings.apps) {
         allApps.filter { app ->
-            (showSystem || !app.system) &&
+            (showSystem || !app.system || app.packageName in settings.apps || query.isNotBlank()) &&
                 (query.isBlank() ||
                     app.label.contains(query, ignoreCase = true) ||
                     app.packageName.contains(query, ignoreCase = true))
@@ -146,15 +148,12 @@ fun AppsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = StravoTokens.SpaceSm)
-                .clickable(role = Role.Checkbox) { showSystem = !showSystem },
+                .toggleable(value = showSystem, role = Role.Checkbox,
+                    onValueChange = { checked -> viewModel.updateSettings { it.copy(showSystemApps = checked) } })
+                .heightIn(min = 48.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(id = if (showSystem) R.drawable.ic_check else R.drawable.ic_chevron),
-                contentDescription = null,
-                tint = if (showSystem) palette.accent else palette.textSecondary,
-                modifier = Modifier.size(16.dp),
-            )
+            CheckMark(checked = showSystem, active = true)
             Text(
                 text = stringResource(id = R.string.apps_show_system),
                 style = StravoType.Caption,
@@ -175,17 +174,14 @@ fun AppsScreen(
                     selected = app.packageName in settings.apps,
                     enabled = settings.appMode != VpnAppMode.ALL,
                     onToggle = {
-                        val mode = if (settings.appMode == VpnAppMode.ALL) {
-                            VpnAppMode.ONLY_SELECTED
-                        } else {
-                            settings.appMode
+                        viewModel.updateSettings { current ->
+                            current.copy(
+                                appMode = if (current.appMode == VpnAppMode.ALL)
+                                    VpnAppMode.ONLY_SELECTED else current.appMode,
+                                apps = if (app.packageName in current.apps)
+                                    current.apps - app.packageName else current.apps + app.packageName,
+                            )
                         }
-                        val apps = if (app.packageName in settings.apps) {
-                            settings.apps - app.packageName
-                        } else {
-                            settings.apps + app.packageName
-                        }
-                        viewModel.updateSettings { it.copy(appMode = mode, apps = apps) }
                     },
                 )
                 PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
@@ -215,7 +211,8 @@ private fun AppRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Checkbox, onClick = onToggle)
+            .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
+            .heightIn(min = 48.dp)
             .padding(vertical = StravoTokens.SpaceSm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -322,6 +319,7 @@ private fun loadApps(context: Context): List<TunnelApp> {
         emptyList<ApplicationInfo>()
     }
     for (info in installed) {
+        if (info.packageName == context.packageName) continue
         val label = try {
             manager.getApplicationLabel(info).toString()
         } catch (error: Exception) {

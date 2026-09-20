@@ -34,6 +34,7 @@ data class HomeUiState(
     val location: VpnLocation = LocationsCatalog.AUTO,
     val profile: VpnProfile? = null,
     val subscription: Subscription = Subscription.None,
+    val subscriptionPlans: Map<SubscriptionService, Subscription> = emptyMap(),
     val subscriptionNodes: List<SubscriptionNode> = emptyList(),
     val mode: NetworkMode = NetworkMode.NORMAL_VPN,
     val stats: VpnStats = VpnStats.Empty,
@@ -49,7 +50,7 @@ data class HomeUiState(
     val probing: Boolean = false,
     /**
      * Локация, которая реально поднята в туннеле. Может не совпадать с выбранной:
-     * смена локации на ходу не перезапускает ядро, и карточка не должна врать.
+     * при переключении ядро ещё закрывает старый TUN и открывает новый.
      */
     val connectedLocationId: String? = null,
 ) {
@@ -60,6 +61,10 @@ data class HomeUiState(
     val modes: List<NetworkMode> get() = CapabilityPolicy.availableModes(formFactor)
 
     val isTv: Boolean get() = formFactor.isTv
+
+    val selectedSubscription: Subscription get() = subscriptionPlans[
+        if (!isTv && mode == NetworkMode.FREE_INTERNET) SubscriptionService.CDN else SubscriptionService.ORDINARY
+    ] ?: Subscription.None
 
     val availableNodes: List<SubscriptionNode> get() = subscriptionNodes.filter {
         CapabilityPolicy.permits(it.service, formFactor) && it.service ==

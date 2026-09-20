@@ -82,12 +82,14 @@ fun SubscriptionPicker(
                         RadioButton(selected = selected, onClick = null, enabled = !state.connection.isBusy)
                         Column(Modifier.weight(1f).padding(start = StravoTokens.SpaceSm)) {
                             Text(
-                                stringResource(if (service == SubscriptionService.CDN)
+                                state.subscriptionPlans[service]?.planName ?: stringResource(if (service == SubscriptionService.CDN)
                                     R.string.subscription_cdn_source else R.string.subscription_ordinary_source),
                                 style = StravoType.BodyStrong,
                                 color = palette.textPrimary,
                             )
                             Text(
+                                stringResource(if (service == SubscriptionService.CDN)
+                                    R.string.subscription_cdn_source else R.string.subscription_ordinary_source) + " · " +
                                 stringResource(R.string.subscription_picker_nodes,
                                     state.subscriptionNodes.count { it.service == service }),
                                 style = StravoType.Caption,

@@ -49,6 +49,7 @@ import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PencilButtonStyle
 import com.stravo.vpn.ui.components.PowerMedallion
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.components.SubscriptionDetails
 import com.stravo.vpn.ui.components.StravoStatRow
 import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.state.HomeEvent
@@ -139,6 +140,7 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
 
+        SubscriptionDetails(state.selectedSubscription)
         StravoCard(
             modifier = Modifier.fillMaxWidth(),
             onClick = onOpenSubscriptions,

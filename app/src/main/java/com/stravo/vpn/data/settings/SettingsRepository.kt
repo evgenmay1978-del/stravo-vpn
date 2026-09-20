@@ -23,6 +23,7 @@ data class StravoSettings(
     /** Раздельный туннель: режим и выбранные пакеты. */
     val appMode: VpnAppMode = VpnAppMode.ALL,
     val apps: Set<String> = emptySet(),
+    val showSystemApps: Boolean = true,
     /**
      * Диагностика: пустить трафик туннеля напрямую, без узла.
      *
@@ -57,6 +58,7 @@ class SettingsRepository(context: Context) {
             .putString(KEY_LANGUAGE, next.language)
             .putString(KEY_APP_MODE, next.appMode.name)
             .putString(KEY_APPS, next.apps.joinToString(","))
+            .putBoolean(KEY_SHOW_SYSTEM, next.showSystemApps)
             .putBoolean(KEY_CORE_DIRECT, next.coreDirectMode)
             .putString(KEY_SELECTED_MODE, next.selectedMode.name)
             .commit()
@@ -79,6 +81,7 @@ class SettingsRepository(context: Context) {
             ?.toSet()
             ?: emptySet(),
         coreDirectMode = prefs.getBoolean(KEY_CORE_DIRECT, false),
+        showSystemApps = prefs.getBoolean(KEY_SHOW_SYSTEM, true),
         selectedMode = NetworkMode.entries.firstOrNull {
             it.name == prefs.getString(KEY_SELECTED_MODE, null)
         } ?: NetworkMode.NORMAL_VPN,
@@ -94,6 +97,7 @@ class SettingsRepository(context: Context) {
         const val KEY_LANGUAGE = "language"
         const val KEY_APP_MODE = "app_mode"
         const val KEY_APPS = "apps"
+        const val KEY_SHOW_SYSTEM = "show_system_apps"
         const val KEY_CORE_DIRECT = "core_direct"
         const val KEY_SELECTED_MODE = "selected_network_mode"
     }

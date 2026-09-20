@@ -37,6 +37,7 @@ import com.stravo.vpn.domain.subscription.SubscriptionService
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.components.SubscriptionDetails
 import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.components.StravoSettingRow
@@ -128,6 +129,7 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
+        SubscriptionDetails(state.selectedSubscription)
         StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
             StravoSettingRow(
                 iconRes = R.drawable.ic_settings,
@@ -254,6 +256,7 @@ fun ProfileScreen(
 
 @Composable
 internal fun subscriptionTitle(state: HomeUiState): String {
+    if (state.selectedSubscription.isActive) return state.selectedSubscription.planName
     val ordinary = state.subscriptionNodes.any { it.service == SubscriptionService.ORDINARY }
     val cdn = state.subscriptionNodes.any { it.service == SubscriptionService.CDN }
     return stringResource(when {
@@ -266,14 +269,19 @@ internal fun subscriptionTitle(state: HomeUiState): String {
 
 @Composable
 private fun subscriptionSubtitle(state: HomeUiState): String {
-    val until = state.subscription.activeUntil
-    return if (state.subscription.isActive && until != null) {
+    val subscription = state.selectedSubscription
+    val until = subscription.activeUntil
+    val validity = if (subscription.isActive && until != null) {
         stringResource(id = R.string.profile_valid_until, until)
-    } else if (state.subscription.isActive) {
+    } else if (subscription.isActive) {
         stringResource(id = R.string.subscription_expiry_unknown)
     } else {
         stringResource(id = R.string.profile_connect_hint)
     }
+    return if (subscription.isActive) stringResource(
+        if (state.mode == com.stravo.vpn.domain.model.NetworkMode.FREE_INTERNET)
+            R.string.subscription_cdn_source else R.string.subscription_ordinary_source,
+    ) + " · " + validity else validity
 }
 
 /** Напоминание о том, что секции подписки ждут серверную часть. */

@@ -1,7 +1,7 @@
 package com.stravo.vpn.data.subscription
 
 import com.stravo.vpn.data.secret.SecretStore
-import com.stravo.vpn.domain.subscription.Base64Codec
+import com.stravo.vpn.domain.model.Subscription
 import com.stravo.vpn.domain.subscription.ParsedLink
 import com.stravo.vpn.domain.subscription.SubscriptionLinkParser
 import com.stravo.vpn.domain.subscription.SubscriptionNode
@@ -15,9 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** Что именно пошло не так при добавлении подписки. Тексты живут в ресурсах, не здесь. */
 enum class ImportError {
@@ -36,8 +33,7 @@ enum class ImportError {
 
 sealed interface ImportOutcome {
     data class Success(
-        val planName: String?,
-        val activeUntil: String?,
+        val subscription: Subscription,
         val nodes: List<SubscriptionNode>,
     ) : ImportOutcome
 
@@ -70,11 +66,11 @@ class SubscriptionImporter(
         if (value.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.EMPTY)
 
         val source = when (val parsed = SubscriptionLinkParser.parse(value)) {
-            is ParsedLink.Node -> Source(listOf(parsed.secretConfig), null, null, null)
+            is ParsedLink.Node -> Source(listOf(parsed.secretConfig), SubscriptionMetadata.read(""), null)
 
             is ParsedLink.SubscriptionUrl -> {
                 val remote = fetch(parsed.url) ?: return@withContext ImportOutcome.Failure(ImportError.NETWORK)
-                Source(linksFrom(remote.body), remote.planName, remote.activeUntil, parsed.url,
+                Source(linksFrom(remote.body), remote.subscription, parsed.url,
                     SubscriptionServiceClassifier.isCdnSource(parsed.url) || remote.isCdn)
             }
 
@@ -82,7 +78,7 @@ class SubscriptionImporter(
                 // Вставили тело подписки целиком: строки, base64 или JSON-конфиг Xray.
                 val lines = linksFrom(value)
                 if (lines.isNotEmpty() && lines.any { SubscriptionLinkParser.parse(it) is ParsedLink.Node }) {
-                    Source(lines, null, null, null)
+                    Source(lines, SubscriptionMetadata.read(value), null)
                 } else {
                     return@withContext ImportOutcome.Failure(
                         error = ImportError.UNKNOWN_LINK,
@@ -130,8 +126,7 @@ class SubscriptionImporter(
         }
 
         ImportOutcome.Success(
-            planName = source.planName,
-            activeUntil = source.activeUntil,
+            subscription = source.subscription,
             nodes = nodes,
         )
     }
@@ -169,42 +164,13 @@ class SubscriptionImporter(
             if (body.length > MAX_BODY_CHARS) return null
             Remote(
                 body = body,
-                planName = planNameOf(opened),
-                activeUntil = expiryOf(opened.getHeaderField(HEADER_USERINFO)),
+                subscription = SubscriptionMetadata.read(body) { opened.getHeaderField(it) },
                 isCdn = SubscriptionServiceClassifier.isCdnSource(opened.url.toString()),
             )
         } catch (error: Exception) {
             null
         } finally {
             connection?.disconnect()
-        }
-    }
-
-    private fun planNameOf(connection: HttpURLConnection): String? {
-        val raw = connection.getHeaderField(HEADER_TITLE)?.trim().orEmpty()
-        if (raw.isEmpty()) return null
-        val value = if (raw.startsWith(BASE64_PREFIX, ignoreCase = true)) {
-            Base64Codec.decodeOrNull(raw.substringAfter(':'))
-        } else {
-            raw
-        }
-        return value?.trim()?.takeIf { it.isNotEmpty() }?.take(PLAN_NAME_LIMIT)
-    }
-
-    private fun expiryOf(header: String?): String? {
-        if (header.isNullOrBlank()) return null
-        val expire = header.split(';')
-            .map { it.trim() }
-            .firstOrNull { it.startsWith(EXPIRE_KEY, ignoreCase = true) }
-            ?.substringAfter('=')
-            ?.trim()
-            ?.toLongOrNull()
-            ?: return null
-        if (expire <= 0L) return null
-        return try {
-            SimpleDateFormat(DATE_PATTERN, Locale.US).format(Date(expire * 1000L))
-        } catch (error: Exception) {
-            null
         }
     }
 
@@ -255,13 +221,12 @@ class SubscriptionImporter(
 
     private class Source(
         val links: List<String>,
-        val planName: String?,
-        val activeUntil: String?,
+        val subscription: Subscription,
         val sourceUrl: String?,
         val isCdn: Boolean = false,
     )
 
-    private class Remote(val body: String, val planName: String?, val activeUntil: String?, val isCdn: Boolean)
+    private class Remote(val body: String, val subscription: Subscription, val isCdn: Boolean)
 
     private companion object {
         /**
@@ -273,13 +238,7 @@ class SubscriptionImporter(
         const val READ_TIMEOUT_MS = 20_000
         const val MAX_BODY_CHARS = 512 * 1024
         const val MAX_NODES = 500
-        const val PLAN_NAME_LIMIT = 48
         const val USER_AGENT = "STRAVO-VPN/1.0 (Android)"
-        const val DATE_PATTERN = "dd.MM.yyyy"
-        const val HEADER_USERINFO = "subscription-userinfo"
-        const val HEADER_TITLE = "profile-title"
-        const val BASE64_PREFIX = "base64:"
-        const val EXPIRE_KEY = "expire="
     }
 }
 
