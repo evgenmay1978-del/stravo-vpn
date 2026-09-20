@@ -6,6 +6,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.stravo.vpn.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -39,7 +43,7 @@ import com.stravo.vpn.ui.theme.StravoColors
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Нативный медальон: гравированный обод, стеклянный диск и подсветка состояния. */
+/** Карандашный медальон: фактурный диск и нативный индикатор состояния. */
 @Composable
 fun PowerMedallion(
     state: ConnectionState,
@@ -84,71 +88,34 @@ fun PowerMedallion(
             Modifier.matchParentSize().clipToBounds(), palette.textPrimary, palette.accent,
             accentAlpha = if (focused) 0.9f else 0.25f, baseAlpha = 0.22f,
         )
+        Image(
+            painterResource(R.drawable.atlas_pencil_medallion), null,
+            Modifier.matchParentSize(), contentScale = ContentScale.Fit,
+        )
         Canvas(Modifier.matchParentSize().clipToBounds()) {
-            val c = center
-            val r = this.size.minDimension * 0.367f
-            drawCircle(
-                Brush.radialGradient(listOf(Color.Black.copy(0.32f), Color.Transparent),
-                    center = c + Offset(0f, r * 0.12f), radius = r * 1.28f),
-                r * 1.28f, c + Offset(0f, r * 0.12f),
-            )
-            drawCircle(
-                Brush.sweepGradient(listOf(
-                    Color(0xFF9A9F90), Color(0xFF253D34), Color(0xFFD9DACE),
-                    Color(0xFF435B4E), Color(0xFF172C25), Color(0xFF9A9F90),
-                ), c), r * 1.09f, c,
-            )
-            drawCircle(Color(0xFF223C31), r * 1.035f, c)
-            drawCircle(mint.copy(alpha = glow * 0.35f), r * 1.02f, c,
-                style = Stroke(r * 0.075f))
-            drawCircle(mint.copy(alpha = glow), r * 1.015f, c,
-                style = Stroke(1.2.dp.toPx()))
-            drawCircle(Color(0xFF0E1B17), r * 0.975f, c)
-            drawCircle(
-                Brush.radialGradient(
-                    listOf(Color(0xFF426354), Color(0xFF1D342B), Color(0xFF101E19)),
-                    center = c + Offset(-r * 0.35f, -r * 0.48f), radius = r * 1.7f,
-                ), r * 0.915f, c,
-            )
-            drawCircle(Color(0xFFCDD5C5).copy(alpha = 0.52f), r * 0.92f, c,
-                style = Stroke(0.7.dp.toPx()))
-            drawCircle(mint.copy(alpha = glow * 0.45f), r * 0.82f, c,
-                style = Stroke(0.6.dp.toPx()))
-            repeat(60) { index ->
-                val angle = Math.toRadians(index * 6.0)
-                val unit = Offset(cos(angle).toFloat(), sin(angle).toFloat())
-                drawLine(
-                    Color(0xFFDFE5D8).copy(alpha = if (index % 5 == 0) 0.55f else 0.22f),
-                    c + unit * (r * 1.055f), c + unit * (r * 1.079f),
-                    strokeWidth = 0.5.dp.toPx(),
-                )
+            val r = this.size.minDimension * 0.39f
+            val glyph = r * 0.38f
+            val c = center + Offset(0f, r * 0.025f)
+            val pigment = if (failed) Color(0xFFE1AD98) else Color(0xFFBCD3A3)
+            // Вторые контуры передают штрих карандаша. Текст и состояние не запечены в картинку.
+            repeat(3) { pass ->
+                val offset = Offset((pass - 1) * 0.65.dp.toPx(), pass * 0.3.dp.toPx())
+                val color = if (pass == 0) Color(0xFF131F16).copy(alpha = 0.6f)
+                    else pigment.copy(alpha = (0.6f + glow * 0.4f) * if (pass == 1) 0.95f else 0.36f)
+                val width = r * if (pass == 0) 0.085f else 0.062f
+                drawArc(color, -52f, 284f, false,
+                    Offset(c.x - glyph, c.y - glyph) + offset, Size(glyph * 2, glyph * 2),
+                    style = Stroke(width, cap = StrokeCap.Square))
+                drawLine(color, center + Offset(0f, -r * 0.49f) + offset,
+                    center + Offset(0f, -r * 0.03f) + offset, width, cap = StrokeCap.Square)
             }
-            drawArc(
-                Color.White.copy(alpha = 0.28f), 210f, 95f, false,
-                Offset(c.x - r * 0.88f, c.y - r * 0.88f),
-                Size(r * 1.76f, r * 1.76f), style = Stroke(0.9.dp.toPx()),
-            )
-            val glyph = r * 0.40f
-            val gc = c + Offset(0f, r * 0.03f)
-            val glyphColor = if (failed) Color(0xFFE6B2A5) else Color(0xFFB8EBD4)
-            for (halo in listOf(true, false)) {
-                val color = if (halo) mint.copy(alpha = glow * 0.16f) else glyphColor
-                val width = r * if (halo) 0.145f else 0.065f
-                drawArc(
-                    color, -52f, 284f, false,
-                    Offset(gc.x - glyph, gc.y - glyph),
-                    Size(glyph * 2f, glyph * 2f), style = Stroke(width, cap = StrokeCap.Round),
-                )
-                drawLine(
-                    color, c + Offset(0f, -r * 0.5f), c + Offset(0f, -r * 0.02f),
-                    strokeWidth = width, cap = StrokeCap.Round,
-                )
-            }
+            if (failed) drawCircle(StravoColors.Danger.copy(alpha = 0.85f),
+                r * 1.1f, center, style = Stroke(2.dp.toPx()))
             if (focused) {
-                drawCircle(palette.accent, this.size.minDimension * 0.485f, c,
+                drawCircle(palette.accent, this.size.minDimension * 0.485f, center,
                     style = Stroke(2.dp.toPx()))
-                drawCircle(palette.accent.copy(alpha = 0.45f),
-                    this.size.minDimension * 0.465f, c, style = Stroke(1.dp.toPx()))
+                drawCircle(palette.accent.copy(alpha = 0.45f), this.size.minDimension * 0.465f,
+                    center, style = Stroke(1.dp.toPx()))
             }
         }
     }

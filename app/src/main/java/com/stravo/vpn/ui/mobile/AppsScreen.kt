@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stravo.vpn.R
 import com.stravo.vpn.data.settings.VpnAppMode
 import com.stravo.vpn.ui.components.PencilDivider
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.components.StravoSearchField
 import com.stravo.vpn.ui.state.StravoViewModel
@@ -269,8 +270,8 @@ private fun CheckMark(checked: Boolean, active: Boolean) {
         modifier = Modifier
             .size(26.dp)
             .clip(shape)
-            .background(if (checked) palette.accent.copy(alpha = if (active) 1f else 0.4f) else palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.35f), shape),
+            .pencilSurface(if (checked) palette.accent.copy(alpha = if (active) 1f else 0.4f) else palette.panel,
+                palette.outline, 8.dp, dark = checked),
         contentAlignment = Alignment.Center,
     ) {
         if (checked) {
@@ -296,8 +297,8 @@ private fun ModeChip(
     Box(
         modifier = modifier
             .clip(shape)
-            .background(if (selected) palette.medallion else palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.28f), shape)
+            .pencilSurface(if (selected) palette.medallion else palette.panel, palette.outline,
+                StravoTokens.ButtonRadiusMobile, dark = selected)
             .clickable(role = Role.Tab, onClick = onClick)
             .padding(vertical = StravoTokens.SpaceSm, horizontal = StravoTokens.SpaceSm),
         contentAlignment = Alignment.Center,

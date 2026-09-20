@@ -16,10 +16,10 @@ object StravoType {
     )
 
     val ScreenTitle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 25.sp,
+        lineHeight = 30.sp,
         letterSpacing = (-0.3).sp,
     )
 
@@ -31,15 +31,15 @@ object StravoType {
     )
 
     val StatusLabel = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 2.sp,
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 23.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.sp,
     )
 
     val Body = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
@@ -47,10 +47,10 @@ object StravoType {
     )
 
     val BodyStrong = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
         letterSpacing = 0.sp,
     )
 

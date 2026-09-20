@@ -42,18 +42,16 @@ fun PaperCanvas(
                 contentDescription = null,
                 modifier = Modifier.matchParentSize().clipToBounds(),
                 contentScale = ContentScale.Crop,
-                alpha = if (palette.isDark) 0.05f else 0.22f,
+                alpha = if (palette.isDark) 0.08f else 0.45f,
             )
         }
         if (showContours) {
-            ContourSketch(modifier = Modifier.matchParentSize(), alpha = 0.055f)
             Image(
-                painter = painterResource(R.drawable.graphite_landscape),
+                painter = painterResource(R.drawable.atlas_pencil_background),
                 contentDescription = null,
-                modifier = Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth().height(minOf(maxWidth * 0.48f, maxHeight * 0.55f)),
-                contentScale = ContentScale.FillBounds,
-                alpha = if (palette.isDark) 0.12f else 0.28f,
+                modifier = Modifier.matchParentSize().clipToBounds(),
+                contentScale = ContentScale.Crop,
+                alpha = if (palette.isDark) 0.1f else 0.88f,
             )
         }
         content()

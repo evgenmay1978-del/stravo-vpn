@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
+import com.stravo.vpn.ui.components.pencilSurface
 
 /** Нижняя навигация телефона: Главная, Локации, Профиль, Настройки. */
 @Composable
@@ -40,11 +41,7 @@ fun StravoBottomNav(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(palette.panel.copy(alpha = 0.96f))
-            .drawBehind {
-                drawLine(palette.outline.copy(alpha = 0.18f), Offset.Zero,
-                    Offset(size.width, 0f), 1.dp.toPx())
-            }
+            .pencilSurface(palette.panel.copy(alpha = 0.95f), palette.outline, 22.dp)
             .selectableGroup()
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -63,7 +60,8 @@ fun StravoBottomNav(
                 Box(
                     modifier = Modifier.size(width = 46.dp, height = 29.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (selected) palette.accent.copy(alpha = 0.09f) else androidx.compose.ui.graphics.Color.Transparent),
+                        .then(if (selected) Modifier.pencilSurface(palette.accent.copy(alpha = 0.12f),
+                            palette.accent.copy(alpha = 0.5f), 10.dp) else Modifier),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(

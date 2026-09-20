@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,8 +54,7 @@ fun StravoSearchField(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.28f), shape)
+            .pencilSurface(palette.panel.copy(alpha = 0.9f), palette.outline, StravoTokens.ButtonRadiusMobile)
             .defaultMinSize(minHeight = StravoTokens.TouchTargetMin)
             .padding(horizontal = StravoTokens.SpaceLg),
         verticalAlignment = Alignment.CenterVertically,
@@ -114,8 +113,8 @@ fun StravoToggle(
     ) {
         Box(
             modifier = Modifier.size(trackWidth, trackHeight).clip(CircleShape)
-                .background(if (checked) palette.accent else palette.panelSoft)
-                .border(0.8.dp, palette.outline.copy(alpha = 0.22f), CircleShape),
+                .pencilSurface(if (checked) palette.accent else palette.panelSoft,
+                    palette.outline, 12.dp, dark = checked),
             contentAlignment = Alignment.CenterStart,
         ) {
         Box(
@@ -124,8 +123,7 @@ fun StravoToggle(
                 .padding(start = 3.dp)
                 .size(knob)
                 .clip(CircleShape)
-                .background(palette.panel)
-                .border(0.7.dp, palette.outline.copy(alpha = 0.18f), CircleShape),
+                .pencilSurface(palette.panel, palette.outline, 9.dp),
         )
         }
     }

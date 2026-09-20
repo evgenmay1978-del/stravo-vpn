@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,6 +48,7 @@ import com.stravo.vpn.core.StravoConfig
 import com.stravo.vpn.ui.components.BrandMark
 import com.stravo.vpn.ui.mobile.AppsScreen
 import com.stravo.vpn.ui.components.PaperCanvas
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.navigation.Destination
 import com.stravo.vpn.ui.navigation.StravoNavigator
 import com.stravo.vpn.ui.state.StravoViewModel
@@ -80,10 +81,9 @@ fun TvRoot(
                     current = navigator.current,
                     onSelect = { navigator.select(it) },
                     modifier = Modifier.fillMaxHeight().width(railWidth)
-                        .background(androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(androidx.compose.ui.graphics.Color(0xFF263C31),
-                                androidx.compose.ui.graphics.Color(0xFF10241B)),
-                        )).padding(horizontal = 16.dp, vertical = 28.dp),
+                        .pencilSurface(androidx.compose.ui.graphics.Color(0xFF293C2D),
+                            androidx.compose.ui.graphics.Color(0xFFBBC4A9), 0.dp, dark = true)
+                        .padding(horizontal = 16.dp, vertical = 28.dp),
                 )
             }
             PaperCanvas(Modifier.weight(1f).fillMaxHeight()) {
@@ -171,11 +171,10 @@ private fun TvRailItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (selected || focused) palette.outline.copy(alpha = if (focused) 0.92f else 0.82f) else palette.panel.copy(alpha = 0.55f))
-            .border(
-                width = if (focused) StravoTokens.FocusBorder else 1.dp,
-                color = if (focused) palette.accent else palette.outline.copy(alpha = 0.18f),
-                shape = shape,
+            .pencilSurface(
+                if (selected || focused) palette.outline.copy(alpha = 0.93f) else palette.panel.copy(alpha = 0.55f),
+                if (focused) palette.accent else palette.outline,
+                StravoTokens.ButtonRadiusTv, focused, dark = !selected && !focused,
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Tab, onClick = onClick)

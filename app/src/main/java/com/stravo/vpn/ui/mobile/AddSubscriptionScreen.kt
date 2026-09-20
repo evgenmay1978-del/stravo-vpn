@@ -41,6 +41,7 @@ import com.stravo.vpn.domain.subscription.Unrecognized
 import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PencilButtonStyle
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.state.HomeEvent
 import com.stravo.vpn.ui.state.HomeUiState
@@ -196,6 +197,9 @@ fun AddSubscriptionScreen(
 
     if (confirmRemoval) {
         AlertDialog(
+            modifier = Modifier.pencilSurface(palette.panel, palette.outline, StravoTokens.CardRadiusMobile),
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            shape = RoundedCornerShape(StravoTokens.CardRadiusMobile),
             onDismissRequest = { confirmRemoval = false },
             title = {
                 Text(
@@ -276,8 +280,7 @@ private fun SecretField(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.28f), shape)
+            .pencilSurface(palette.panel.copy(alpha = 0.9f), palette.outline, StravoTokens.CardRadiusMobile)
             .defaultMinSize(minHeight = 96.dp)
             .padding(StravoTokens.SpaceLg),
         contentAlignment = Alignment.TopStart,

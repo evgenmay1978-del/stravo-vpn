@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +37,7 @@ import com.stravo.vpn.domain.subscription.SubscriptionService
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.state.HomeUiState
@@ -81,12 +82,12 @@ fun ProfileScreen(
 
         StravoCard(modifier = Modifier.fillMaxWidth(), onClick = onManageSubscriptions) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).background(Color(0xFFE9D8AD), RoundedCornerShape(12.dp)),
+                Box(Modifier.size(44.dp).pencilSurface(palette.accent.copy(alpha = 0.12f), palette.accent, 12.dp),
                     contentAlignment = Alignment.Center) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_crown),
                         contentDescription = null,
-                        tint = Color(0xFF725727),
+                        tint = palette.accent,
                         modifier = Modifier.size(25.dp),
                     )
                 }
@@ -208,6 +209,9 @@ fun ProfileScreen(
 
     if (confirmRemoval) {
         AlertDialog(
+            modifier = Modifier.pencilSurface(palette.panel, palette.outline, StravoTokens.CardRadiusMobile),
+            containerColor = Color.Transparent,
+            shape = RoundedCornerShape(StravoTokens.CardRadiusMobile),
             onDismissRequest = { confirmRemoval = false },
             title = {
                 Text(

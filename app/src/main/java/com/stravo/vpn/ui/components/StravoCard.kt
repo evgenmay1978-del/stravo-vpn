@@ -56,15 +56,10 @@ fun StravoCard(
     Box(
         modifier = modifier
             .scale(scale)
-            .shadow(if (hasFocus) 10.dp else 3.dp, shape,
-                ambientColor = Color(0xFF4A4435), spotColor = Color(0xFF4A4435))
             .clip(shape)
-            .background(Brush.verticalGradient(listOf(palette.panel, palette.background)))
-            .border(
-                width = if (hasFocus) StravoTokens.FocusBorder else 0.8.dp,
-                color = if (hasFocus) palette.accent else palette.outline.copy(alpha = 0.22f),
-                shape = shape,
-            )
+            .pencilSurface(palette.panel.copy(alpha = 0.88f),
+                if (hasFocus) palette.accent else palette.outline, radius,
+                focused = hasFocus, dark = palette.isDark)
             .then(
                 if (onClick != null) {
                     Modifier.onFocusChanged { keyboardFocused = it.isFocused }.clickable(
@@ -78,11 +73,6 @@ fun StravoCard(
                 },
             ),
     ) {
-        Box(
-            modifier = Modifier.matchParentSize().padding(3.dp)
-                .border(0.6.dp, if (hasFocus) palette.accent.copy(alpha = 0.35f)
-                    else Color.White.copy(alpha = 0.72f), RoundedCornerShape(radius - 3.dp)),
-        )
         Column(modifier = Modifier.padding(padding), content = content)
     }
 }

@@ -40,6 +40,7 @@ import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
 import com.stravo.vpn.ui.components.PencilDivider
+import com.stravo.vpn.ui.components.pencilSurface
 import androidx.compose.foundation.layout.height
 
 /** Выбор локации: фильтр, поиск и список стран из подписки. */
@@ -105,8 +106,7 @@ fun LocationsScreen(
                 .weight(1f)
                 .padding(top = StravoTokens.SpaceMd)
                 .clip(RoundedCornerShape(StravoTokens.CardRadiusMobile))
-                .background(palette.panel.copy(alpha = 0.92f))
-                .border(0.8.dp, palette.outline.copy(alpha = 0.18f), RoundedCornerShape(StravoTokens.CardRadiusMobile)),
+                .pencilSurface(palette.panel.copy(alpha = 0.91f), palette.outline, StravoTokens.CardRadiusMobile),
         ) {
             items(items = visible, key = { it.id }) { location ->
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -207,8 +207,8 @@ private fun FilterChip(
     Column(
         modifier = Modifier
             .clip(shape)
-            .background(if (selected) palette.medallion else palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.25f), shape)
+            .pencilSurface(if (selected) palette.medallion else palette.panel, palette.outline,
+                10.dp, dark = selected)
             .clickable(role = Role.Tab, onClick = onClick)
             .padding(horizontal = StravoTokens.SpaceLg, vertical = StravoTokens.SpaceSm),
     ) {

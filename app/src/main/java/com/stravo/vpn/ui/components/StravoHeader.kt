@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -32,7 +32,7 @@ import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
 
-/** Круглый знак S: используется в шапке и в центре QR. */
+/** Карандашный щит-компас из визуального референса. */
 @Composable
 fun BrandMark(
     modifier: Modifier = Modifier,
@@ -43,12 +43,13 @@ fun BrandMark(
     Box(
         modifier = modifier
             .size(size)
-            .shadow(if (withRing) 2.dp else 0.dp, CircleShape)
-            .clip(CircleShape)
-            .background(palette.panel)
-            .then(if (withRing) Modifier.border(1.dp, palette.outline.copy(alpha = 0.35f), CircleShape) else Modifier),
+            .then(if (withRing) Modifier.pencilSurface(
+                palette.panel.copy(alpha = 0.45f), palette.outline.copy(alpha = 0.3f), size / 2,
+            ) else Modifier),
     ) {
-        SMarkImage(
+        androidx.compose.foundation.Image(
+            painter = painterResource(R.drawable.atlas_pencil_crest),
+            contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(size * 0.035f),
@@ -110,8 +111,7 @@ fun IconAction(
         modifier = modifier
             .size(StravoTokens.TouchTargetMin)
             .clip(CircleShape)
-            .background(palette.panel.copy(alpha = 0.65f))
-            .border(0.8.dp, palette.outline.copy(alpha = 0.18f), CircleShape)
+            .pencilSurface(palette.panel.copy(alpha = 0.75f), palette.outline, 24.dp)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

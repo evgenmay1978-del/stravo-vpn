@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +29,7 @@ import com.stravo.vpn.ui.state.SubscriptionRefreshState
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
+import com.stravo.vpn.ui.components.pencilSurface
 
 /** Выбор только добавленных подписок; сам по себе не запускает VPN. */
 @Composable
@@ -44,8 +46,10 @@ fun SubscriptionPicker(
             state.subscriptionNodes.any { it.service == service }
     }
     AlertDialog(
+        modifier = Modifier.pencilSurface(palette.panel, palette.outline, StravoTokens.CardRadiusMobile),
+        shape = RoundedCornerShape(StravoTokens.CardRadiusMobile),
         onDismissRequest = onDismiss,
-        containerColor = palette.background,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         title = { Text(stringResource(R.string.subscription_picker_title), style = StravoType.BodyStrong) },
         text = {
             Column(

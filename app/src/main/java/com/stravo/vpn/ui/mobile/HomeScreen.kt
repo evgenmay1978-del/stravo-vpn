@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,6 +42,7 @@ import com.stravo.vpn.telegram.BotLaunchResult
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.BrandMark
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.components.CoreLogCard
 import com.stravo.vpn.ui.components.IconAction
 import com.stravo.vpn.ui.components.PencilButton
@@ -251,23 +252,24 @@ fun HomeScreen(
 @Composable
 private fun HomeHeader(onOpenSettings: () -> Unit) {
     val palette = LocalStravoPalette.current
-    Box(
+    Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        BrandMark(size = 54.dp, withRing = false)
         Column(
-            modifier = Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.weight(1f).padding(horizontal = StravoTokens.SpaceSm),
+            horizontalAlignment = Alignment.Start,
         ) {
-            BrandMark(size = 52.dp, withRing = false)
             Text(
                 text = stringResource(id = R.string.app_name),
-                style = StravoType.Wordmark.copy(fontSize = 27.sp, letterSpacing = 1.1.sp),
+                style = StravoType.Wordmark.copy(fontSize = 26.sp, letterSpacing = 0.3.sp),
                 color = palette.textPrimary,
                 modifier = Modifier.padding(top = 4.dp),
             )
             Text(
                 text = stringResource(id = R.string.tagline),
-                style = StravoType.Tiny.copy(fontSize = 9.sp, letterSpacing = 2.5.sp),
+                style = StravoType.Tiny.copy(fontSize = 9.sp, letterSpacing = 1.2.sp),
                 color = palette.textSecondary,
             )
         }
@@ -275,7 +277,6 @@ private fun HomeHeader(onOpenSettings: () -> Unit) {
             iconRes = R.drawable.ic_settings,
             label = stringResource(id = R.string.settings_title),
             onClick = onOpenSettings,
-            modifier = Modifier.align(Alignment.TopEnd),
         )
     }
 }
@@ -298,8 +299,7 @@ private fun SummaryCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier.size(30.dp).clip(CircleShape)
-                    .background(palette.panelSoft)
-                    .border(1.dp, palette.outline.copy(alpha = 0.28f), CircleShape),
+                    .pencilSurface(palette.panelSoft.copy(alpha = 0.75f), palette.outline, 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

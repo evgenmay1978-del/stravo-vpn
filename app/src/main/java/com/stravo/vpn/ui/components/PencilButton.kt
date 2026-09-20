@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -81,17 +81,9 @@ fun PencilButton(
     Row(
         modifier = modifier
             .scale(scale)
-            .shadow(if (style == PencilButtonStyle.Primary) 6.dp else 2.dp, shape)
             .clip(shape)
-            .background(Brush.verticalGradient(
-                if (style == PencilButtonStyle.Primary) listOf(Color(0xFF38574A), Color(0xFF152D23))
-                else listOf(background, if (style == PencilButtonStyle.Secondary) palette.background else palette.accentDeep),
-            ), shape)
-            .border(
-                width = if (hasFocus) StravoTokens.FocusBorder else 1.dp,
-                color = borderColor,
-                shape = shape,
-            )
+            .pencilSurface(background, borderColor, radius, focused = hasFocus,
+                dark = style != PencilButtonStyle.Secondary || palette.isDark)
             .onFocusChanged { keyboardFocused = it.isFocused }
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .defaultMinSize(minHeight = StravoTokens.TouchTargetMin)
