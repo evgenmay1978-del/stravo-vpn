@@ -272,12 +272,12 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
 
             is HomeEvent.ModeSelected -> {
                 val mode = CapabilityPolicy.normalizes(event.mode, _home.value.formFactor)
+                container.settings.update { it.copy(selectedMode = mode) }
                 if (mode != _home.value.mode) {
                     scope.launch {
                         val connection = _home.value.connection
                         if (connection.isActive || connection.isBusy) container.vpnEngine.disconnect()
                         _home.update { it.copy(mode = mode, location = LocationsCatalog.AUTO) }
-                        container.settings.update { it.copy(selectedMode = mode) }
                     }
                 }
             }
