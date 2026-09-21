@@ -390,7 +390,8 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         if (state.selectedSourceId == id && state.location.id == location.id) {
             val actualId = container.vpnEngine.observeState().value.locationId
             val actualSource = container.subscriptions.nodes.value.firstOrNull { it.id == actualId }?.sourceId
-            if (running && actualSource != id) toggleConnection(forceConnect = true)
+            val explicitNodeChanged = location.id != LocationsCatalog.AUTO.id && actualId != location.id
+            if (running && (actualSource != id || explicitNodeChanged)) toggleConnection(forceConnect = true)
             return
         }
         _home.update { candidate.copy(location = location,
