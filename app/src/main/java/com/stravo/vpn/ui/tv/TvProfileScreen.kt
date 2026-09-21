@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -15,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.stravo.vpn.R
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.components.SubscriptionDetails
 import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.state.HomeUiState
 import com.stravo.vpn.ui.theme.LocalStravoPalette
@@ -29,7 +32,7 @@ fun TvProfileScreen(
 ) {
     val palette = LocalStravoPalette.current
     Column(
-        modifier = modifier.fillMaxSize().padding(start = StravoTokens.Space2Xl),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = StravoTokens.Space2Xl),
         verticalArrangement = Arrangement.spacedBy(StravoTokens.SpaceMd),
     ) {
         Text(
@@ -40,17 +43,19 @@ fun TvProfileScreen(
         )
         StravoCard(modifier = Modifier.fillMaxWidth(), radius = StravoTokens.CardRadiusTv) {
             Text(
-                text = if (state.subscription.isActive) state.subscription.planName else stringResource(id = R.string.profile_no_subscription),
+                text = if (state.selectedSubscription.isActive) state.selectedSubscription.planName else stringResource(id = R.string.profile_no_subscription),
                 style = StravoType.BodyStrong,
                 color = palette.textPrimary,
             )
             Text(
-                text = state.subscription.activeUntil?.let { stringResource(id = R.string.profile_valid_until, it) }
-                    ?: stringResource(id = R.string.profile_connect_hint),
+                text = state.selectedSubscription.activeUntil?.let { stringResource(id = R.string.profile_valid_until, it) }
+                    ?: stringResource(id = if (state.selectedSubscription.isActive)
+                        R.string.subscription_expiry_unknown else R.string.profile_connect_hint),
                 style = StravoType.Caption,
                 color = palette.textSecondary,
             )
         }
+        SubscriptionDetails(state.selectedSubscription)
         Spacer(modifier = Modifier.height(StravoTokens.SpaceSm))
         StravoSettingRow(
             iconRes = R.drawable.ic_tv,

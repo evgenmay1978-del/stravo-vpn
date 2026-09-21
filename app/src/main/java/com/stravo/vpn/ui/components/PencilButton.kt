@@ -6,21 +6,28 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -46,41 +53,41 @@ fun PencilButton(
 ) {
     val palette = LocalStravoPalette.current
     val shape = RoundedCornerShape(radius)
+    var keyboardFocused by remember { mutableStateOf(false) }
+    val hasFocus = focused || keyboardFocused
     val background = when (style) {
         PencilButtonStyle.Primary -> palette.medallion
         PencilButtonStyle.Secondary -> palette.panel
         PencilButtonStyle.Accent -> palette.accent
     }
     val contentColor = when (style) {
-        PencilButtonStyle.Primary -> palette.onAccent
+        PencilButtonStyle.Primary -> palette.onMedallion
         PencilButtonStyle.Secondary -> palette.textPrimary
         PencilButtonStyle.Accent -> palette.onAccent
     }
     val borderColor = when (style) {
-        PencilButtonStyle.Primary -> palette.accent.copy(alpha = if (focused) 0.9f else 0.35f)
-        PencilButtonStyle.Secondary -> if (focused) palette.accent else palette.outline.copy(alpha = 0.35f)
+        PencilButtonStyle.Primary -> Color(0xFF7DAB92).copy(alpha = if (hasFocus) 1f else 0.65f)
+        PencilButtonStyle.Secondary -> if (hasFocus) palette.accent else palette.outline.copy(alpha = 0.25f)
         PencilButtonStyle.Accent -> palette.accent
     }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (focused) StravoTokens.FocusScale else 1f,
+        targetValue = if (pressed) 0.98f else if (hasFocus) StravoTokens.FocusScale else 1f,
         animationSpec = tween(durationMillis = 140),
         label = "buttonFocusScale",
     )
-    val interaction = remember { MutableInteractionSource() }
 
     Row(
         modifier = modifier
             .scale(scale)
             .clip(shape)
-            .background(background, shape)
-            .border(
-                width = if (focused) StravoTokens.FocusBorder else 1.dp,
-                color = borderColor,
-                shape = shape,
-            )
+            .pencilSurface(background, borderColor, radius, focused = hasFocus,
+                dark = style != PencilButtonStyle.Secondary || palette.isDark)
+            .onFocusChanged { keyboardFocused = it.isFocused }
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .defaultMinSize(minHeight = StravoTokens.TouchTargetMin)
-            .padding(horizontal = StravoTokens.SpaceXl, vertical = StravoTokens.SpaceMd),
+            .padding(horizontal = StravoTokens.SpaceLg, vertical = StravoTokens.SpaceMd),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -88,12 +95,12 @@ fun PencilButton(
             Icon(
                 painter = leadingIcon,
                 contentDescription = null,
-                tint = iconTint ?: palette.accent,
+                tint = iconTint ?: if (style == PencilButtonStyle.Secondary) palette.accent else Color(0xFFC0E6D3),
                 modifier = Modifier.size(20.dp),
             )
         }
         androidx.compose.foundation.layout.Column(
-            modifier = Modifier.padding(start = if (leadingIcon != null) StravoTokens.SpaceMd else 0.dp),
+            modifier = Modifier.weight(1f).padding(start = if (leadingIcon != null) StravoTokens.SpaceMd else 0.dp),
         ) {
             Text(
                 text = text,

@@ -9,6 +9,8 @@ import com.stravo.vpn.domain.model.ProtocolCatalog
  */
 object StravoConfig {
 
+    const val ACCOUNT_API_BASE: String = "https://wapmixx.ru:8911"
+
     const val BOT_USERNAME: String = "MaestroSecureVPN_bot"
 
     const val START_PARAM_MOBILE: String = "stravo_quick_connect"

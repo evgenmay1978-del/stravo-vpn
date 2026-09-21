@@ -12,7 +12,7 @@ enum class Destination(
     HOME("home", R.string.nav_home, R.drawable.ic_home),
     LOCATIONS("locations", R.string.nav_locations, R.drawable.ic_location),
     PROFILE("profile", R.string.nav_profile, R.drawable.ic_profile),
-    CONNECT_TV("connect_tv", R.string.nav_connect_phone, R.drawable.ic_tv),
+    CONNECT_TV("connect_tv", R.string.subscription_connect_tv, R.drawable.ic_tv),
     SETTINGS("settings", R.string.nav_settings, R.drawable.ic_settings),
     SCANNER("scanner", R.string.scan_title, R.drawable.ic_scan),
     ADD_SUBSCRIPTION("add_subscription", R.string.add_sub_title, R.drawable.ic_crown),

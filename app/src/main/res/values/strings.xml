@@ -6,8 +6,8 @@
 
     <string name="status_disconnected">ГОТОВО К ПОДКЛЮЧЕНИЮ</string>
     <string name="status_connecting">ПОДКЛЮЧЕНИЕ…</string>
-    <string name="status_connected">ЗАЩИЩЕНО</string>
-    <string name="status_connected_sub">СОЕДИНЕНИЕ АКТИВНО</string>
+    <string name="status_connected">VPN ВКЛЮЧЁН</string>
+    <string name="status_connected_sub">СЕРВЕР ОТВЕЧАЕТ ЧЕРЕЗ VPN</string>
     <string name="status_error">НУЖНО ВНИМАНИЕ</string>
 
     <string name="action_back">Назад</string>
@@ -43,6 +43,9 @@
 
     <string name="profile_title">Профиль</string>
     <string name="profile_no_subscription">Подписка не подключена</string>
+    <string name="subscription_ordinary_source">Обычная VPN-подписка</string>
+    <string name="subscription_cdn_source">CDN-подписка</string>
+    <string name="subscription_two_sources">2 подписки: VPN и CDN</string>
     <string name="profile_active">активна</string>
     <string name="profile_valid_until">Действует до %1$s</string>
     <string name="profile_connect_hint">Подключите подписку через Telegram-бота</string>
@@ -89,7 +92,9 @@
     <string name="apps_mode_only">Только выбранные</string>
     <string name="apps_mode_except">Все, кроме выбранных</string>
     <string name="apps_search">Поиск приложения</string>
-    <string name="apps_show_system">Показывать системные</string>
+    <string name="apps_show_system">Показывать системные приложения</string>
+    <string name="subscription_traffic">Трафик: %1$s / %2$s</string>
+    <string name="subscription_unlimited">без лимита</string>
     <string name="apps_loading">Загружаем приложения…</string>
     <string name="settings_footer">STRAVO VPN · универсальная сборка для телефона и Android TV</string>
 
@@ -167,4 +172,5 @@
     <string name="settings_core_direct_sub">Трафик туннеля идёт напрямую, без узла</string>
     <string name="diag_probe_running">Проверяем туннель…</string>
     <string name="diag_core_log_hint">Шаги запуска и последние сообщения ядра без адресов и ключей</string>
+    <string name="diagnostics_title">Диагностика подключения</string>
 </resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_selected_protocol">Протокол выбранного сервера</string>
+    <string name="settings_no_selected_node">Выберите сервер из подписки</string>
+    <string name="settings_notifications_system">Настроить в Android</string>
+    <string name="settings_notifications_unavailable">Откройте настройки Android → Приложения → STRAVO VPN → Уведомления</string>
+    <string name="settings_network_action">Проверить интернет</string>
+    <string name="settings_network_running">Проверяем интернет…</string>
+    <string name="settings_network_connecting">Дождитесь завершения подключения</string>
+    <string name="settings_network_scope">Доступ в интернет в текущей сети устройства</string>
+</resources>

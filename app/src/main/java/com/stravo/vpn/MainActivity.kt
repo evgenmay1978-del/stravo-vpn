@@ -8,46 +8,118 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.remember
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import com.stravo.vpn.ui.state.SubscriptionImportState
+import androidx.lifecycle.ViewModelProvider
 import com.stravo.vpn.platform.DeviceType
 import com.stravo.vpn.ui.StravoAppRoot
 import com.stravo.vpn.ui.state.StravoViewModel
 import com.stravo.vpn.ui.theme.StravoTheme
 
 class MainActivity : ComponentActivity() {
+    private val stravoViewModel: StravoViewModel by lazy { ViewModelProvider(this)[StravoViewModel::class.java] }
+    private var externalImport by mutableStateOf<String?>(null)
 
     /** Системный диалог разрешения VPN: без него ядро не получит TUN. */
     private val vpnPermission =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            stravoViewModel.onVpnPermissionResult(result.resultCode == RESULT_OK)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        requestVpnPermissionIfNeeded()
+        acceptImportIntent(intent)
         setContent {
+            LaunchedEffect(stravoViewModel) {
+                stravoViewModel.vpnPermissionRequests.collect { requestVpnPermissionIfNeeded() }
+            }
             val formFactor = remember { DeviceType.formFactorOf(this) }
             StravoTheme(formFactor = formFactor) {
-                val viewModel: StravoViewModel = viewModel()
-                StravoAppRoot(viewModel = viewModel, formFactor = formFactor)
+                val state by stravoViewModel.home.collectAsStateWithLifecycle()
+                Box(Modifier.fillMaxSize()) {
+                    StravoAppRoot(viewModel = stravoViewModel, formFactor = formFactor)
+                    if (externalImport == null && !state.restoringBackup) {
+                        com.stravo.vpn.ui.settings.AppUpdateNotice(stravoViewModel.appUpdates,
+                            Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing)
+                                .widthIn(max = 520.dp).padding(16.dp))
+                    }
+                }
+                externalImport?.let { raw ->
+                    val busy = state.importState is SubscriptionImportState.Loading
+                    val done = state.importState is SubscriptionImportState.Done
+                    fun closeImport() { externalImport = null; stravoViewModel.clearImportState() }
+                    AlertDialog(
+                        onDismissRequest = { if (!busy) closeImport() },
+                        title = { Text("Импорт в STRAVO") },
+                        text = { Text(when (val result = state.importState) {
+                            SubscriptionImportState.Loading -> "Добавляем профиль…"
+                            is SubscriptionImportState.Done -> "Профиль добавлен. Узлов: " + result.nodeCount
+                            is SubscriptionImportState.Failed -> com.stravo.vpn.ui.mobile.importErrorText(result)
+                            else -> "Добавить профиль, переданный из другого приложения?"
+                        }) },
+                        confirmButton = { TextButton(enabled = !busy, onClick = {
+                            if (done) closeImport() else stravoViewModel.importSubscription(raw)
+                        }) { Text(if (done) "Готово" else "Добавить") } },
+                        dismissButton = { TextButton(enabled = !busy, onClick = { closeImport() }) { Text("Отмена") } },
+                    )
+                }
             }
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptImportIntent(intent)
+    }
+
+    private fun acceptImportIntent(intent: Intent?) {
+        val payload = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.dataString?.takeIf { intent.data?.scheme == "stravo" }
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+            else -> null
+        }?.trim()?.takeIf { it.isNotEmpty() && it.length <= 512 * 1024 } ?: return
+        if (stravoViewModel.home.value.importState is SubscriptionImportState.Loading) return
+        stravoViewModel.clearImportState()
+        externalImport = payload
+    }
+
     /**
-     * Разрешение спрашиваем один раз при первом запуске. Если пользователь отказал,
-     * ядро честно скажет об этом при попытке подключения — «подключено» не рисуется.
+     * Only after a connection action. Denying once does not prevent a later retry.
      */
     private fun requestVpnPermissionIfNeeded() {
         val consent: Intent? = try {
             VpnService.prepare(this)
         } catch (error: Exception) {
-            null
+            stravoViewModel.onVpnPermissionResult(false)
+            return
         }
-        if (consent == null) return
+        if (consent == null) {
+            stravoViewModel.onVpnPermissionResult(true)
+            return
+        }
         try {
             vpnPermission.launch(consent)
         } catch (error: Exception) {
-            // Диалог недоступен: остаётся честная ошибка от ядра.
+            stravoViewModel.onVpnPermissionResult(false)
         }
     }
 }

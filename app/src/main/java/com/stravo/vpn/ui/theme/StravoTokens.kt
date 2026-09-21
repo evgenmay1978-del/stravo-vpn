@@ -5,18 +5,18 @@ import androidx.compose.ui.unit.dp
 
 /** Размеры из design_tokens.json. */
 object StravoTokens {
-    val CardRadiusMobile: Dp = 28.dp
-    val CardRadiusTv: Dp = 30.dp
-    val ButtonRadiusMobile: Dp = 34.dp
-    val ButtonRadiusTv: Dp = 28.dp
+    val CardRadiusMobile: Dp = 20.dp
+    val CardRadiusTv: Dp = 20.dp
+    val ButtonRadiusMobile: Dp = 28.dp
+    val ButtonRadiusTv: Dp = 24.dp
 
     val ScreenPaddingMobile: Dp = 20.dp
-    val ScreenPaddingTv: Dp = 48.dp
+    val ScreenPaddingTv: Dp = 28.dp
     val ContentMaxWidthMobile: Dp = 640.dp
 
     val TouchTargetMin: Dp = 48.dp
     val FocusBorder: Dp = 3.dp
-    const val FocusScale: Float = 1.05f
+    const val FocusScale: Float = 1.025f
 
     val SpaceXs: Dp = 4.dp
     val SpaceSm: Dp = 8.dp

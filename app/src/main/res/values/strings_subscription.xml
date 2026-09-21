@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subscription_login_tab">Maestro login</string>
+    <string name="subscription_link_tab">Ссылка или ключ</string>
+    <string name="subscription_login_hint">Ваш Maestro login из Telegram-бота</string>
+    <string name="subscription_login_action">Войти по логину</string>
+    <string name="subscription_login_help">Используйте действующий Maestro login из бота. Приложение получает обычную VPN-подписку и учитывает лимит устройств. Ссылка и ключ остаются отдельным способом добавления.</string>
+    <string name="subscription_services_intro">Обычная VPN-подписка и CDN сохраняются отдельно. CDN — отдельные платные гигабайты для телефона при действующей обычной подписке.</string>
+    <string name="subscription_tv_intro">На телевизоре доступен обычный VPN. Войдите по Maestro login или добавьте ссылку обычной подписки.</string>
+    <string name="subscription_tv_cdn_error">Эта подписка содержит только CDN. На TV добавьте обычную VPN-подписку или войдите по Maestro login. Сохранённая подписка не изменена.</string>
+    <string name="subscription_login_error">Логин не найден или введён неверно. Проверьте Maestro login в Telegram-боте.</string>
+    <string name="subscription_device_limit">Достигнут лимит устройств или доступ запрещён. Откройте управление устройствами в боте.</string>
+    <string name="subscription_expired">Подписка закончилась или отключена. Продлите её в Telegram-боте.</string>
+    <string name="subscription_return_home">Перейти к подключению</string>
+    <string name="subscription_connect_tv">Подключить подписку</string>
+    <string name="subscription_tv_quick_connect">Войти по логину или ссылке</string>
+    <string name="subscription_tv_step_2">Откройте «Подключить подписку»</string>
+    <string name="subscription_tv_step_3">Введите Maestro login из Telegram-бота или ссылку обычной подписки</string>
+    <string name="subscription_tv_step_4">Дождитесь добавления узлов, вернитесь на главную и включите VPN</string>
+    <string name="subscription_remove_all">Удалить все подписки</string>
+    <string name="subscription_remove_all_hint">Удалить с устройства обычный VPN и CDN</string>
+    <string name="subscription_remove_all_title">Удалить все подписки?</string>
+    <string name="subscription_remove_all_body">Туннель выключится. Ключи обычного VPN и CDN будут удалены с этого устройства. Подписки и оплаченные пакеты в сервисе сохранятся.</string>
+    <string name="subscription_picker_title">Выбрать подписку</string>
+    <string name="subscription_picker_hint">Выберите добавленную подписку для следующего подключения.</string>
+    <string name="subscription_picker_empty">Подписки пока не добавлены.</string>
+    <string name="subscription_picker_empty_mode">Подписка не добавлена · открыть список</string>
+    <string name="subscription_picker_open">Выбрать другую подписку</string>
+    <string name="subscription_picker_nodes">Серверов: %1$d</string>
+    <string name="subscription_picker_disconnect">При смене подписки текущее VPN-соединение отключится. Новое подключение запускается кнопкой на главной.</string>
+    <string name="subscription_picker_close">Закрыть</string>
+    <string name="subscription_expiry_unknown">Подписка добавлена · срок не указан источником</string>
+    <string name="subscription_refresh_action">Обновить подписки</string>
+    <string name="subscription_refresh_running">Обновление…</string>
+    <string name="subscription_refresh_done">Добавленные подписки обновлены</string>
+    <string name="subscription_refresh_failed">Часть подписок не обновилась. Для них сохранены прежние узлы.</string>
+    <string name="subscription_refresh_no_source">Для вставленного ключа нет ссылки обновления. Добавьте новую ссылку или ключ.</string>
+    <string name="locations_ping_measured">Последний пинг: %1$d мс</string>
+    <string name="locations_ping_unknown">Пинг: —</string>
+    <string name="locations_ping_hint">Пинг измеряется ядром при подключении к конкретному серверу. До измерения показано тире.</string>
+</resources>

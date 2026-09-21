@@ -1,19 +1,24 @@
 package com.stravo.vpn.data.subscription
 
 import com.stravo.vpn.data.secret.SecretStore
-import com.stravo.vpn.domain.subscription.Base64Codec
+import com.stravo.vpn.domain.model.Subscription
 import com.stravo.vpn.domain.subscription.ParsedLink
 import com.stravo.vpn.domain.subscription.SubscriptionLinkParser
 import com.stravo.vpn.domain.subscription.SubscriptionNode
 import com.stravo.vpn.domain.subscription.SubscriptionPayload
 import com.stravo.vpn.domain.subscription.Unrecognized
+import com.stravo.vpn.domain.subscription.SubscriptionService
+import com.stravo.vpn.domain.subscription.SubscriptionServiceClassifier
+import com.stravo.vpn.domain.model.FormFactor
+import com.stravo.vpn.domain.policy.CapabilityPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.net.URI
+import java.security.MessageDigest
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** Что именно пошло не так при добавлении подписки. Тексты живут в ресурсах, не здесь. */
 enum class ImportError {
@@ -24,14 +29,20 @@ enum class ImportError {
     NO_NODES,
     TOO_MANY_NODES,
     SECRET_STORE,
+    TV_CDN_ONLY,
+    LOGIN_REJECTED,
+    DEVICE_LIMIT,
+    SUBSCRIPTION_EXPIRED,
+    UNSUPPORTED_CONFIG,
 }
 
 sealed interface ImportOutcome {
     data class Success(
-        val planName: String?,
-        val activeUntil: String?,
+        val subscription: Subscription,
         val nodes: List<SubscriptionNode>,
-    ) : ImportOutcome
+    ) : ImportOutcome {
+        val sourceIds: Set<String> get() = nodes.map { it.sourceId }.filter { it.isNotBlank() }.toSet()
+    }
 
     /** [reason] и [token] уточняют ошибку: что именно не распознано (обычно схема). */
     data class Failure(
@@ -48,25 +59,40 @@ sealed interface ImportOutcome {
  * Секреты не покидают этот класс: полные конфиги уходят только в [SecretStore],
  * наружу отдаются безопасные карточки узлов.
  */
-class SubscriptionImporter(private val secrets: SecretStore) {
+class SubscriptionImporter(
+    private val secrets: SecretStore,
+    private val formFactor: FormFactor,
+    private val accountAccess: SubscriptionAccountAccess,
+) {
 
-    suspend fun import(raw: String): ImportOutcome = withContext(Dispatchers.IO) {
+    suspend fun import(
+        raw: String,
+        servicesToRefresh: Set<SubscriptionService>? = null,
+        sourceId: String? = null,
+    ): ImportOutcome = withContext(Dispatchers.IO) {
         val value = raw.trim()
         if (value.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.EMPTY)
+        if (value.length > MAX_BODY_CHARS) return@withContext ImportOutcome.Failure(
+            ImportError.UNKNOWN_LINK, Unrecognized.TOO_LONG,
+        )
 
-        val source = when (val parsed = SubscriptionLinkParser.parse(value)) {
-            is ParsedLink.Node -> Source(listOf(parsed.secretConfig), null, null, null)
+        val source = try { when (val parsed = SubscriptionLinkParser.parse(value)) {
+            is ParsedLink.Node -> Source(listOf(parsed.secretConfig), SubscriptionMetadata.read(""), null)
 
             is ParsedLink.SubscriptionUrl -> {
+                if (formFactor.isTv && SubscriptionServiceClassifier.isCdnSource(parsed.url)) {
+                    return@withContext ImportOutcome.Failure(ImportError.TV_CDN_ONLY)
+                }
                 val remote = fetch(parsed.url) ?: return@withContext ImportOutcome.Failure(ImportError.NETWORK)
-                Source(linksFrom(remote.body), remote.planName, remote.activeUntil, parsed.url)
+                Source(linksFrom(remote.body), remote.subscription, parsed.url,
+                    SubscriptionServiceClassifier.isCdnSource(parsed.url) || remote.isCdn)
             }
 
             is ParsedLink.Unknown -> {
                 // Вставили тело подписки целиком: строки, base64 или JSON-конфиг Xray.
                 val lines = linksFrom(value)
-                if (lines.size > 1) {
-                    Source(lines, null, null, null)
+                if (lines.isNotEmpty() && lines.any { SubscriptionLinkParser.parse(it) is ParsedLink.Node }) {
+                    Source(lines, SubscriptionMetadata.read(value), null)
                 } else {
                     return@withContext ImportOutcome.Failure(
                         error = ImportError.UNKNOWN_LINK,
@@ -77,35 +103,63 @@ class SubscriptionImporter(private val secrets: SecretStore) {
             }
         }
 
+        } catch (unsupported: UnsupportedPayload) {
+            return@withContext ImportOutcome.Failure(ImportError.UNSUPPORTED_CONFIG, token = unsupported.safeReason)
+        }
+
         if (source.links.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.EMPTY_PAYLOAD)
         if (source.links.size > MAX_NODES) return@withContext ImportOutcome.Failure(ImportError.TOO_MANY_NODES)
         if (!secrets.isAvailable) return@withContext ImportOutcome.Failure(ImportError.SECRET_STORE)
+        if (!SubscriptionSourceSecrets.migrate(secrets, emptySet())) {
+            return@withContext ImportOutcome.Failure(ImportError.SECRET_STORE)
+        }
+        val refreshing = sourceId?.let { SubscriptionSourceSecrets.find(secrets, it) }
+        if (sourceId != null && (refreshing == null || source.sourceUrl == null ||
+                SubscriptionSourceSecrets.urlIdentity(refreshing.url) !=
+                SubscriptionSourceSecrets.urlIdentity(source.sourceUrl))) {
+            return@withContext ImportOutcome.Failure(ImportError.UNKNOWN_LINK)
+        }
 
         val nodes = ArrayList<SubscriptionNode>(source.links.size)
         val configs = LinkedHashMap<String, String>()
+        val localIdentity = source.links.distinct().sorted().joinToString("\n")
+        val sourceIds = mutableMapOf<SubscriptionService, String>()
         for (link in source.links) {
             val parsed = SubscriptionLinkParser.parse(link)
             if (parsed !is ParsedLink.Node) continue
-            if (configs.containsKey(parsed.node.id)) continue
-            configs[parsed.node.id] = parsed.secretConfig
-            nodes.add(parsed.node)
+            val service = if (source.isCdn) SubscriptionService.CDN
+                else SubscriptionServiceClassifier.classify(parsed.secretConfig)
+            if (!CapabilityPolicy.permits(service, formFactor)) continue
+            if (servicesToRefresh != null && service !in servicesToRefresh) continue
+            if (refreshing != null && refreshing.service != service) continue
+            val ownerId = sourceId ?: sourceIds.getOrPut(service) {
+                SubscriptionSourceSecrets.idFor(service, source.sourceUrl, localIdentity)
+            }
+            val nodeId = "$ownerId.${parsed.node.id}"
+            if (configs.containsKey(nodeId)) continue
+            configs[nodeId] = parsed.secretConfig
+            nodes.add(parsed.node.copy(id = nodeId, service = service, sourceId = ownerId))
         }
-        if (nodes.isEmpty()) return@withContext ImportOutcome.Failure(ImportError.NO_NODES)
+        if (nodes.isEmpty()) return@withContext ImportOutcome.Failure(
+            if (formFactor.isTv && source.links.any {
+                source.isCdn || SubscriptionServiceClassifier.classify(it) == SubscriptionService.CDN
+            }) ImportError.TV_CDN_ONLY else ImportError.NO_NODES,
+        )
 
         for ((id, config) in configs) {
             if (!secrets.put(id, config)) return@withContext ImportOutcome.Failure(ImportError.SECRET_STORE)
         }
 
-        // Источник запоминаем только у успешного импорта: по нему подписка обновляется
-        // без повторного ввода ссылки. Панель может менять параметры узлов (например,
-        // метод отправки XHTTP), и сохранённые ссылки без обновления остаются старыми.
-        // Ручной ключ и вставленное тело источником не считаются — иначе автообновление
-        // подменило бы их подпиской.
-        rememberSource(source.sourceUrl)
+        // Manual keys/bodies remain independent local sources, without an inferred refresh URL.
+        val urls = source.sourceUrl?.let { url -> nodes.distinctBy { it.sourceId }.map {
+            SubscriptionSourceSecrets.Entry(it.sourceId, it.service, url)
+        } }.orEmpty()
+        if (urls.isNotEmpty() && !SubscriptionSourceSecrets.put(secrets, urls)) {
+            return@withContext ImportOutcome.Failure(ImportError.SECRET_STORE)
+        }
 
         ImportOutcome.Success(
-            planName = source.planName,
-            activeUntil = source.activeUntil,
+            subscription = source.subscription,
             nodes = nodes,
         )
     }
@@ -116,12 +170,19 @@ class SubscriptionImporter(private val secrets: SecretStore) {
      * последние декодируются в обычные share-ссылки, дальше путь один и тот же.
      */
     private fun linksFrom(body: String): List<String> {
-        if (PanelSubscription.looksLikeJson(body)) {
-            val links = PanelSubscription.toLinks(body)
-            if (links.isNotEmpty()) return links
+        val plain = com.stravo.vpn.domain.subscription.Base64Codec.decodeOrNull(body.trim()) ?: body
+        if (PanelSubscription.looksLikeJson(plain) ||
+            com.stravo.vpn.domain.subscription.WireGuardProfile.looksLikeConf(plain)) {
+            return when (val result = PanelSubscription.convert(plain)) {
+                is PanelSubscription.Conversion.Links -> result.links
+                is PanelSubscription.Conversion.Unsupported -> throw UnsupportedPayload(result.reason)
+                PanelSubscription.Conversion.Broken -> emptyList()
+            }
         }
         return SubscriptionPayload.split(body)
     }
+
+    private class UnsupportedPayload(val safeReason: String) : Exception()
 
     /** Конфиг узла для ядра туннеля. В UI и в логи это значение не попадает. */
     fun configFor(nodeId: String): String? = secrets.get(nodeId)
@@ -129,7 +190,7 @@ class SubscriptionImporter(private val secrets: SecretStore) {
     private fun fetch(url: String): Remote? {
         var connection: HttpURLConnection? = null
         return try {
-            val opened = URL(url).openConnection() as? HttpURLConnection ?: return null
+            val opened = URL(accountAccess.subscriptionUrl(url)).openConnection() as? HttpURLConnection ?: return null
             connection = opened
             opened.connectTimeout = CONNECT_TIMEOUT_MS
             opened.readTimeout = READ_TIMEOUT_MS
@@ -139,12 +200,21 @@ class SubscriptionImporter(private val secrets: SecretStore) {
             opened.setRequestProperty("Accept", "*/*")
             val code = opened.responseCode
             if (code !in 200..299) return null
-            val body = opened.inputStream.bufferedReader().use { it.readText() }
-            if (body.length > MAX_BODY_CHARS) return null
+            val body = opened.inputStream.bufferedReader().use { reader ->
+                val result = StringBuilder()
+                val buffer = CharArray(8192)
+                while (true) {
+                    val count = reader.read(buffer)
+                    if (count < 0) break
+                    if (result.length + count > MAX_BODY_CHARS) return null
+                    result.append(buffer, 0, count)
+                }
+                result.toString()
+            }
             Remote(
                 body = body,
-                planName = planNameOf(opened),
-                activeUntil = expiryOf(opened.getHeaderField(HEADER_USERINFO)),
+                subscription = SubscriptionMetadata.read(body) { opened.getHeaderField(it) },
+                isCdn = SubscriptionServiceClassifier.isCdnSource(opened.url.toString()),
             )
         } catch (error: Exception) {
             null
@@ -153,85 +223,152 @@ class SubscriptionImporter(private val secrets: SecretStore) {
         }
     }
 
-    private fun planNameOf(connection: HttpURLConnection): String? {
-        val raw = connection.getHeaderField(HEADER_TITLE)?.trim().orEmpty()
-        if (raw.isEmpty()) return null
-        val value = if (raw.startsWith(BASE64_PREFIX, ignoreCase = true)) {
-            Base64Codec.decodeOrNull(raw.substringAfter(':'))
-        } else {
-            raw
-        }
-        return value?.trim()?.takeIf { it.isNotEmpty() }?.take(PLAN_NAME_LIMIT)
-    }
-
-    private fun expiryOf(header: String?): String? {
-        if (header.isNullOrBlank()) return null
-        val expire = header.split(';')
-            .map { it.trim() }
-            .firstOrNull { it.startsWith(EXPIRE_KEY, ignoreCase = true) }
-            ?.substringAfter('=')
-            ?.trim()
-            ?.toLongOrNull()
-            ?: return null
-        if (expire <= 0L) return null
-        return try {
-            SimpleDateFormat(DATE_PATTERN, Locale.US).format(Date(expire * 1000L))
-        } catch (error: Exception) {
-            null
-        }
-    }
-
     /** Ссылка подписки, из которой пришли узлы: секрет, живёт только в хранилище. */
-    val sourceUrl: String? get() = secrets.get(SOURCE_ID)
+    val sourceUrls: List<String> get() = SubscriptionSourceSecrets.entries(secrets).orEmpty()
+        .filter { CapabilityPolicy.permits(it.service, formFactor) }.map { it.url }.distinct()
+
+    fun hasSourceUrl(sourceId: String): Boolean = SubscriptionSourceSecrets.find(secrets, sourceId)
+        ?.let { CapabilityPolicy.permits(it.service, formFactor) } == true
+
+    /** Resolve the bearer URL inside the importer; callers only pass a public source id. */
+    suspend fun refreshSource(sourceId: String): ImportOutcome {
+        val entry = SubscriptionSourceSecrets.find(secrets, sourceId)
+            ?: return ImportOutcome.Failure(ImportError.UNKNOWN_LINK)
+        if (!CapabilityPolicy.permits(entry.service, formFactor)) {
+            return ImportOutcome.Failure(if (formFactor.isTv && entry.service == SubscriptionService.CDN)
+                ImportError.TV_CDN_ONLY else ImportError.NO_NODES)
+        }
+        return import(entry.url, setOf(entry.service), sourceId)
+    }
 
     /**
      * Обновление подписки из сохранённого источника — без повторного ввода ссылки.
-     * null означает, что источника нет: подписку вводили ключом или телом целиком.
+     * Каждый сохранённый источник обновляется независимо; ошибка сохраняет текущие узлы.
      */
-    suspend fun refresh(): ImportOutcome? {
-        val url = sourceUrl ?: return null
-        return import(url)
+    suspend fun refresh(url: String): ImportOutcome {
+        val owned = SubscriptionSourceSecrets.entries(secrets).orEmpty().filter {
+            SubscriptionSourceSecrets.urlIdentity(it.url) == SubscriptionSourceSecrets.urlIdentity(url)
+        }.map { it.service }.toSet()
+        return import(url, owned.takeIf { it.isNotEmpty() })
     }
 
     /** Забыть источник: вызывается при удалении подписки. */
-    fun forgetSource() {
-        secrets.remove(SOURCE_ID)
-    }
+    fun forgetSource(): Boolean = SubscriptionSourceSecrets.clear(secrets)
 
-    private fun rememberSource(url: String?) {
-        if (url.isNullOrBlank()) {
-            secrets.remove(SOURCE_ID)
-        } else {
-            secrets.put(SOURCE_ID, url)
-        }
+    fun forgetSource(sourceId: String): Boolean = SubscriptionSourceSecrets.remove(secrets, sourceId)
+
+    fun migrateSource(nodes: List<SubscriptionNode>) {
+        SubscriptionSourceSecrets.migrate(secrets, nodes.map { it.service }.toSet())
     }
 
     private class Source(
         val links: List<String>,
-        val planName: String?,
-        val activeUntil: String?,
+        val subscription: Subscription,
         val sourceUrl: String?,
+        val isCdn: Boolean = false,
     )
 
-    private class Remote(val body: String, val planName: String?, val activeUntil: String?)
+    private class Remote(val body: String, val subscription: Subscription, val isCdn: Boolean)
 
     private companion object {
-        /**
-         * Ключ источника в защищённом хранилище. Идентификаторы узлов — короткие
-         * хеши, поэтому имя с точками не может с ними столкнуться.
-         */
-        const val SOURCE_ID = "stravo.subscription.source"
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 20_000
         const val MAX_BODY_CHARS = 512 * 1024
         const val MAX_NODES = 500
-        const val PLAN_NAME_LIMIT = 48
         const val USER_AGENT = "STRAVO-VPN/1.0 (Android)"
-        const val DATE_PATTERN = "dd.MM.yyyy"
-        const val HEADER_USERINFO = "subscription-userinfo"
-        const val HEADER_TITLE = "profile-title"
-        const val BASE64_PREFIX = "base64:"
-        const val EXPIRE_KEY = "expire="
+    }
+}
+
+/** One encrypted URL catalog, atomically committed by SecretStore; never exposed to UI state. */
+internal object SubscriptionSourceSecrets {
+    private const val LEGACY = "stravo.subscription.source"
+    private const val CATALOG = "stravo.subscription.sources.v2"
+
+    class Entry(val id: String, val service: SubscriptionService, val url: String)
+
+    fun urlIdentity(url: String): String = runCatching {
+        URI(url.trim().substringBefore('#')).normalize().toASCIIString()
+    }.getOrDefault(url.trim().substringBefore('#'))
+
+    fun idFor(service: SubscriptionService, url: String?, localIdentity: String = ""): String {
+        val identity = if (url == null) "local:$localIdentity" else "url:${urlIdentity(url)}"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("${service.name}:$identity".toByteArray(Charsets.UTF_8))
+        return "source." + digest.take(16).joinToString("") { "%02x".format(it.toInt() and 255) }
+    }
+
+    @Synchronized
+    fun entries(secrets: SecretStore): List<Entry>? {
+        if (!secrets.contains(CATALOG)) return legacyEntries(secrets, emptySet())
+        val raw = secrets.get(CATALOG) ?: return null
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).map { index ->
+                val item = array.getJSONObject(index)
+                Entry(item.getString("id"), SubscriptionService.valueOf(item.getString("service")),
+                    item.getString("url"))
+            }
+        }.getOrNull()
+    }
+
+    fun find(secrets: SecretStore, sourceId: String): Entry? = entries(secrets)?.firstOrNull { it.id == sourceId }
+
+    @Synchronized
+    fun migrate(secrets: SecretStore, services: Set<SubscriptionService>): Boolean {
+        if (secrets.contains(CATALOG)) return entries(secrets) != null
+        // Do not replace inaccessible encrypted legacy data with an empty catalog.
+        val keys = listOf(LEGACY) + SubscriptionService.entries.map { "$LEGACY.${it.name}" }
+        if (keys.any { secrets.contains(it) && secrets.get(it) == null }) return false
+        return write(secrets, legacyEntries(secrets, services))
+    }
+
+    @Synchronized
+    fun put(secrets: SecretStore, values: List<Entry>): Boolean {
+        val current = entries(secrets) ?: return false
+        return write(secrets, (current + values).associateBy { it.id }.values.toList())
+    }
+
+    @Synchronized
+    fun remove(secrets: SecretStore, sourceId: String): Boolean {
+        val current = entries(secrets) ?: return false
+        val removed = current.firstOrNull { it.id == sourceId }
+        val remaining = current.filterNot { it.id == sourceId }
+        if (!write(secrets, remaining)) return false
+        if (removed != null) {
+            val legacyKey = "$LEGACY.${removed.service.name}"
+            if (secrets.get(legacyKey) == removed.url) secrets.remove(legacyKey)
+            if (secrets.get(LEGACY) == removed.url && remaining.none { it.url == removed.url }) secrets.remove(LEGACY)
+        }
+        return true
+    }
+
+    @Synchronized
+    fun clear(secrets: SecretStore): Boolean {
+        if (!write(secrets, emptyList())) return false
+        secrets.remove(LEGACY)
+        SubscriptionService.entries.forEach { secrets.remove("$LEGACY.${it.name}") }
+        return true
+    }
+
+    private fun legacyEntries(secrets: SecretStore, services: Set<SubscriptionService>): List<Entry> {
+        val urls = SubscriptionService.entries.mapNotNull { service ->
+            secrets.get("$LEGACY.${service.name}")?.let { service to it }
+        }.toMap().toMutableMap()
+        secrets.get(LEGACY)?.let { old ->
+            val kinds = services.filter { it != SubscriptionService.UNKNOWN }.ifEmpty {
+                listOf(if (SubscriptionServiceClassifier.isCdnSource(old)) SubscriptionService.CDN
+                    else SubscriptionService.ORDINARY)
+            }
+            kinds.forEach { urls.getOrPut(it) { old } }
+        }
+        return urls.map { (service, url) -> Entry(idFor(service, url), service, url) }
+    }
+
+    private fun write(secrets: SecretStore, entries: List<Entry>): Boolean {
+        val array = JSONArray()
+        entries.forEach { array.put(JSONObject().put("id", it.id).put("service", it.service.name).put("url", it.url)) }
+        // Retain legacy ciphertext as a recovery copy. Presence of this catalog (even []) retires it.
+        return secrets.put(CATALOG, array.toString())
     }
 }
 

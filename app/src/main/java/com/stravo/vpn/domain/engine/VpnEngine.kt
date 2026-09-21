@@ -19,7 +19,7 @@ interface VpnEngine {
 
     fun observeState(): StateFlow<VpnConnectionSnapshot>
 
-    suspend fun connect(profile: VpnProfile?, location: VpnLocation)
+    suspend fun connect(profile: VpnProfile?, location: VpnLocation, automatic: Boolean = false)
 
     suspend fun disconnect()
 }

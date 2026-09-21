@@ -19,10 +19,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,6 +41,7 @@ import com.stravo.vpn.domain.subscription.Unrecognized
 import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PencilButtonStyle
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.state.HomeEvent
 import com.stravo.vpn.ui.state.HomeUiState
@@ -60,7 +64,9 @@ fun AddSubscriptionScreen(
 ) {
     val palette = LocalStravoPalette.current
     val context = LocalContext.current
-    var input by rememberSaveable { mutableStateOf("") }
+    var input by remember { mutableStateOf("") }
+    var isLogin by rememberSaveable { mutableStateOf(state.isTv) }
+    var confirmRemoval by remember { mutableStateOf(false) }
     val importState = state.importState
 
     LaunchedEffect(importState) {
@@ -80,7 +86,7 @@ fun AddSubscriptionScreen(
         )
 
         Text(
-            text = stringResource(id = R.string.add_sub_sub),
+            text = stringResource(id = if (state.isTv) R.string.subscription_tv_intro else R.string.subscription_services_intro),
             style = StravoType.Caption,
             color = palette.textSecondary,
             modifier = Modifier.padding(top = StravoTokens.SpaceSm),
@@ -93,10 +99,26 @@ fun AddSubscriptionScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
+        Row(horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceSm)) {
+            listOf(true, false).forEach { loginMode ->
+                PencilButton(
+                    text = stringResource(if (loginMode) R.string.subscription_login_tab else R.string.subscription_link_tab),
+                    onClick = {
+                        isLogin = loginMode
+                        input = ""
+                        onEvent(HomeEvent.SubscriptionImportCleared)
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = if (isLogin == loginMode) PencilButtonStyle.Primary else PencilButtonStyle.Secondary,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
+
         SecretField(
             value = input,
             onValueChange = { input = it },
-            placeholder = stringResource(id = R.string.add_sub_field_hint),
+            placeholder = stringResource(id = if (isLogin) R.string.subscription_login_hint else R.string.add_sub_field_hint),
         )
 
         Row(
@@ -111,7 +133,7 @@ fun AddSubscriptionScreen(
                 modifier = Modifier.weight(1f),
                 style = PencilButtonStyle.Secondary,
             )
-            PencilButton(
+            if (!state.isTv && !isLogin) PencilButton(
                 text = stringResource(id = R.string.add_sub_action_scan),
                 onClick = onScan,
                 modifier = Modifier.weight(1f),
@@ -120,8 +142,10 @@ fun AddSubscriptionScreen(
         }
 
         PencilButton(
-            text = stringResource(id = R.string.add_sub_action_add),
-            onClick = { onEvent(HomeEvent.SubscriptionSubmitted(input)) },
+            text = stringResource(id = if (isLogin) R.string.subscription_login_action else R.string.add_sub_action_add),
+            onClick = {
+                onEvent(if (isLogin) HomeEvent.LoginSubmitted(input) else HomeEvent.SubscriptionSubmitted(input))
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = StravoTokens.SpaceMd),
@@ -137,10 +161,18 @@ fun AddSubscriptionScreen(
             )
         }
 
+        if (state.isTv && importState is SubscriptionImportState.Done) {
+            PencilButton(
+                text = stringResource(R.string.subscription_return_home),
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth().padding(top = StravoTokens.SpaceMd),
+            )
+        }
+
         if (state.subscription.isActive) {
             PencilButton(
-                text = stringResource(id = R.string.add_sub_remove),
-                onClick = { onEvent(HomeEvent.SubscriptionRemoved) },
+                text = stringResource(id = R.string.subscription_remove_all),
+                onClick = { confirmRemoval = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = StravoTokens.SpaceMd),
@@ -155,12 +187,48 @@ fun AddSubscriptionScreen(
             modifier = Modifier.padding(top = StravoTokens.SpaceLg),
         )
         Text(
-            text = stringResource(id = R.string.add_sub_login_note),
+            text = stringResource(id = R.string.subscription_login_help),
             style = StravoType.Tiny,
             color = palette.textSecondary,
             modifier = Modifier.padding(top = StravoTokens.SpaceSm),
         )
         Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
+    }
+
+    if (confirmRemoval) {
+        AlertDialog(
+            modifier = Modifier.pencilSurface(palette.panel, palette.outline, StravoTokens.CardRadiusMobile),
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            shape = RoundedCornerShape(StravoTokens.CardRadiusMobile),
+            onDismissRequest = { confirmRemoval = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.subscription_remove_all_title),
+                    style = StravoType.BodyStrong,
+                    color = palette.textPrimary,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.subscription_remove_all_body),
+                    style = StravoType.Caption,
+                    color = palette.textSecondary,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemoval = false
+                    onEvent(HomeEvent.SubscriptionRemoved)
+                }) {
+                    Text(stringResource(R.string.profile_remove_confirm), color = palette.accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemoval = false }) {
+                    Text(stringResource(R.string.profile_remove_cancel), color = palette.textSecondary)
+                }
+            },
+        )
     }
 }
 
@@ -212,8 +280,7 @@ private fun SecretField(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.28f), shape)
+            .pencilSurface(palette.panel.copy(alpha = 0.9f), palette.outline, StravoTokens.CardRadiusMobile)
             .defaultMinSize(minHeight = 96.dp)
             .padding(StravoTokens.SpaceLg),
         contentAlignment = Alignment.TopStart,
@@ -243,13 +310,18 @@ private fun importMessage(state: SubscriptionImportState): String? = when (state
 
 /** Ошибка объясняет, ЧТО именно не распознано, а не только «не похоже на ссылку». */
 @Composable
-private fun importErrorText(state: SubscriptionImportState.Failed): String = when (state.error) {
+internal fun importErrorText(state: SubscriptionImportState.Failed): String = when (state.error) {
     ImportError.EMPTY -> stringResource(id = R.string.add_sub_error_empty)
     ImportError.NETWORK -> stringResource(id = R.string.add_sub_error_network)
     ImportError.EMPTY_PAYLOAD -> stringResource(id = R.string.add_sub_error_empty_payload)
     ImportError.NO_NODES -> stringResource(id = R.string.add_sub_error_no_nodes)
     ImportError.TOO_MANY_NODES -> stringResource(id = R.string.add_sub_error_too_many)
     ImportError.SECRET_STORE -> stringResource(id = R.string.add_sub_error_secret_store)
+    ImportError.TV_CDN_ONLY -> stringResource(R.string.subscription_tv_cdn_error)
+    ImportError.LOGIN_REJECTED -> stringResource(R.string.subscription_login_error)
+    ImportError.DEVICE_LIMIT -> stringResource(R.string.subscription_device_limit)
+    ImportError.SUBSCRIPTION_EXPIRED -> stringResource(R.string.subscription_expired)
+    ImportError.UNSUPPORTED_CONFIG -> state.token ?: "Конфигурация пока не поддерживается этим ядром"
     ImportError.UNKNOWN_LINK -> when (state.reason) {
         Unrecognized.UNKNOWN_SCHEME ->
             stringResource(id = R.string.add_sub_error_unknown_scheme, state.token.orEmpty())

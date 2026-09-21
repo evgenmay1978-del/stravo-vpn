@@ -23,6 +23,10 @@ import com.stravo.vpn.data.diagnostics.CoreTrace
 import com.stravo.vpn.data.settings.VpnAppMode
 import com.stravo.vpn.domain.engine.VpnConnectionSnapshot
 import com.stravo.vpn.domain.model.ConnectionState
+import com.stravo.vpn.domain.policy.CapabilityPolicy
+import com.stravo.vpn.domain.subscription.SubscriptionService
+import com.stravo.vpn.domain.subscription.SubscriptionServiceClassifier
+import com.stravo.vpn.platform.DeviceType
 import io.nekohasekai.libbox.BridgeOptions
 import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.CommandServer
@@ -50,6 +54,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.net.InetSocketAddress
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 /**
  * Единственный VpnService приложения: поднимает TUN и отдаёт его ядру sing-box (libbox).
@@ -67,13 +74,15 @@ import java.net.InetSocketAddress
 class StravoVpnService : VpnService(), PlatformInterface {
 
     private var commandServer: CommandServer? = null
-    private var serverThread: Thread? = null
+    @Volatile private var latestStartId = 0
     private var defaultMonitor: DefaultInterfaceMonitor? = null
     private var tunDescriptor: android.os.ParcelFileDescriptor? = null
     private var myInterface: String? = null
-    private var currentNodeId: String? = null
     private var failureStep: String? = null
     private var interfaceCount = 0
+    private var healthWorker: ScheduledExecutorService? = null
+    private var automaticSelection = false
+    private var loadedNodeIds: List<String> = emptyList()
 
     @Volatile
     private var foregroundStarted = false
@@ -84,12 +93,37 @@ class StravoVpnService : VpnService(), PlatformInterface {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
         if (intent?.action == ACTION_STOP) {
-            stopTunnel()
-            stopSelf()
+            TunnelSession(this).stop()
+            coreWorker.execute {
+                stopTunnel(clearState = false)
+                if (latestStartId == startId) setState(ConnectionState.Disconnected, null, null)
+                stopSelfResult(startId)
+            }
             return START_NOT_STICKY
         }
-        val nodeId = intent?.getStringExtra(EXTRA_NODE_ID)
+        if ((application as StravoApplication).container.restoringBackup) {
+            coreWorker.execute {
+                stopTunnel(clearState = false)
+                if (latestStartId == startId) setState(ConnectionState.Disconnected, null, null)
+                stopSelfResult(startId)
+            }
+            return START_NOT_STICKY
+        }
+        val session = TunnelSession(this)
+        val resume = intent == null || intent.action == ACTION_RESUME || intent.action == "android.net.VpnService"
+        val systemRequest = intent?.action == "android.net.VpnService" ||
+            (Build.VERSION.SDK_INT >= 29 && isAlwaysOn)
+        if (resume && !session.wanted && !systemRequest) {
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
+        val container = (application as StravoApplication).container
+        val nodeId = if (resume) session.nodeId?.takeIf { id -> container.subscriptions.nodes.value.any { it.id == id } }
+            ?: container.subscriptions.nodes.value.firstOrNull { it.sourceId == session.sourceId }?.id
+            else intent?.getStringExtra(EXTRA_NODE_ID)
+        automaticSelection = if (resume) session.automatic else intent?.getBooleanExtra(EXTRA_AUTOMATIC, false) == true
         val locationId = intent?.getStringExtra(EXTRA_LOCATION_ID) ?: nodeId
         val label = intent?.getStringExtra(EXTRA_LOCATION_LABEL)
         if (nodeId == null) {
@@ -97,22 +131,51 @@ class StravoVpnService : VpnService(), PlatformInterface {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (prepare(this) != null) {
+            session.stop()
+            publishError("Требуется системное разрешение VPN", locationId)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
+        // Intent state follows Android's ordered command delivery, not the sender's timing.
+        session.begin(nodeId, automaticSelection)
         startInForeground()
         trace.record(CoreTrace.STEP_FOREGROUND)
-        if (currentNodeId == nodeId && commandServer != null) return START_NOT_STICKY
-        startTunnel(nodeId, locationId, label)
-        return START_NOT_STICKY
+        coreWorker.execute {
+            if (latestStartId != startId) return@execute
+            try {
+                stopTunnel(clearState = false)
+                if (latestStartId != startId) return@execute
+                setState(ConnectionState.Connecting, locationId, null)
+                startTunnel(nodeId, locationId, label, startId)
+            } catch (error: Throwable) {
+                val reason = error.message?.takeIf { it.isNotBlank() } ?: "Ошибка запуска ядра"
+                failureStep = CoreTrace.errorStep(reason)
+                trace.record(failureStep!!)
+                stopTunnel(clearState = false)
+                if (latestStartId == startId) publishError(reason, locationId)
+                stopSelfResult(startId)
+            }
+        }
+        return if ((application as StravoApplication).container.settings.settings.value.autoReconnect)
+            START_STICKY else START_NOT_STICKY
     }
 
     override fun onRevoke() {
-        stopTunnel()
+        TunnelSession(this).stop()
+        coreWorker.execute { stopTunnel(); stopSelf() }
         super.onRevoke()
     }
 
     override fun onDestroy() {
-        stopTunnel()
-        // Штатная остановка: следующая диагностика не считает её аварией.
-        if (failureStep == null) trace.record(CoreTrace.STEP_IDLE)
+        latestStartId = 0
+        foregroundStarted = false
+        stopForegroundCompat()
+        coreWorker.execute {
+            // Do not overwrite a newer instance's Connecting or the final startup error.
+            stopTunnel(clearState = false)
+            if (failureStep == null) trace.record(CoreTrace.STEP_IDLE)
+        }
         super.onDestroy()
     }
 
@@ -121,42 +184,58 @@ class StravoVpnService : VpnService(), PlatformInterface {
     private val trace: CoreTrace
         get() = (application as StravoApplication).container.coreTrace
 
-    private fun startTunnel(nodeId: String, locationId: String?, label: String?) {
-        currentNodeId = nodeId
+    private fun startTunnel(nodeId: String, locationId: String?, label: String?, startId: Int) {
+        failureStep = null
         val container = (application as StravoApplication).container
         val link = container.subscriptionImporter.configFor(nodeId)
         // Журнал прошлого запуска ядра: он объясняет, почему трафик не пошёл.
         container.coreLogReader.publish()
         if (link == null) {
-            publishError(KEY_MISSING_REASON, locationId)
-            return
+            error(KEY_MISSING_REASON)
+        }
+        val formFactor = DeviceType.formFactorOf(this)
+        val service = container.subscriptions.nodes.value.firstOrNull { it.id == nodeId }?.service
+            ?: SubscriptionService.UNKNOWN
+        if (!CapabilityPolicy.permits(service, formFactor) ||
+            (formFactor.isTv && SubscriptionServiceClassifier.classify(link) == SubscriptionService.CDN)) {
+            error("Этот узел недоступен на устройстве. На TV нужен обычный VPN.")
         }
         val variant = container.coreTuning.variant()
+        trace.record("версия приложения: " + BuildConfig.VERSION_NAME + "; ядро: " + Libbox.version())
         val directMode = container.settings.settings.value.coreDirectMode
+        val settings = container.settings.settings.value
+        NetworkPolicy.validate(settings)?.let { error(it) }
+        val selectedNode = container.subscriptions.nodes.value.firstOrNull { it.id == nodeId }
+            ?: error(NODE_MISSING_REASON)
+        require(container.subscriptions.sources.value.any { it.id == selectedNode.sourceId && it.enabled }) {
+            "Подписка отключена или удалена"
+        }
+        TunnelSession(this).rememberSource(selectedNode.sourceId)
+        val candidates = container.subscriptions.nodes.value.filter {
+            it.sourceId == selectedNode.sourceId && it.service == selectedNode.service &&
+                CapabilityPolicy.permits(it.service, formFactor)
+        }
+        loadedNodeIds = candidates.map { it.id }
         trace.record("конфиг ядра: " + variant.label + (if (directMode) ", прямой режим" else ""))
         val config = when (
-            val built = SingBoxConfigBuilder.build(
-                link = link,
+            val built = SingBoxGroupBuilder.build(
+                nodes = candidates,
+                selectedId = nodeId,
+                automatic = automaticSelection,
+                configFor = container.subscriptionImporter::configFor,
                 variant = variant,
-                directMode = directMode,
+                settings = settings,
                 apiSecret = container.coreApiToken.value,
             )
         ) {
             is CoreConfig.Ready -> built.json
 
             is CoreConfig.Unsupported -> {
-                publishError(
-                    "Транспорт " + built.transport + " не поддерживается ядром этой сборки",
-                    locationId,
-                )
-                trace.record(CoreTrace.STEP_IDLE)
-                return
+                error("Транспорт " + built.transport + " не поддерживается ядром этой сборки")
             }
 
             CoreConfig.Broken -> {
-                publishError(BROKEN_NODE_REASON, locationId)
-                trace.record(CoreTrace.STEP_IDLE)
-                return
+                error(BROKEN_NODE_REASON)
             }
         }
 
@@ -164,78 +243,65 @@ class StravoVpnService : VpnService(), PlatformInterface {
         // with_clash_api, отвергает конфиг с блоком experimental.clash_api целиком —
         // вместе с узлом и TUN. Плитки пинга и скорости такого запуска не стоят.
         val withoutMetrics =
-            (SingBoxConfigBuilder.build(link, variant, directMode, apiSecret = null)
+            (SingBoxGroupBuilder.build(candidates, nodeId, automaticSelection,
+                container.subscriptionImporter::configFor, variant, settings, apiSecret = null)
                 as? CoreConfig.Ready)?.json
 
         // Что именно ушло в ядро — одной строкой без секретов: по ней разбирается
         // отказ узла (например, «405 Method Not Allowed» от CDN). Ту же схему
         // сохраняем как контекст запуска: он переживает вытеснение журнала и попадает
         // в шапку выгружаемого файла.
-        val transport = SingBoxConfigBuilder.describe(config)
+        val transport = SingBoxConfigBuilder.describe(
+            (SingBoxConfigBuilder.build(link, variant, directMode) as? CoreConfig.Ready)?.json ?: config)
         transport?.let { trace.record("транспорт: " + it) }
         trace.recordContext(
-            node = label,
+            node = selectedNode.service.name + " / " + selectedNode.protocolLabel + " / " + selectedNode.transportLabel,
             core = variant.label + if (directMode) " · прямой режим" else "",
             transport = transport,
         )
 
-        setState(ConnectionState.Connecting, locationId, null)
-        serverThread = Thread(
-            { runCore(config, withoutMetrics, locationId) },
-            "stravo-libbox",
-        ).apply { start() }
+        runCore(config, withoutMetrics, locationId, startId)
     }
 
-    private fun runCore(config: String, fallback: String?, locationId: String?) {
+    private fun runCore(config: String, fallback: String?, locationId: String?, startId: Int) {
+        val options = SetupOptions()
+        options.setBasePath(filesDir.absolutePath)
+        options.setWorkingPath(filesDir.absolutePath)
+        options.setTempPath(cacheDir.absolutePath)
+        // debug: без него ядро не зовёт writeDebugMessage и диагностика мертва.
+        options.setDebug(true)
+        options.setLogMaxLines(200L)
+        options.setAppVersion(BuildConfig.VERSION_NAME)
+        options.setFixAndroidStack(true)
+        Libbox.setup(options)
+        trace.record(CoreTrace.STEP_SETUP)
+
+        val server = Libbox.newCommandServer(handler, this)
+        commandServer = server
+        trace.record(CoreTrace.STEP_SERVER)
+        server.start()
+
+        var active = config
         try {
-            val options = SetupOptions()
-            options.setBasePath(filesDir.absolutePath)
-            options.setWorkingPath(filesDir.absolutePath)
-            options.setTempPath(cacheDir.absolutePath)
-            // debug: без него ядро не зовёт writeDebugMessage и диагностика мертва.
-            options.setDebug(true)
-            options.setLogMaxLines(200L)
-            options.setAppVersion(BuildConfig.VERSION_NAME)
-            options.setFixAndroidStack(true)
-            Libbox.setup(options)
-            trace.record(CoreTrace.STEP_SETUP)
-
-            val server = Libbox.newCommandServer(handler, this)
-            commandServer = server
-            trace.record(CoreTrace.STEP_SERVER)
-            server.start()
-
-            var active = config
-            try {
-                checkAndStart(server, active)
-            } catch (error: Throwable) {
-                // Ядро без with_clash_api отвечает «clash api is not included in this
-                // build» и не берёт конфиг целиком: повторяем без локального API,
-                // чтобы туннель поднялся, а метрики честно показывали прочерки.
-                if (fallback == null || fallback == active || !isMetricsUnsupported(error)) {
-                    throw error
-                }
-                active = fallback
-                trace.record(CoreTrace.STEP_NO_METRICS)
-                checkAndStart(server, active)
-            }
-            trace.record(CoreTrace.STEP_STARTED)
-            trace.record(
-                "ядро запущено, интерфейсов отдано: " + interfaceCount +
-                    ", свой интерфейс: " + (myInterface ?: "неизвестен"),
-            )
-            setState(ConnectionState.Connected, locationId, System.currentTimeMillis())
-            // Даём ядру записать первые строки журнала и складываем их в след.
-            Thread.sleep(LOG_SETTLE_MS)
-            (application as StravoApplication).container.coreLogReader.publish("ядро старт")
+            checkAndStart(server, active)
         } catch (error: Throwable) {
-            // В сообщении нет ни конфига, ни ключей: только текст ошибки ядра.
-            val reason = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
-            failureStep = CoreTrace.errorStep(reason)
-            trace.record(failureStep!!)
-            publishError("Ядро не подняло туннель: " + reason, locationId)
-            stopTunnel()
-            stopSelf()
+            // Старое ядро без API метрик: повторяем без него, не меняя узел.
+            if (fallback == null || fallback == active || !isMetricsUnsupported(error)) {
+                throw error
+            }
+            active = fallback
+            trace.record(CoreTrace.STEP_NO_METRICS)
+            checkAndStart(server, active)
+        }
+        trace.record(CoreTrace.STEP_STARTED)
+        trace.record(
+            "ядро запущено, интерфейсов отдано: " + interfaceCount +
+                ", свой интерфейс: " + (myInterface ?: "неизвестен"),
+        )
+        if (latestStartId == startId) {
+            setState(ConnectionState.Checking, locationId, System.currentTimeMillis())
+            startHealthMonitor(startId, locationId)
+            (application as StravoApplication).container.coreLogReader.publish("ядро старт")
         }
     }
 
@@ -259,13 +325,15 @@ class StravoVpnService : VpnService(), PlatformInterface {
         return text.contains("clash api") || text.contains("with_clash_api")
     }
 
-    /** Раздельный туннель из настроек: пустой список — через VPN ходят все приложения. */
+    /** Пустой allowlist не должен незаметно превращаться в VPN для всех приложений. */
     private fun overrideOptions(): OverrideOptions {
         val settings = (application as StravoApplication).container.settings.settings.value
         val options = OverrideOptions()
         options.setAutoRedirect(false)
-        val packages = settings.apps.toList()
-        if (packages.isEmpty()) return options
+        val packages = settings.apps.filterNot { it == packageName }
+        require(settings.appMode != VpnAppMode.ONLY_SELECTED || packages.isNotEmpty()) {
+            "Выберите хотя бы одно приложение для туннеля"
+        }
         when (settings.appMode) {
             VpnAppMode.ONLY_SELECTED -> options.setIncludePackage(StringList(packages))
             VpnAppMode.EXCEPT_SELECTED -> options.setExcludePackage(StringList(packages))
@@ -274,10 +342,11 @@ class StravoVpnService : VpnService(), PlatformInterface {
         return options
     }
 
-    private fun stopTunnel() {
+    private fun stopTunnel(clearState: Boolean = true) {
+        healthWorker?.shutdownNow()
+        healthWorker = null
         val server = commandServer
         commandServer = null
-        currentNodeId = null
         try {
             server?.closeService()
         } catch (_: Throwable) {
@@ -294,17 +363,52 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
         tunDescriptor = null
         myInterface = null
-        setState(ConnectionState.Disconnected, null, null)
-        foregroundStarted = false
-        stopForegroundCompat()
+        if (clearState) setState(ConnectionState.Disconnected, null, null)
     }
 
     private fun setState(state: ConnectionState, locationId: String?, since: Long?) {
         StravoVpnService.publish(
             VpnConnectionSnapshot(state = state, locationId = locationId, connectedSince = since),
         )
-        if (state is ConnectionState.Connected) {
-            updateNotification(getString(R.string.status_connected))
+        updateNotification(getString(when (state) {
+            ConnectionState.Connected -> R.string.status_connected
+            ConnectionState.Checking -> R.string.status_checking
+            ConnectionState.Degraded -> R.string.status_unverified
+            ConnectionState.Connecting -> R.string.status_connecting
+            else -> R.string.status_disconnected
+        }))
+    }
+
+    private fun startHealthMonitor(startId: Int, initialNodeId: String?) {
+        val container = (application as StravoApplication).container
+        val control = CoreControl(container.coreApiToken.value)
+        val since = System.currentTimeMillis()
+        var failures = 0
+        healthWorker = Executors.newSingleThreadScheduledExecutor { Thread(it, "stravo-health") }.apply {
+            scheduleWithFixedDelay({
+                if (latestStartId != startId || !TunnelSession(this@StravoVpnService).wanted) return@scheduleWithFixedDelay
+                val settings = container.settings.settings.value
+                var delay = if (settings.coreDirectMode) null else
+                    control.delay(target = settings.probeUrl, timeoutMs = settings.probeTimeoutMs)
+                failures = if (delay == null) failures + 1 else 0
+                if (failures >= 2 && settings.autoFailover && !automaticSelection && !settings.coreDirectMode) {
+                    for (candidate in loadedNodeIds) {
+                        if (latestStartId != startId || !TunnelSession(this@StravoVpnService).wanted) break
+                        val candidateDelay = control.delay(CoreControl.tag(candidate), settings.probeUrl, settings.probeTimeoutMs)
+                        if (candidateDelay != null && control.select(candidate)) {
+                            delay = candidateDelay
+                            failures = 0
+                            break
+                        }
+                    }
+                }
+                val actualNode = control.selectedNode()?.takeIf { id -> container.subscriptions.nodes.value.any { it.id == id } }
+                    ?: initialNodeId
+                if (latestStartId == startId && TunnelSession(this@StravoVpnService).wanted) {
+                    if (actualNode != null) TunnelSession(this@StravoVpnService).updateNode(actualNode)
+                    setState(if (delay != null) ConnectionState.Connected else ConnectionState.Degraded, actualNode, since)
+                }
+            }, 0, 20, TimeUnit.SECONDS)
         }
     }
 
@@ -321,8 +425,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         }
 
         override fun serviceStop() {
-            stopTunnel()
-            stopSelf()
+            coreWorker.execute { stopTunnel(); stopSelf() }
         }
 
         override fun writeDebugMessage(message: String?) {
@@ -416,12 +519,15 @@ class StravoVpnService : VpnService(), PlatformInterface {
             val include = options.getIncludePackage().toList().filterNot { it == packageName }
             val exclude = options.getExcludePackage().toList()
             if (include.isNotEmpty()) {
+                var allowed = 0
                 for (name in include) {
                     try {
                         builder.addAllowedApplication(name)
-                    } catch (_: Exception) {
+                        allowed++
+                    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
                     }
                 }
+                check(allowed > 0) { "Выбранные приложения больше не установлены" }
             } else {
                 // Своё приложение вне туннеля: подписка и Telegram-ссылки не должны
                 // идти через себя же. Исключение добавляется первым: после allow его уже не принять.
@@ -705,7 +811,7 @@ class StravoVpnService : VpnService(), PlatformInterface {
         foregroundStarted = true
         val notification = buildNotification(getString(R.string.status_connecting))
         if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -734,6 +840,10 @@ class StravoVpnService : VpnService(), PlatformInterface {
             .setOngoing(true)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(R.drawable.ic_power, getString(R.string.action_disconnect_service),
+                PendingIntent.getService(this, 1,
+                    Intent(this, StravoVpnService::class.java).setAction(ACTION_STOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             .build()
     }
 
@@ -919,6 +1029,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
 
     companion object {
         const val ACTION_START = "com.stravo.vpn.action.START"
+        const val ACTION_RESUME = "com.stravo.vpn.action.RESUME"
+        const val EXTRA_AUTOMATIC = "com.stravo.vpn.extra.AUTOMATIC"
         const val ACTION_STOP = "com.stravo.vpn.action.STOP"
         const val EXTRA_NODE_ID = "com.stravo.vpn.extra.NODE_ID"
         const val EXTRA_LOCATION_ID = "com.stravo.vpn.extra.LOCATION_ID"
@@ -931,7 +1043,8 @@ class StravoVpnService : VpnService(), PlatformInterface {
         private const val TUN_PREFIX = "tun"
         private const val FALLBACK_DNS = "1.1.1.1"
         private const val DEFAULT_MTU = 1500
-        private const val LOG_SETTLE_MS = 1200L
+        // Shared across Service instances so destroy/start cannot overlap native cores.
+        private val coreWorker = Executors.newSingleThreadExecutor { Thread(it, "stravo-libbox") }
         private const val REPORT_ATTEMPTS = 8
         private const val REPORT_RETRY_MS = 120L
         private const val CHANNEL_ID = "stravo.vpn.status"

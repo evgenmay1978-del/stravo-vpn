@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,7 +32,6 @@ import com.stravo.vpn.domain.model.ConnectionState
 import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PowerMedallion
 import com.stravo.vpn.ui.components.StravoCard
-import com.stravo.vpn.ui.navigation.Destination
 import com.stravo.vpn.ui.state.HomeUiState
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
@@ -42,8 +41,8 @@ import com.stravo.vpn.ui.theme.StravoType
 @Composable
 fun TvHomeScreen(
     state: HomeUiState,
-    onNavigate: (Destination) -> Unit,
     onOpenConnectPhone: () -> Unit,
+    onOpenServers: () -> Unit,
     modifier: Modifier = Modifier,
     onEvent: (com.stravo.vpn.ui.state.HomeEvent) -> Unit = {},
 ) {
@@ -56,9 +55,9 @@ fun TvHomeScreen(
     }
 
     Row(
-        modifier = modifier.fillMaxSize().padding(start = StravoTokens.Space2Xl),
+        modifier = modifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(StravoTokens.Space2Xl),
+        horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceLg),
     ) {
         Column(
             modifier = Modifier.weight(1.2f),
@@ -68,7 +67,7 @@ fun TvHomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
-                val size = minOf(maxWidth * 0.62f, 360.dp)
+                val size = minOf(maxWidth * 0.94f, 300.dp)
                 PowerMedallion(
                     state = state.connection,
                     size = size,
@@ -80,7 +79,7 @@ fun TvHomeScreen(
             Text(
                 text = connectionLabel(state.connection),
                 style = StravoType.StatusLabel,
-                color = if (state.connection is ConnectionState.Error) palette.accent else palette.textPrimary,
+                color = if (state.connection is ConnectionState.Error) com.stravo.vpn.ui.theme.StravoColors.Danger else palette.textPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = StravoTokens.SpaceLg),
             )
@@ -103,17 +102,17 @@ fun TvHomeScreen(
                 subtitle = listOf(state.location.country, state.location.subtitle)
                     .filter { it.isNotBlank() }
                     .joinToString(" · "),
-                onClick = { onNavigate(Destination.LOCATIONS) },
+                onClick = onOpenServers,
             )
             TvInfoCard(
                 iconRes = R.drawable.ic_profile,
-                title = stringResource(id = R.string.card_profile),
-                subtitle = state.subscription.planName,
-                onClick = { onNavigate(Destination.PROFILE) },
+                title = "Подписка",
+                subtitle = state.selectedSource?.name ?: "Добавить / логин",
+                onClick = onOpenServers,
             )
             PencilButton(
                 text = stringResource(id = R.string.cta_quick_connect),
-                subtitle = stringResource(id = R.string.tv_quick_connect_sub),
+                subtitle = stringResource(id = R.string.subscription_tv_quick_connect),
                 onClick = onOpenConnectPhone,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -121,7 +120,7 @@ fun TvHomeScreen(
                 radius = StravoTokens.ButtonRadiusTv,
                 leadingIcon = painterResource(id = R.drawable.ic_quick_connect),
                 trailingIcon = painterResource(id = R.drawable.ic_send),
-                iconTint = palette.accent,
+                iconTint = androidx.compose.ui.graphics.Color(0xFFB8DECA),
             )
             Spacer(modifier = Modifier.height(StravoTokens.SpaceXs))
         }
@@ -176,5 +175,7 @@ internal fun connectionLabel(connection: ConnectionState): String = when (connec
     ConnectionState.Disconnected -> stringResource(id = R.string.status_disconnected)
     ConnectionState.Connecting -> stringResource(id = R.string.status_connecting)
     ConnectionState.Connected -> stringResource(id = R.string.status_connected)
+    ConnectionState.Checking -> stringResource(id = R.string.status_checking)
+    ConnectionState.Degraded -> stringResource(id = R.string.status_unverified)
     is ConnectionState.Error -> stringResource(id = R.string.status_error)
 }

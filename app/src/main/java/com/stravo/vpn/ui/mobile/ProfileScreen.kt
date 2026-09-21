@@ -1,6 +1,12 @@
 package com.stravo.vpn.ui.mobile
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,14 +27,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.stravo.vpn.R
+import com.stravo.vpn.domain.subscription.SubscriptionService
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
 import com.stravo.vpn.ui.components.StravoCard
+import com.stravo.vpn.ui.components.SubscriptionDetails
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.components.StravoScreenHeader
 import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.state.HomeUiState
@@ -45,12 +55,15 @@ fun ProfileScreen(
     onConnectTv: () -> Unit,
     onAddSubscription: () -> Unit,
     onRemoveSubscription: () -> Unit,
+    onManageSubscriptions: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalStravoPalette.current
     val context = LocalContext.current
-    val notAvailable = stringResource(id = R.string.profile_section_soon)
+    val shareTitle = stringResource(R.string.service_share_title)
+    val shareText = stringResource(R.string.service_share_text, BotLinks.supportHttps())
+    val shareUnavailable = stringResource(R.string.service_share_unavailable)
     // Удаление подписки необратимо для ключей на устройстве — сначала спрашиваем.
     var confirmRemoval by remember { mutableStateOf(false) }
 
@@ -68,14 +81,17 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
-        StravoCard(modifier = Modifier.fillMaxWidth()) {
+        StravoCard(modifier = Modifier.fillMaxWidth(), onClick = onManageSubscriptions) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_crown),
-                    contentDescription = null,
-                    tint = palette.textPrimary,
-                    modifier = Modifier.size(34.dp),
-                )
+                Box(Modifier.size(44.dp).pencilSurface(palette.accent.copy(alpha = 0.12f), palette.accent, 12.dp),
+                    contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_crown),
+                        contentDescription = null,
+                        tint = palette.accent,
+                        modifier = Modifier.size(25.dp),
+                    )
+                }
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -113,7 +129,8 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
 
-        Column(modifier = Modifier.fillMaxWidth()) {
+        SubscriptionDetails(state.selectedSubscription)
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
             StravoSettingRow(
                 iconRes = R.drawable.ic_settings,
                 title = stringResource(id = R.string.profile_manage),
@@ -122,7 +139,7 @@ fun ProfileScreen(
                 } else {
                     stringResource(id = R.string.profile_manage_none)
                 },
-                onClick = onAddSubscription,
+                onClick = onManageSubscriptions,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
@@ -135,8 +152,8 @@ fun ProfileScreen(
                 PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
                 StravoSettingRow(
                     iconRes = R.drawable.ic_delete,
-                    title = stringResource(id = R.string.profile_remove),
-                    subtitle = stringResource(id = R.string.profile_remove_sub),
+                    title = stringResource(id = R.string.subscription_remove_all),
+                    subtitle = stringResource(id = R.string.subscription_remove_all_hint),
                     onClick = { confirmRemoval = true },
                 )
             }
@@ -144,15 +161,29 @@ fun ProfileScreen(
             StravoSettingRow(
                 iconRes = R.drawable.ic_tv,
                 title = stringResource(id = R.string.profile_connect_tv),
-                subtitle = stringResource(id = R.string.profile_connect_tv_sub),
+                subtitle = stringResource(id = R.string.subscription_tv_quick_connect),
                 onClick = onConnectTv,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_share,
-                title = stringResource(id = R.string.profile_invite),
-                subtitle = notAvailable,
-                onClick = { },
+                title = shareTitle,
+                subtitle = stringResource(R.string.service_share_subtitle),
+                onClick = {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, shareText)
+                    }
+                    try {
+                        context.startActivity(Intent.createChooser(send, shareTitle).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
+                    } catch (_: SecurityException) {
+                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
+                    }
+                },
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
@@ -180,17 +211,20 @@ fun ProfileScreen(
 
     if (confirmRemoval) {
         AlertDialog(
+            modifier = Modifier.pencilSurface(palette.panel, palette.outline, StravoTokens.CardRadiusMobile),
+            containerColor = Color.Transparent,
+            shape = RoundedCornerShape(StravoTokens.CardRadiusMobile),
             onDismissRequest = { confirmRemoval = false },
             title = {
                 Text(
-                    text = stringResource(id = R.string.profile_remove_title),
+                    text = stringResource(id = R.string.subscription_remove_all_title),
                     style = StravoType.BodyStrong,
                     color = palette.textPrimary,
                 )
             },
             text = {
                 Text(
-                    text = stringResource(id = R.string.profile_remove_body),
+                    text = stringResource(id = R.string.subscription_remove_all_body),
                     style = StravoType.Caption,
                     color = palette.textSecondary,
                 )
@@ -221,17 +255,33 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun subscriptionTitle(state: HomeUiState): String =
-    if (state.subscription.isActive) state.subscription.planName else stringResource(id = R.string.profile_no_subscription)
+internal fun subscriptionTitle(state: HomeUiState): String {
+    if (state.selectedSubscription.isActive) return state.selectedSubscription.planName
+    val ordinary = state.subscriptionNodes.any { it.service == SubscriptionService.ORDINARY }
+    val cdn = state.subscriptionNodes.any { it.service == SubscriptionService.CDN }
+    return stringResource(when {
+        ordinary && cdn -> R.string.subscription_two_sources
+        ordinary -> R.string.subscription_ordinary_source
+        cdn -> R.string.subscription_cdn_source
+        else -> R.string.profile_no_subscription
+    })
+}
 
 @Composable
 private fun subscriptionSubtitle(state: HomeUiState): String {
-    val until = state.subscription.activeUntil
-    return if (state.subscription.isActive && until != null) {
+    val subscription = state.selectedSubscription
+    val until = subscription.activeUntil
+    val validity = if (subscription.isActive && until != null) {
         stringResource(id = R.string.profile_valid_until, until)
+    } else if (subscription.isActive) {
+        stringResource(id = R.string.subscription_expiry_unknown)
     } else {
         stringResource(id = R.string.profile_connect_hint)
     }
+    return if (subscription.isActive) stringResource(
+        if (state.mode == com.stravo.vpn.domain.model.NetworkMode.FREE_INTERNET)
+            R.string.subscription_cdn_source else R.string.subscription_ordinary_source,
+    ) + " · " + validity else validity
 }
 
 /** Напоминание о том, что секции подписки ждут серверную часть. */

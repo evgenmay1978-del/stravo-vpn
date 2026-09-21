@@ -90,9 +90,7 @@ class TunnelStats(
     private suspend fun pingLoop() {
         while (currentCoroutineContext().isActive) {
             val delayMs = runCatching { requestDelay() }.getOrNull()
-            if (delayMs != null) {
-                _stats.update { it.copy(pingMs = delayMs) }
-            }
+            _stats.update { it.copy(pingMs = delayMs) }
             delay(PING_INTERVAL_MS)
         }
     }

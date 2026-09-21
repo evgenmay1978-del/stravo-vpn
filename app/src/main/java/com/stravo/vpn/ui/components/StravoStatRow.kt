@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,6 +18,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.stravo.vpn.R
 import com.stravo.vpn.domain.model.VpnStats
 import com.stravo.vpn.domain.model.asPing
@@ -81,8 +82,8 @@ private fun StatCell(
             Icon(
                 painter = painterResource(id = iconRes),
                 contentDescription = null,
-                tint = palette.textSecondary,
-                modifier = Modifier.size(14.dp),
+                tint = palette.accent,
+                modifier = Modifier.size(18.dp),
             )
             Text(
                 text = label,
@@ -93,7 +94,7 @@ private fun StatCell(
         }
         Text(
             text = value,
-            style = StravoType.BodyStrong,
+            style = StravoType.BodyStrong.copy(fontSize = 24.sp, lineHeight = 28.sp),
             color = palette.textPrimary,
             textAlign = TextAlign.Center,
         )

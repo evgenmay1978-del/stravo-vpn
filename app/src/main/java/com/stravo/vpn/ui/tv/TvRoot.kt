@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,12 +40,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stravo.vpn.R
+import com.stravo.vpn.ui.mobile.AddSubscriptionScreen
 import com.stravo.vpn.core.StravoConfig
 import com.stravo.vpn.ui.components.BrandMark
 import com.stravo.vpn.ui.mobile.AppsScreen
 import com.stravo.vpn.ui.components.PaperCanvas
+import com.stravo.vpn.ui.components.pencilSurface
 import com.stravo.vpn.ui.navigation.Destination
 import com.stravo.vpn.ui.navigation.StravoNavigator
 import com.stravo.vpn.ui.state.StravoViewModel
@@ -66,72 +69,97 @@ fun TvRoot(
 ) {
     val navigator = rememberSaveable(saver = StravoNavigator.saver()) { StravoNavigator() }
     val state by viewModel.home.collectAsStateWithLifecycle()
-
+    var showSubscriptions by rememberSaveable { mutableStateOf(false) }
+    var showServers by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
 
-    PaperCanvas(modifier = modifier.fillMaxSize(), showTexture = true) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(StravoTokens.ScreenPaddingTv),
-        ) {
-            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
+        val railWidth = (maxWidth * 0.23f).coerceIn(168.dp, 218.dp)
+        Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalStravoPalette provides com.stravo.vpn.ui.theme.StravoPalette.Dark,
+            ) {
                 TvRail(
                     current = navigator.current,
-                    onSelect = { destination -> navigator.select(destination) },
-                    modifier = Modifier.fillMaxHeight().width(250.dp),
+                    onSelect = { navigator.select(it) },
+                    modifier = Modifier.fillMaxHeight().width(railWidth)
+                        .pencilSurface(androidx.compose.ui.graphics.Color(0xFF293C2D),
+                            androidx.compose.ui.graphics.Color(0xFFBBC4A9), 0.dp, dark = true)
+                        .padding(horizontal = 16.dp, vertical = 28.dp),
                 )
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    when (navigator.current) {
-                        Destination.HOME -> TvHomeScreen(
-                            state = state,
-                            onNavigate = { destination -> navigator.select(destination) },
-                            onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
-                            onEvent = viewModel::onEvent,
-                        )
-
-                        Destination.LOCATIONS -> TvLocationsScreen(
-                            state = state,
-                            onEvent = viewModel::onEvent,
-                        )
-
-                        Destination.PROFILE -> TvProfileScreen(state = state)
-
-                        Destination.CONNECT_TV -> TvConnectScreen(
-                            viewModel = viewModel,
-                            onDone = { navigator.select(Destination.HOME) },
-                        )
-
-                        Destination.SETTINGS -> TvSettingsScreen(
-                            viewModel = viewModel,
-                            onOpenApps = { navigator.select(Destination.APPS) },
-                        )
-
-                        // Раздельный туннель: тот же экран, что на телефоне — он весь на D-pad.
-                        Destination.APPS -> AppsScreen(
-                            viewModel = viewModel,
-                            onBack = { navigator.select(Destination.SETTINGS) },
-                        )
-
-                        // На TV подписка приходит переносом с телефона: отдельного ввода ссылки нет.
-                        Destination.ADD_SUBSCRIPTION -> TvConnectScreen(
-                            viewModel = viewModel,
-                            onDone = { navigator.select(Destination.HOME) },
-                        )
-
-                        // На TV сканера нет: камера и «Свободный интернет» — только телефон.
-                        Destination.SCANNER -> TvHomeScreen(
-                            state = state,
-                            onNavigate = { destination -> navigator.select(destination) },
-                            onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
-                            onEvent = viewModel::onEvent,
-                        )
+            }
+            PaperCanvas(Modifier.weight(1f).fillMaxHeight()) {
+                Column(Modifier.fillMaxSize().padding(StravoTokens.ScreenPaddingTv)) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        when (navigator.current) {
+                            Destination.HOME -> TvHomeScreen(
+                                state = state,
+                                onOpenServers = { showServers = true },
+                                onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
+                                onEvent = viewModel::onEvent,
+                            )
+                            Destination.LOCATIONS -> com.stravo.vpn.ui.mobile.LocationsScreen(
+                                state, onEvent = { event ->
+                                    viewModel.onEvent(event)
+                                    if (event is com.stravo.vpn.ui.state.HomeEvent.LocationSelected)
+                                        navigator.select(Destination.HOME)
+                                }, onBack = { navigator.select(Destination.HOME) },
+                                onOpenSubscriptions = { showServers = true })
+                            Destination.PROFILE -> com.stravo.vpn.ui.mobile.ProfileScreen(
+                                state = state,
+                                onConnectTv = { navigator.select(Destination.CONNECT_TV) },
+                                onAddSubscription = { navigator.select(Destination.ADD_SUBSCRIPTION) },
+                                onRemoveSubscription = { viewModel.removeSubscription() },
+                                onManageSubscriptions = { showSubscriptions = true },
+                                onBack = { navigator.select(Destination.HOME) })
+                            Destination.CONNECT_TV, Destination.ADD_SUBSCRIPTION -> AddSubscriptionScreen(
+                                state = state,
+                                onEvent = viewModel::onEvent,
+                                onScan = {},
+                                onBack = { navigator.select(Destination.HOME) },
+                            )
+                            Destination.SETTINGS -> TvSettingsScreen(
+                                viewModel, onOpenApps = { navigator.select(Destination.APPS) },
+                            )
+                            Destination.APPS -> AppsScreen(
+                                viewModel, onBack = { navigator.select(Destination.SETTINGS) },
+                            )
+                            Destination.SCANNER -> TvHomeScreen(
+                                state = state,
+                                onOpenServers = { showServers = true },
+                                onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
+                                onEvent = viewModel::onEvent,
+                            )
+                        }
                     }
+                    TvProtocolStrip(Modifier.padding(top = StravoTokens.SpaceLg))
                 }
             }
-            TvProtocolStrip(modifier = Modifier.padding(top = StravoTokens.SpaceLg))
         }
+    }
+    if (showServers) {
+        com.stravo.vpn.ui.mobile.QuickServerPicker(
+            state = state,
+            onSelect = { sourceId, nodeId ->
+                viewModel.selectServer(sourceId, nodeId)
+                showServers = false
+                navigator.select(Destination.HOME)
+            },
+            onManage = { showServers = false; showSubscriptions = true },
+            onAdd = {
+                showServers = false
+                viewModel.clearImportState()
+                navigator.select(Destination.ADD_SUBSCRIPTION)
+            },
+            onDismiss = { showServers = false },
+        )
+    }
+    if (showSubscriptions) {
+        com.stravo.vpn.ui.mobile.SubscriptionManager(
+            state = state, viewModel = viewModel,
+            onSelect = { viewModel.selectSource(it); showSubscriptions = false },
+            onAdd = { showSubscriptions = false; navigator.select(Destination.ADD_SUBSCRIPTION) },
+            onDismiss = { showSubscriptions = false })
     }
 }
 
@@ -144,18 +172,18 @@ private fun TvRail(
     val palette = LocalStravoPalette.current
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(StravoTokens.SpaceSm),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = StravoTokens.SpaceXl),
         ) {
-            BrandMark(size = 44.dp)
+            BrandMark(size = 36.dp, withRing = false)
             Text(
                 text = stringResource(id = R.string.app_name),
-                style = StravoType.BodyStrong,
+                style = StravoType.Wordmark.copy(fontSize = 15.sp, letterSpacing = 0.3.sp),
                 color = palette.textPrimary,
-                modifier = Modifier.padding(start = StravoTokens.SpaceMd),
+                modifier = Modifier.padding(start = StravoTokens.SpaceSm),
             )
         }
         Destination.tvRail.forEach { destination ->
@@ -181,15 +209,14 @@ private fun TvRailItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (selected || focused) palette.outline.copy(alpha = if (focused) 0.92f else 0.82f) else palette.panel.copy(alpha = 0.55f))
-            .border(
-                width = if (focused) StravoTokens.FocusBorder else 1.dp,
-                color = if (focused) palette.accent else palette.outline.copy(alpha = 0.18f),
-                shape = shape,
+            .pencilSurface(
+                if (selected || focused) palette.outline.copy(alpha = 0.93f) else palette.panel.copy(alpha = 0.55f),
+                if (focused) palette.accent else palette.outline,
+                StravoTokens.ButtonRadiusTv, focused, dark = !selected && !focused,
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = StravoTokens.SpaceLg, vertical = StravoTokens.SpaceMd),
+            .padding(horizontal = StravoTokens.SpaceMd, vertical = StravoTokens.SpaceMd),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val tint = if (selected || focused) palette.background else palette.textPrimary

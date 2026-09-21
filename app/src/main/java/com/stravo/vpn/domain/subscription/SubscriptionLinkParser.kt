@@ -11,7 +11,8 @@ import java.security.MessageDigest
  *
  * Понимает три вида строк:
  *  1. ссылка подписки — http(s), в том числе без схемы (голый домен sub.example.com/x);
- *  2. одиночный ключ — vless://, anytls://, hysteria2://, hy2://, trojan://, ss://;
+ *  2. одиночный ключ — VLESS, VMess, AnyTLS, Hysteria2, Trojan, SS, SOCKS5, TUIC,
+ *     либо HTTP(S) proxy с user:password@host:port;
  *  3. ссылка-обёртка клиента — happ://add/…, incy://…, sub://…, v2rayng://install-sub?url=…,
  *     clash://install-config?url=…, sing-box://import-remote-profile?url=… и другие:
  *     из неё достаётся вложенный http(s)-адрес или ключ, в том числе из base64.
@@ -21,11 +22,11 @@ import java.security.MessageDigest
  */
 object SubscriptionLinkParser {
 
-    private const val MAX_LINK_LENGTH = 8192
+    private const val MAX_LINK_LENGTH = WireGuardProfile.MAX_LINK_LENGTH
 
     /** Схемы клиентов-обёрток: сами по себе они контейнер, а не адрес подписки. */
     private val wrapperSchemes: Set<String> = setOf(
-        "happ", "incy", "sub", "v2rayng", "v2raytun", "clash", "clashmeta",
+        "stravo", "happ", "incy", "sub", "v2rayng", "v2raytun", "clash", "clashmeta",
         "sing-box", "singbox", "streisand", "shadowrocket", "karing",
         "hiddify", "nekobox", "nekoray", "foxray", "stash", "quantumult",
         "loon", "surge", "sn",
@@ -52,47 +53,51 @@ object SubscriptionLinkParser {
             }
         }
 
-        if (scheme == "http" || scheme == "https") return ParsedLink.SubscriptionUrl(value)
+        if ((scheme == "http" || scheme == "https") && !isCredentialProxy(value)) {
+            return ParsedLink.SubscriptionUrl(value)
+        }
+
+        // App import wrappers take precedence over the legacy stravo/WebRTC alias.
+        if (scheme in wrapperSchemes) return unwrap(value, scheme)
 
         val protocol = ProtocolCatalog.byScheme(scheme)
         if (protocol != null) {
             return parseNode(value, protocol) ?: ParsedLink.Unknown(Unrecognized.BROKEN_KEY, scheme)
         }
 
-        if (scheme in wrapperSchemes) return unwrap(value, scheme)
-
         return ParsedLink.Unknown(Unrecognized.UNKNOWN_SCHEME, scheme)
     }
 
     /** Разбирает строку целиком; если это не ссылка — возвращает null. */
     fun parseNode(raw: String, protocol: VpnProtocol): ParsedLink.Node? {
-        val value = raw.trim()
-        val afterScheme = value.substringAfter("://", "")
-        if (afterScheme.isEmpty()) return null
-
-        val fragment = afterScheme.substringAfter('#', "")
-        val withoutFragment = afterScheme.substringBefore('#')
-        val query = withoutFragment.substringAfter('?', "")
-        val authority = withoutFragment.substringBefore('?')
-
-        val params = parseQuery(query)
-        val userInfo = if (authority.contains('@')) authority.substringBeforeLast('@') else ""
-        val hostPort = if (authority.contains('@')) authority.substringAfterLast('@') else authority
-
-        val host = hostOf(hostPort) ?: return null
-        val port = portOf(hostPort, defaultPort(protocol))
-        if (port !in 1..65535) return null
-
-        val transport = resolveTransport(protocol, params)
-        val security = resolveSecurity(protocol, params)
-        val name = fragment.takeIf { it.isNotBlank() }?.let { decodeComponent(it) }
-            ?: defaultName(protocol, transport, security)
+        val input = raw.trim()
+        if (input.length > MAX_LINK_LENGTH || schemeOf(input) !in protocol.schemes) return null
+        val wireguard = WireGuardProfile.isLink(input)
+        val value = if (wireguard) {
+            runCatching { WireGuardProfile.normalizeLink(input) }.getOrNull() ?: return null
+        } else input
+        val parsed = ProxyShareLink.parse(value) ?: return null
+        val endpoint = if (wireguard) {
+            runCatching { WireGuardProfile.endpoint(value, "proxy") }.getOrNull() ?: return null
+        } else null
+        val actualProtocol = if (endpoint != null &&
+            (parsed.scheme in AmneziaParameters.schemes || AmneziaParameters.isEndpoint(endpoint))) {
+            ProtocolCatalog.AMNEZIAWG
+        } else protocol
+        val credential = runCatching { ProxyShareLink.decode(parsed.userInfo) }.getOrNull() ?: return null
+        if (protocol.id in setOf("vless", "vmess") && !ProxyShareLink.isUuid(credential)) return null
+        if (protocol.id == "tuic" && (!credential.contains(':') || !ProxyShareLink.isUuid(credential.substringBefore(':')))) return null
+        if (protocol.id in setOf("trojan", "hysteria2", "anytls", "shadowsocks", "http") && credential.isEmpty()) return null
+        val params = parsed.query
+        val transport = resolveTransport(actualProtocol, params)
+        val security = if (parsed.scheme == "https") VpnSecurity.TLS else resolveSecurity(actualProtocol, params)
+        val name = parsed.name ?: defaultName(actualProtocol, transport, security)
 
         val node = SubscriptionNode(
             id = fingerprint(value),
             name = name,
-            protocolId = protocol.id,
-            protocolLabel = protocol.displayName,
+            protocolId = actualProtocol.id,
+            protocolLabel = actualProtocol.displayName,
             transport = transport,
             security = security,
         )
@@ -144,7 +149,7 @@ object SubscriptionLinkParser {
     private fun embedded(inner: String, wrapper: String): ParsedLink {
         val value = inner.trim()
         val scheme = schemeOf(value) ?: return ParsedLink.Unknown(Unrecognized.BROKEN_IMPORT_LINK, wrapper)
-        if (scheme == "http" || scheme == "https") return ParsedLink.SubscriptionUrl(value)
+        if ((scheme == "http" || scheme == "https") && !isCredentialProxy(value)) return ParsedLink.SubscriptionUrl(value)
         val protocol = ProtocolCatalog.byScheme(scheme)
             ?: return ParsedLink.Unknown(Unrecognized.BROKEN_IMPORT_LINK, wrapper)
         return parseNode(value, protocol) ?: ParsedLink.Unknown(Unrecognized.BROKEN_KEY, scheme)
@@ -195,50 +200,22 @@ object SubscriptionLinkParser {
         }
     }
 
-    private fun defaultPort(protocol: VpnProtocol): Int = when (protocol.id) {
-        "hysteria2" -> 443
-        "anytls" -> 443
-        "trojan" -> 443
-        else -> 443
-    }
-
-    private fun hostOf(hostPort: String): String? {
-        if (hostPort.isEmpty()) return null
-        if (hostPort.startsWith("[")) {
-            val end = hostPort.indexOf(']')
-            if (end <= 1) return null
-            return hostPort.substring(1, end)
-        }
-        val host = if (hostPort.contains(':')) hostPort.substringBeforeLast(':') else hostPort
-        return host.ifEmpty { null }
-    }
-
-    private fun portOf(hostPort: String, fallback: Int): Int {
-        val raw = if (hostPort.startsWith("[")) {
-            val end = hostPort.indexOf(']')
-            if (end < 0) return fallback
-            hostPort.substring(end + 1).removePrefix(":")
-        } else if (hostPort.contains(':')) {
-            hostPort.substringAfterLast(':')
-        } else {
-            ""
-        }
-        return raw.toIntOrNull() ?: fallback
+    /** Bare HTTP(S) URLs remain subscriptions; credentials + authority-only denotes a proxy. */
+    private fun isCredentialProxy(value: String): Boolean {
+        val authority = value.substringAfter("://").substringBefore('?').substringBefore('#').removeSuffix("/")
+        return '@' in authority && '/' !in authority.substringAfterLast('@')
     }
 
     private fun resolveTransport(protocol: VpnProtocol, params: Map<String, String>): VpnTransport {
         val type = params["type"] ?: params["transport"] ?: params["net"]
         if (type == null) return protocol.defaultTransport
         val transport = VpnTransport.byId(type)
-        if (transport == VpnTransport.UNKNOWN) return protocol.defaultTransport
-        // Ядро всё равно попробует транспорт, даже если каталог его не заявлял:
-        // показываем честно то, что написано в конфиге.
-        return transport
+        return if (protocol.supports(transport)) transport else VpnTransport.UNKNOWN
     }
 
     private fun resolveSecurity(protocol: VpnProtocol, params: Map<String, String>): VpnSecurity {
         val security = params["security"] ?: params["tls"]
-        if (security == null) return protocol.defaultSecurity
+        if (security == null) return if (!params["pbk"].isNullOrBlank()) VpnSecurity.REALITY else protocol.defaultSecurity
         return when (security.trim().lowercase()) {
             "none", "0", "false" -> VpnSecurity.NONE
             "tls", "1", "true" -> VpnSecurity.TLS

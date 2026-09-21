@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.Icon
+import com.stravo.vpn.ui.components.PencilIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -50,8 +54,7 @@ fun StravoSearchField(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.28f), shape)
+            .pencilSurface(palette.panel.copy(alpha = 0.9f), palette.outline, StravoTokens.ButtonRadiusMobile)
             .defaultMinSize(minHeight = StravoTokens.TouchTargetMin)
             .padding(horizontal = StravoTokens.SpaceLg),
         verticalAlignment = Alignment.CenterVertically,
@@ -90,9 +93,10 @@ fun StravoToggle(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalStravoPalette.current
-    val trackWidth = 52.dp
-    val trackHeight = 30.dp
-    val knob = 24.dp
+    val trackWidth = 44.dp
+    val trackHeight = 24.dp
+    val knob = 18.dp
+    var focused by remember { mutableStateOf(false) }
     val offset by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
         animationSpec = tween(durationMillis = 160),
@@ -100,22 +104,28 @@ fun StravoToggle(
     )
     Box(
         modifier = modifier
-            .size(width = trackWidth, height = trackHeight)
-            .clip(CircleShape)
-            .background(if (checked) palette.accent.copy(alpha = 0.85f) else palette.panelSoft)
-            .border(1.dp, palette.outline.copy(alpha = 0.35f), CircleShape)
-            .clickable(role = Role.Switch) { onCheckedChange(!checked) },
-        contentAlignment = Alignment.CenterStart,
+            .size(width = 52.dp, height = StravoTokens.TouchTargetMin)
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (focused) Modifier.border(2.dp, palette.accent, RoundedCornerShape(12.dp)) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        contentAlignment = Alignment.Center,
     ) {
+        Box(
+            modifier = Modifier.size(trackWidth, trackHeight).clip(CircleShape)
+                .pencilSurface(if (checked) palette.accent else palette.panelSoft,
+                    palette.outline, 12.dp, dark = checked),
+            contentAlignment = Alignment.CenterStart,
+        ) {
         Box(
             modifier = Modifier
                 .offset(x = ((trackWidth - knob - 6.dp) * offset))
                 .padding(start = 3.dp)
                 .size(knob)
                 .clip(CircleShape)
-                .background(if (checked) palette.onAccent else palette.outline)
-                .border(1.dp, palette.outline.copy(alpha = 0.5f), CircleShape),
+                .pencilSurface(palette.panel, palette.outline, 9.dp),
         )
+        }
     }
 }
 
@@ -131,8 +141,10 @@ fun StravoSettingRow(
     trailing: @Composable (() -> Unit)? = null,
 ) {
     val palette = LocalStravoPalette.current
+    var keyboardFocused by remember { mutableStateOf(false) }
+    val hasFocus = focused || keyboardFocused
     val scale by animateFloatAsState(
-        targetValue = if (focused) StravoTokens.FocusScale else 1f,
+        targetValue = if (hasFocus) StravoTokens.FocusScale else 1f,
         animationSpec = tween(durationMillis = 140),
         label = "rowFocusScale",
     )
@@ -144,7 +156,7 @@ fun StravoSettingRow(
             .scale(scale)
             .clip(shape)
             .then(
-                if (focused) {
+                if (hasFocus) {
                     Modifier.border(StravoTokens.FocusBorder, palette.accent, shape)
                 } else {
                     Modifier
@@ -152,7 +164,8 @@ fun StravoSettingRow(
             )
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+                    Modifier.onFocusChanged { keyboardFocused = it.isFocused }
+                        .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
                 } else {
                     Modifier
                 },

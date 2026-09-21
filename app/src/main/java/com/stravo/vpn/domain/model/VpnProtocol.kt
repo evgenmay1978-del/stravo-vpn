@@ -8,9 +8,11 @@ enum class VpnTransport(val id: String, val displayName: String) {
     TCP("tcp", "TCP"),
     WEBSOCKET("ws", "WebSocket"),
     HTTP_UPGRADE("httpupgrade", "HTTP Upgrade"),
+    HTTP("http", "HTTP/2"),
     XHTTP("xhttp", "XHTTP"),
     GRPC("grpc", "gRPC"),
     QUIC("quic", "QUIC"),
+    UDP("udp", "UDP"),
     UNKNOWN("unknown", "—"),
     ;
 
@@ -22,7 +24,8 @@ enum class VpnTransport(val id: String, val displayName: String) {
             val alias = when (normalized) {
                 "raw" -> "tcp"
                 "splithttp" -> "xhttp"
-                "h2", "http" -> "httpupgrade"
+                "websocket" -> "ws"
+                "h2" -> "http"
                 "hysteria", "hysteria2", "hy2" -> "quic"
                 else -> normalized
             }
@@ -74,10 +77,60 @@ object ProtocolCatalog {
             VpnTransport.TCP,
             VpnTransport.WEBSOCKET,
             VpnTransport.HTTP_UPGRADE,
+            VpnTransport.HTTP,
             VpnTransport.XHTTP,
             VpnTransport.GRPC,
             VpnTransport.QUIC,
         ),
+    )
+
+    val VMESS = VpnProtocol(
+        id = "vmess",
+        displayName = "VMess",
+        schemes = listOf("vmess"),
+        defaultTransport = VpnTransport.TCP,
+        transports = VLESS.transports,
+    )
+
+    val SOCKS5 = VpnProtocol(
+        id = "socks5",
+        displayName = "SOCKS5",
+        schemes = listOf("socks", "socks5"),
+        defaultTransport = VpnTransport.TCP,
+        transports = listOf(VpnTransport.TCP),
+    )
+
+    val HTTP = VpnProtocol(
+        id = "http",
+        displayName = "HTTP(S) proxy",
+        schemes = listOf("http", "https"),
+        defaultTransport = VpnTransport.TCP,
+        transports = listOf(VpnTransport.TCP),
+    )
+
+    val TUIC = VpnProtocol(
+        id = "tuic",
+        displayName = "TUIC v5",
+        schemes = listOf("tuic"),
+        defaultTransport = VpnTransport.QUIC,
+        transports = listOf(VpnTransport.QUIC),
+        defaultSecurity = VpnSecurity.TLS,
+    )
+
+    val WIREGUARD = VpnProtocol(
+        id = "wireguard",
+        displayName = "WireGuard",
+        schemes = listOf("wireguard", "wg"),
+        defaultTransport = VpnTransport.UDP,
+        transports = listOf(VpnTransport.UDP),
+    )
+
+    val AMNEZIAWG = VpnProtocol(
+        id = "amneziawg",
+        displayName = "AmneziaWG",
+        schemes = listOf("amneziawg", "awg"),
+        defaultTransport = VpnTransport.UDP,
+        transports = listOf(VpnTransport.UDP),
     )
 
     val ANYTLS = VpnProtocol(
@@ -103,7 +156,7 @@ object ProtocolCatalog {
         displayName = "Trojan",
         schemes = listOf("trojan"),
         defaultTransport = VpnTransport.TCP,
-        transports = listOf(VpnTransport.TCP, VpnTransport.WEBSOCKET, VpnTransport.GRPC),
+        transports = VLESS.transports,
         defaultSecurity = VpnSecurity.TLS,
     )
 
@@ -115,7 +168,7 @@ object ProtocolCatalog {
         transports = listOf(VpnTransport.TCP),
     )
 
-    /** Служебный протокол сервиса: запасной канал, когда остальные недоступны. */
+    /** Legacy-схема: распознаётся для честного Unsupported; рабочий транспорт не реализован. */
     val WEBRTC = VpnProtocol(
         id = "webrtc",
         displayName = "WebRTC",
@@ -125,7 +178,9 @@ object ProtocolCatalog {
         defaultSecurity = VpnSecurity.TLS,
     )
 
-    val all: List<VpnProtocol> = listOf(VLESS, ANYTLS, HYSTERIA2, TROJAN, SHADOWSOCKS, WEBRTC)
+    // WireGuard and AmneziaWG use endpoints. Legacy WebRTC is recognized but not implemented.
+    private val supported: List<VpnProtocol> = listOf(VLESS, ANYTLS, HYSTERIA2, TROJAN, SHADOWSOCKS, VMESS, SOCKS5, HTTP, TUIC, WIREGUARD, AMNEZIAWG)
+    val all: List<VpnProtocol> = supported + WEBRTC
 
     /** Схемы, которые приложение вообще умеет читать из подписки. */
     val knownSchemes: List<String> = all.flatMap { it.schemes }
@@ -144,24 +199,14 @@ object ProtocolCatalog {
     /** Подписи для экрана настроек: «Авто», протоколы и отдельная строка для VLESS + XHTTP. */
     val settingsLabels: List<String> = buildList {
         add("Авто (рекомендуется)")
-        add(VLESS.displayName)
+        addAll(supported.map { it.displayName })
         add(VLESS.displayName + " + " + VpnTransport.XHTTP.displayName)
-        add(HYSTERIA2.displayName)
-        add(ANYTLS.displayName)
-        add(WEBRTC.displayName)
     }
 
     /**
      * Короткие подписи для полосы протоколов на TV: там мало места,
      * длинные строки вроде «VLESS + XHTTP» не помещаются в чип.
      */
-    val stripLabels: List<String> = listOf(
-        "Авто",
-        VLESS.displayName,
-        VpnTransport.XHTTP.displayName,
-        HYSTERIA2.displayName,
-        ANYTLS.displayName,
-        WEBRTC.displayName,
-    )
+    val stripLabels: List<String> = listOf("Авто") + supported.map { it.displayName } + VpnTransport.XHTTP.displayName
 }
 

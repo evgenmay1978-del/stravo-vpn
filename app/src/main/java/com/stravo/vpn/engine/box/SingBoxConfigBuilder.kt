@@ -1,7 +1,11 @@
 package com.stravo.vpn.engine.box
 
-import com.stravo.vpn.domain.subscription.Base64Codec
-import com.stravo.vpn.domain.subscription.SubscriptionLinkParser
+import com.stravo.vpn.domain.model.ProtocolCatalog
+import com.stravo.vpn.domain.model.VpnTransport
+import com.stravo.vpn.domain.subscription.AmneziaParameters
+import com.stravo.vpn.domain.subscription.ProxyShareLink
+import com.stravo.vpn.domain.subscription.WireGuardProfile
+import com.stravo.vpn.domain.subscription.ProxyShareLink as Link
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -22,7 +26,9 @@ sealed interface CoreConfig {
  * Собирает JSON sing-box из ссылки узла подписки.
  *
  * Поддерживаются VLESS (TCP, XHTTP, WebSocket, HTTP Upgrade, gRPC, QUIC), AnyTLS,
- * Hysteria2, Trojan и Shadowsocks — то, что закрывает libbox. Если транспорта нет
+ * Hysteria2, Trojan, Shadowsocks, VMess, SOCKS5, HTTP CONNECT и TUIC v5.
+ * WireGuard и AmneziaWG используют endpoints; full Xray не конвертируется.
+ * Если транспорта нет
  * в сборке ядра, возвращается честный [CoreConfig.Unsupported], а не тихий отказ.
  *
  * Конфиг никогда не логируется и не попадает в UI-состояние.
@@ -31,7 +37,6 @@ object SingBoxConfigBuilder {
 
     private const val TAG_PROXY = "proxy"
     private const val TAG_DIRECT = "direct"
-    private const val TAG_BLOCK = "block-quic"
     private const val TAG_SOCKS = "socks-in"
     private const val LOCAL_PROXY_PORT = 10808
     private const val LOOPBACK = "127.0.0.1"
@@ -51,12 +56,8 @@ object SingBoxConfigBuilder {
     private const val TUN_IPV4 = "172.19.0.1/30"
     private const val TUN_IPV6 = "fdfe:dcba:9876::1/126"
 
-    /** Транспорты, которых нет в этой сборке ядра (docs/IMPLEMENTATION.md, раздел 1c). */
-    /**
-     * Транспорты, которых нет даже в сборке ядра из форка. XHTTP здесь больше нет:
-     * его закрывает sing-box-lx с тегом `with_xhttp` (см. `libbox.yml`).
-     */
-    private val unsupportedTransports = emptySet<String>()
+    /** Only constant labels are exposed to UI; never echo a link or its parameter values. */
+    private class UnsupportedOption(val label: String) : Exception()
 
     /**
      * [variant] выбирает диагностический вариант сборки: когда туннель поднимается,
@@ -77,26 +78,88 @@ object SingBoxConfigBuilder {
         directMode: Boolean = false,
         apiSecret: String? = null,
     ): CoreConfig {
-        val value = link.trim()
-        val scheme = value.substringBefore("://", "").lowercase()
-        if (scheme.isEmpty() || !value.contains("://")) return CoreConfig.Broken
-
-        val parsed = parse(value) ?: return CoreConfig.Broken
-        val transport = parsed.query["type"] ?: parsed.query["net"] ?: ""
-        if (transport.lowercase() in unsupportedTransports) {
-            return CoreConfig.Unsupported(transport.uppercase())
+        return try {
+            val wireguard = WireGuardProfile.isLink(link)
+            val node = if (wireguard) WireGuardProfile.endpoint(link, TAG_PROXY) else createOutbound(link)
+            if (node == null) return CoreConfig.Broken
+            val config = assemble(node, variant, directMode, apiSecret, endpoint = wireguard)
+            if (wireguard) {
+                val servers = WireGuardProfile.dnsFor(link)
+                if (servers.isNotEmpty()) {
+                    val dns = config.getJSONObject("dns")
+                    val existing = dns.getJSONArray("servers")
+                    val configured = JSONArray().put(existing.getJSONObject(0))
+                    val detour = if (directMode || variant == CoreVariant.DIRECT_RESOLVER) TAG_DIRECT else TAG_PROXY
+                    servers.forEachIndexed { index, address ->
+                        configured.put(JSONObject().put("type", "udp")
+                            .put("tag", if (index == 0) "dns-proxy" else "dns-wg-$index")
+                            .put("server", address).put("detour", detour))
+                    }
+                    dns.put("servers", configured)
+                }
+            }
+            CoreConfig.Ready(config.toString())
+        } catch (error: UnsupportedOption) {
+            CoreConfig.Unsupported(error.label)
+        } catch (error: WireGuardProfile.Unsupported) {
+            CoreConfig.Unsupported(error.reason)
+        } catch (_: Exception) {
+            CoreConfig.Broken
         }
+    }
 
-        val outbound = when (scheme) {
-            "vless" -> vless(parsed) ?: return CoreConfig.Broken
-            "trojan" -> trojan(parsed) ?: return CoreConfig.Broken
-            "hysteria2", "hy2" -> hysteria2(parsed) ?: return CoreConfig.Broken
-            "anytls" -> anytls(parsed) ?: return CoreConfig.Broken
-            "ss" -> shadowsocks(parsed) ?: return CoreConfig.Broken
-            else -> return CoreConfig.Broken
+    /** A standalone outbound for a selector/urltest group; null means unsupported or invalid.
+     * Contains secrets: pass only to the core. WireGuard endpoints must never be placed here.
+     */
+    fun outboundFor(link: String, tag: String = "proxy"): JSONObject? = runCatching {
+        require(tag.isNotBlank())
+        if (WireGuardProfile.isLink(link)) return@runCatching null
+        createOutbound(link)?.put("tag", tag)
+    }.getOrNull()
+
+    /** Secret-bearing WireGuard endpoint. Put in endpoints[], never in outbounds[]. */
+    fun endpointFor(link: String, tag: String = "proxy"): JSONObject? = runCatching {
+        if (!WireGuardProfile.isLink(link)) return@runCatching null
+        WireGuardProfile.endpoint(link, tag)
+    }.getOrNull()
+
+    private fun createOutbound(value: String): JSONObject? {
+        val scheme = value.trim().substringBefore("://", "").lowercase()
+        when {
+            value.trimStart().startsWith('{') || value.trimStart().startsWith('[') ->
+                throw UnsupportedOption("Полный JSON-конфиг")
+            scheme.isEmpty() -> return null
+            WireGuardProfile.isLink(value) -> return null
+            scheme == "vpn" -> throw UnsupportedOption("Сжатый контейнер Amnezia vpn://; используйте .conf или awg://")
+            scheme !in setOf("vless", "vmess", "trojan", "hysteria2", "hy2", "anytls", "ss", "socks", "socks5", "http", "https", "tuic") ->
+                throw UnsupportedOption("Протокол")
         }
-
-        return CoreConfig.Ready(assemble(outbound, variant, directMode, apiSecret).toString())
+        val link = ProxyShareLink.parse(value) ?: return null
+        val protocol = ProtocolCatalog.byScheme(scheme) ?: return null
+        val transport = VpnTransport.byId(transportType(link))
+        if (!protocol.supports(transport)) throw UnsupportedOption("Транспорт")
+        for (key in listOf("type", "transport", "net")) {
+            val declared = link.query[key] ?: continue
+            if (VpnTransport.byId(declared) != transport) throw UnsupportedOption("Противоречивый транспорт")
+        }
+        if (!link.query["plugin"].isNullOrEmpty()) throw UnsupportedOption("Shadowsocks plugin")
+        if (listOf("pcs", "vcn", "pinsha256", "ech", "echconfig", "pqv", "mldsa65verify").any { !link.query[it].isNullOrBlank() }) {
+            throw UnsupportedOption("Дополнительные параметры TLS")
+        }
+        val header = link.query["headertype"]
+        if (!header.isNullOrBlank() && header != "none") throw UnsupportedOption("Маскировка транспорта")
+        return when (scheme) {
+            "vless" -> vless(link)
+            "vmess" -> vmess(link)
+            "trojan" -> trojan(link)
+            "hysteria2", "hy2" -> hysteria2(link)
+            "anytls" -> anytls(link)
+            "ss" -> shadowsocks(link)
+            "socks", "socks5" -> proxy(link, socks = true)
+            "http", "https" -> proxy(link, socks = false)
+            "tuic" -> tuic(link)
+            else -> null
+        }
     }
 
     /**
@@ -107,37 +170,81 @@ object SingBoxConfigBuilder {
      * узла разбирался по журналу, а не догадками: «405 Method Not Allowed» от CDN
      * означает ровно одно — какой метод отправки был в конфиге.
      */
-    fun describe(configJson: String): String? = runCatching {
-        val outbound = JSONObject(configJson).optJSONArray("outbounds")?.optJSONObject(0)
-            ?: return@runCatching null
+    fun describe(configJson: String): String? = describe(configJson, outboundTag = null)
+
+    /** For grouped configs the parent supplies the actual node tag; the tag is never logged. */
+    fun describe(configJson: String, outboundTag: String?): String? = runCatching {
+        val config = JSONObject(configJson)
+        val nodes = listOf("outbounds", "endpoints").flatMap { key ->
+            val entries = config.optJSONArray(key) ?: JSONArray()
+            (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
+        }
+        val outbound = if (outboundTag == null) nodes.firstOrNull { it.optString("type") !in setOf("direct", "block") }
+            else nodes.firstOrNull { it.optString("tag") == outboundTag }
+        if (outbound == null) return@runCatching null
+        if (outbound.optString("type") == "wireguard") {
+            val peers = outbound.optJSONArray("peers") ?: JSONArray()
+            val preshared = (0 until peers.length()).any { !peers.optJSONObject(it)?.optString("pre_shared_key").isNullOrBlank() }
+            val protocol = if (AmneziaParameters.isEndpoint(outbound)) "AmneziaWG" else "WireGuard"
+            return@runCatching "$protocol endpoint · peers " + peers.length() +
+                " · приватный ключ " + (if (outbound.optString("private_key").isNotBlank()) "есть" else "нет") +
+                " · preshared " + (if (preshared) "есть" else "нет")
+        }
+        if (outbound.optString("type") in setOf("selector", "urltest")) {
+            return@runCatching "группа; TLS/REALITY описываются для выбранного узла"
+        }
         val parts = ArrayList<String>()
+        val tls = outbound.optJSONObject("tls")
+        val reality = tls?.optJSONObject("reality")
+        fun presence(present: Boolean) = if (present) "есть" else "нет"
+        parts.add("TLS " + presence(tls?.optBoolean("enabled") == true))
+        parts.add("REALITY " + presence(reality?.optBoolean("enabled") == true))
+        parts.add("flow " + when (outbound.optString("flow")) {
+            "" -> "нет"
+            "xtls-rprx-vision" -> "xtls-rprx-vision"
+            else -> "неподдерживаемый"
+        })
+        parts.add("SNI " + presence(!tls?.optString("server_name").isNullOrBlank()))
+        parts.add("ключ " + presence(!reality?.optString("public_key").isNullOrBlank()))
+        parts.add("short-id " + presence(!reality?.optString("short_id").isNullOrBlank()))
         if (outbound.optString("encryption").isNotBlank()) parts.add("шифрование VLESS")
         outbound.optJSONObject("transport")?.let { transport ->
             if (transport.optString("type") != "xhttp") return@let
             parts.add("xhttp")
-            transport.optString("mode").takeIf { it.isNotBlank() }?.let { parts.add("режим " + it) }
+            transport.optString("mode").takeIf { it.isNotBlank() }?.let {
+                parts.add("режим " + if (it in setOf("auto", "packet-up", "stream-up", "stream-one")) it else "неизвестный")
+            }
             method(transport).let { parts.add("uplink " + it) }
             placement(transport, "session_placement", "session в пути").let { parts.add(it) }
             placement(transport, "seq_placement", "seq в пути").let { parts.add(it) }
-            transport.optString("uplink_data_placement").takeIf { it.isNotBlank() }
-                ?.let { parts.add("payload " + it) }
+            transport.optString("uplink_data_placement").takeIf { it.isNotBlank() }?.let {
+                parts.add("payload " + if (it in setOf("body", "auto", "header", "cookie")) it else "неизвестный")
+            }
             if (transport.optBoolean("x_padding_obfs_mode")) parts.add("padding obfs")
         }
-        outbound.optString("type") + if (parts.isEmpty()) "" else " · " + parts.joinToString(", ")
+        val type = outbound.optString("type").takeIf {
+            it in setOf("vless", "vmess", "trojan", "shadowsocks", "anytls", "hysteria2", "tuic", "socks", "http", "selector", "urltest")
+        } ?: "узел"
+        type + " · " + parts.joinToString(", ")
     }.getOrNull()
 
-    private fun method(transport: JSONObject): String =
-        transport.optString("uplink_http_method").takeIf { it.isNotBlank() } ?: "POST (по умолчанию)"
+    private fun method(transport: JSONObject): String = when (val value = transport.optString("uplink_http_method")) {
+        "" -> "POST (по умолчанию)"
+        "GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH", "DELETE" -> value
+        else -> "неизвестный"
+    }
 
     private fun placement(transport: JSONObject, key: String, fallback: String): String =
-        transport.optString(key).takeIf { it.isNotBlank() }?.let { key.substringBefore('_') + " " + it }
+        transport.optString(key).takeIf { it.isNotBlank() }?.let {
+            key.substringBefore('_') + " " + if (it in setOf("path", "query", "header", "cookie")) it else "неизвестное"
+        }
             ?: fallback
 
     // --- Протоколы --------------------------------------------------------
 
     private fun vless(link: Link): JSONObject? {
-        val uuid = decode(link.userInfo.substringBefore(':'))
-        if (uuid.isEmpty() || link.host.isEmpty()) return null
+        val uuid = decode(link.userInfo)
+        if (!ProxyShareLink.isUuid(uuid)) return null
         val outbound = JSONObject()
             .put("type", "vless")
             .put("tag", TAG_PROXY)
@@ -154,10 +261,13 @@ object SingBoxConfigBuilder {
             ?.let { outbound.put("encryption", it) }
         // XHTTP несовместим с xtls-rprx-vision: ядро форка ждёт пустой flow, а панели
         // иногда оставляют его в ссылке по инерции.
-        val transport = (link.query["type"] ?: link.query["net"] ?: "").lowercase()
+        val transport = transportType(link)
         val xtls = transport != "xhttp" && transport != "splithttp"
         if (xtls) {
-            link.query["flow"]?.takeIf { it.isNotBlank() }?.let { outbound.put("flow", it) }
+            link.query["flow"]?.takeIf { it.isNotBlank() }?.let {
+                if (it != "xtls-rprx-vision") throw UnsupportedOption("VLESS flow")
+                outbound.put("flow", it)
+            }
         }
         applyTls(link, outbound, default = false)
         applyTransport(link, outbound)
@@ -165,7 +275,7 @@ object SingBoxConfigBuilder {
     }
 
     private fun trojan(link: Link): JSONObject? {
-        val password = decode(link.userInfo.substringBefore(':'))
+        val password = decode(link.userInfo)
         if (password.isEmpty() || link.host.isEmpty()) return null
         val outbound = JSONObject()
             .put("type", "trojan")
@@ -179,7 +289,7 @@ object SingBoxConfigBuilder {
     }
 
     private fun hysteria2(link: Link): JSONObject? {
-        val password = decode(link.userInfo.substringBefore(':'))
+        val password = decode(link.userInfo)
         if (password.isEmpty() || link.host.isEmpty()) return null
         val outbound = JSONObject()
             .put("type", "hysteria2")
@@ -189,6 +299,8 @@ object SingBoxConfigBuilder {
             .put("password", password)
         val obfs = link.query["obfs"]
         if (!obfs.isNullOrBlank() && obfs != "none") {
+            if (obfs != "salamander") throw UnsupportedOption("Hysteria2 obfs")
+            if (link.query["obfs-password"].isNullOrEmpty()) return null
             outbound.put(
                 "obfs",
                 JSONObject().put("type", obfs).put("password", link.query["obfs-password"] ?: ""),
@@ -199,7 +311,7 @@ object SingBoxConfigBuilder {
     }
 
     private fun anytls(link: Link): JSONObject? {
-        val password = decode(link.userInfo.substringBefore(':'))
+        val password = decode(link.userInfo)
         if (password.isEmpty() || link.host.isEmpty()) return null
         val outbound = JSONObject()
             .put("type", "anytls")
@@ -213,15 +325,18 @@ object SingBoxConfigBuilder {
 
     private fun shadowsocks(link: Link): JSONObject? {
         if (link.host.isEmpty()) return null
-        // SIP002: учётные данные могут быть как method:password, так и base64 от них.
-        val credentials = if (link.userInfo.contains(':')) {
-            link.userInfo
-        } else {
-            Base64Codec.decodeOrNull(link.userInfo)?.trim() ?: decode(link.userInfo)
-        }
-        val method = credentials.substringBefore(':').lowercase()
-        val password = credentials.substringAfter(':', "")
+        val method = decode(link.userInfo.substringBefore(':')).lowercase()
+        val password = decode(link.userInfo.substringAfter(':', ""))
         if (method.isEmpty() || password.isEmpty()) return null
+        if (method !in setOf(
+                "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305",
+                "none", "aes-128-gcm", "aes-192-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
+                "aes-128-ctr", "aes-192-ctr", "aes-256-ctr", "aes-128-cfb", "aes-192-cfb", "aes-256-cfb",
+                "rc4-md5", "chacha20-ietf", "xchacha20",
+            )) throw UnsupportedOption("Шифрование Shadowsocks")
+        if ((link.query["security"] ?: link.query["tls"] ?: "none") !in setOf("none", "false", "0")) {
+            throw UnsupportedOption("Shadowsocks TLS")
+        }
         return JSONObject()
             .put("type", "shadowsocks")
             .put("tag", TAG_PROXY)
@@ -231,10 +346,100 @@ object SingBoxConfigBuilder {
             .put("password", password)
     }
 
+    // Schema: sing-box-lx/option/{vmess,tuic,simple}.go, upstream outbound docs.
+    private fun vmess(link: Link): JSONObject? {
+        val uuid = decode(link.userInfo)
+        if (!ProxyShareLink.isUuid(uuid)) return null
+        val cipher = link.query["scy"] ?: link.query["encryption"] ?: "auto"
+        if (cipher !in setOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305", "aes-128-ctr")) {
+            throw UnsupportedOption("Шифрование VMess")
+        }
+        val alterId = (link.query["aid"] ?: link.query["alterid"] ?: "0").toIntOrNull() ?: return null
+        if (alterId < 0) return null
+        val outbound = JSONObject().put("type", "vmess").put("tag", TAG_PROXY)
+            .put("server", link.host).put("server_port", link.port)
+            .put("uuid", uuid).put("security", cipher).put("alter_id", alterId)
+        (link.query["packetencoding"] ?: link.query["packet_encoding"])?.let {
+            if (it !in setOf("", "none", "packetaddr", "xudp")) throw UnsupportedOption("VMess UDP encoding")
+            if (it != "none") outbound.put("packet_encoding", it)
+        }
+        applyTls(link, outbound, default = false)
+        applyTransport(link, outbound)
+        return outbound
+    }
+
+    private fun proxy(link: Link, socks: Boolean): JSONObject? {
+        val outbound = JSONObject().put("type", if (socks) "socks" else "http").put("tag", TAG_PROXY)
+            .put("server", link.host).put("server_port", link.port)
+        if (socks) {
+            if (link.query["version"]?.let { it != "5" } == true) throw UnsupportedOption("SOCKS version")
+            outbound.put("version", "5")
+            if (link.query["security"]?.let { it != "none" } == true ||
+                link.query["tls"]?.let { it !in setOf("0", "false", "none") } == true) {
+                throw UnsupportedOption("SOCKS TLS")
+            }
+        }
+        if (link.userInfo.isNotEmpty()) {
+            if (!link.userInfo.contains(':')) return null
+            val username = decode(link.userInfo.substringBefore(':'))
+            val password = decode(link.userInfo.substringAfter(':'))
+            if (username.isEmpty()) return null
+            if (socks && (username.toByteArray().size > 255 || password.toByteArray().size !in 1..255)) return null
+            outbound.put("username", username).put("password", password)
+        } else if (!socks) return null // HTTP(S) without credentials is a subscription URL.
+        if (!socks) applyTls(link, outbound, default = link.scheme == "https")
+        return outbound
+    }
+
+    private fun tuic(link: Link): JSONObject? {
+        if (!link.userInfo.contains(':')) return null // TUIC v4 token links are incompatible.
+        val uuid = decode(link.userInfo.substringBefore(':'))
+        if (!ProxyShareLink.isUuid(uuid)) return null
+        if (link.query["version"]?.let { it != "5" } == true) throw UnsupportedOption("TUIC v4")
+        val outbound = JSONObject().put("type", "tuic").put("tag", TAG_PROXY)
+            .put("server", link.host).put("server_port", link.port)
+            .put("uuid", uuid).put("password", decode(link.userInfo.substringAfter(':')))
+        fun option(snake: String, camel: String) = link.query[snake] ?: link.query[camel]
+        option("congestion_control", "congestioncontrol")?.let {
+            if (it !in setOf("cubic", "new_reno", "bbr")) throw UnsupportedOption("TUIC congestion control")
+            outbound.put("congestion_control", it)
+        }
+        val relay = option("udp_relay_mode", "udprelaymode")
+        if (relay != null) {
+            if (relay !in setOf("native", "quic")) throw UnsupportedOption("TUIC UDP relay")
+            outbound.put("udp_relay_mode", relay)
+        }
+        option("udp_over_stream", "udpoverstream")?.let {
+            val enabled = boolean(it)
+            if (enabled && relay != null) return null
+            outbound.put("udp_over_stream", enabled)
+        }
+        option("zero_rtt_handshake", "zerortthandshake")?.let { outbound.put("zero_rtt_handshake", boolean(it)) }
+        link.query["heartbeat"]?.let {
+            if (!Regex("[0-9]+(?:\\.[0-9]+)?(?:ms|s|m|h)").matches(it)) return null
+            outbound.put("heartbeat", it)
+        }
+        if (option("disable_sni", "disablesni")?.let(::boolean) == true) throw UnsupportedOption("TUIC disable_sni")
+        applyTls(link, outbound, default = true)
+        return outbound
+    }
+
+    private fun boolean(value: String): Boolean = when (value.lowercase()) {
+        "1", "true" -> true
+        "0", "false" -> false
+        else -> throw IllegalArgumentException()
+    }
+
+    private fun transportType(link: Link): String =
+        (link.query["type"] ?: link.query["transport"] ?: link.query["net"] ?: when (link.scheme) {
+            "tuic", "hysteria2", "hy2" -> "quic"
+            else -> "tcp"
+        }).lowercase()
+
     // --- Транспорт и защита ----------------------------------------------
 
     private fun applyTransport(link: Link, outbound: JSONObject) {
-        val type = (link.query["type"] ?: link.query["net"] ?: "tcp").lowercase()
+        val type = transportType(link)
         when (type) {
             "ws", "websocket" -> {
                 val transport = JSONObject().put("type", "ws")
@@ -253,6 +458,10 @@ object SingBoxConfigBuilder {
             }
 
             "grpc" -> {
+                if (link.query["mode"]?.let { it !in setOf("gun", "none", "") } == true ||
+                    !link.query["authority"].isNullOrBlank() || !link.query["host"].isNullOrBlank()) {
+                    throw UnsupportedOption("Дополнительные параметры gRPC")
+                }
                 val transport = JSONObject().put("type", "grpc")
                 val service = link.query["servicename"]
                 service?.takeIf { it.isNotBlank() }?.let { transport.put("service_name", it) }
@@ -261,8 +470,15 @@ object SingBoxConfigBuilder {
 
             "xhttp", "splithttp" -> outbound.put("transport", xhttp(link))
 
+            "http", "h2" -> {
+                val transport = JSONObject().put("type", "http")
+                link.query["host"]?.let { transport.put("host", JSONArray(it.split(','))) }
+                link.query["path"]?.let { transport.put("path", it) }
+                outbound.put("transport", transport)
+            }
             "quic" -> outbound.put("transport", JSONObject().put("type", "quic"))
-            else -> Unit
+            "tcp", "raw" -> Unit
+            else -> throw UnsupportedOption("Транспорт")
         }
     }
 
@@ -277,7 +493,10 @@ object SingBoxConfigBuilder {
      * (SPECS/TASKS/002-XHTTP_CLIENT_TRANSPORT/URL_PARSING.md).
      */
     private fun xhttp(link: Link): JSONObject {
-        val extra = runCatching { JSONObject(link.query["extra"] ?: "") }.getOrElse { JSONObject() }
+        val extra = link.query["extra"]?.let { JSONObject(it) } ?: JSONObject()
+        if (extra.has("downloadSettings") || extra.has("download_settings") || link.query.containsKey("downloadsettings")) {
+            throw UnsupportedOption("XHTTP downloadSettings")
+        }
         val transport = JSONObject().put("type", "xhttp")
 
         fun text(vararg names: String): String? {
@@ -293,14 +512,17 @@ object SingBoxConfigBuilder {
             return when (raw.trim().lowercase()) {
                 "1", "true", "yes" -> true
                 "0", "false", "no" -> false
-                else -> null
+                else -> throw IllegalArgumentException()
             }
         }
 
         // path приходит с query-хвостом («/GaMeOpTiMiZeR?ed=2048») — хвост не часть пути.
         text("path")?.substringBefore('?')?.takeIf { it.isNotBlank() }?.let { transport.put("path", it) }
         text("host")?.let { transport.put("host", it) }
-        text("mode")?.let { transport.put("mode", it.lowercase()) }
+        text("mode")?.let {
+            require(it.lowercase() in setOf("auto", "packet-up", "stream-up", "stream-one"))
+            transport.put("mode", it.lowercase())
+        }
         text("xPaddingBytes", "x_padding_bytes")?.let { transport.put("x_padding_bytes", it) }
         flag("noGRPCHeader", "no_grpc_header")?.let { transport.put("no_grpc_header", it) }
 
@@ -326,6 +548,12 @@ object SingBoxConfigBuilder {
         for ((jsonKey, urlKeys) in mapped) {
             text(*urlKeys)?.let { transport.put(jsonKey, it) }
         }
+        // Xray 26.7.28 uses UUIDs when the session alphabet or length is absent.
+        // The embedded fork rejects a half-pair, so keep its same UUID default.
+        if (transport.optString("session_table").isBlank() || transport.optString("session_length").isBlank()) {
+            transport.remove("session_table")
+            transport.remove("session_length")
+        }
         // Флаг ставится отдельно: ядро ждёт bool, а строка «true» ломает конфиг.
         flag("xPaddingObfsMode", "x_padding_obfs_mode")?.let { transport.put("x_padding_obfs_mode", it) }
 
@@ -348,22 +576,34 @@ object SingBoxConfigBuilder {
     }
 
     private fun applyTls(link: Link, outbound: JSONObject, default: Boolean) {
-        val security = (link.query["security"] ?: "").lowercase()
+        val security = (link.query["security"] ?: link.query["tls"] ?: "").lowercase()
+        val publicKey = link.query["pbk"]?.takeIf { it.isNotBlank() }
+        val isReality = security == "reality" || publicKey != null
         val enabled = when (security) {
             "tls", "reality", "1", "true" -> true
             "none", "0", "false" -> false
-            else -> link.query["tls"]?.let { it == "1" || it.equals("true", ignoreCase = true) } ?: default
+            "" -> default || isReality
+            else -> throw UnsupportedOption("Защита транспорта")
         }
-        if (!enabled) return
+        if (!enabled) {
+            require(!isReality && link.scheme !in setOf("tuic", "hysteria2", "hy2", "anytls", "https"))
+            require(outbound.optString("flow").isEmpty())
+            return
+        }
+        if (isReality) {
+            require(link.scheme in setOf("vless", "vmess", "trojan"))
+            require(publicKey != null && Regex("[A-Za-z0-9_-]{43}").matches(publicKey))
+            val sid = link.query["sid"] ?: ""
+            require(sid.length <= 16 && sid.length % 2 == 0 && sid.all { it in "0123456789abcdefABCDEF" })
+        }
 
         val tls = JSONObject().put("enabled", true)
         val serverName = link.query["sni"] ?: link.query["peer"] ?: link.query["host"]
         if (!serverName.isNullOrBlank()) tls.put("server_name", serverName)
-        if (link.query["allowinsecure"] == "1" || link.query["insecure"] == "1") tls.put("insecure", true)
+        (link.query["allowinsecure"] ?: link.query["allow_insecure"] ?: link.query["insecure"] ?: link.query["skip-cert-verify"])
+            ?.let { tls.put("insecure", boolean(it)) }
         val alpn = link.query["alpn"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
         if (!alpn.isNullOrEmpty()) tls.put("alpn", JSONArray(alpn))
-        val publicKey = link.query["pbk"]
-        val isReality = security == "reality" || !publicKey.isNullOrBlank()
         // Отпечаток uTLS. Для REALITY это не косметика: с 08.09.2026 серверная часть
         // REALITY (xtls/reality, коммит 8cdf7bf9; Xray v26.9.8+) отбрасывает ClientHello,
         // в котором нет гибридной доли ключа X25519MLKEM768 перед обычной X25519, и уводит
@@ -377,7 +617,10 @@ object SingBoxConfigBuilder {
         } else {
             link.query["fp"]?.takeIf { it.isNotBlank() }
         }
-        if (fingerprint != null) {
+        if (fingerprint != null && link.scheme !in setOf("tuic", "hysteria2", "hy2")) {
+            if (fingerprint !in setOf("chrome", "firefox", "edge", "safari", "360", "qq", "ios", "android", "random", "randomized")) {
+                throw UnsupportedOption("TLS fingerprint")
+            }
             tls.put("utls", JSONObject().put("enabled", true).put("fingerprint", fingerprint))
         }
         if (isReality) {
@@ -411,6 +654,7 @@ object SingBoxConfigBuilder {
         variant: CoreVariant,
         directMode: Boolean,
         apiSecret: String?,
+        endpoint: Boolean = false,
     ): JSONObject {
         // Вариант «DNS напрямую» оставляет резолвер в сети оператора: если с ним
         // страницы открываются, значит трафик до узла не доходит из-за DNS-петли.
@@ -424,7 +668,8 @@ object SingBoxConfigBuilder {
                     .put(JSONObject().put("type", "udp").put("tag", "dns-direct").put("server", "8.8.8.8"))
                     .put(
                         JSONObject()
-                            .put("type", "udp")
+                            // HTTP CONNECT cannot relay UDP DNS; use DNS-over-TCP through it.
+                            .put("type", if (outbound.optString("type") == "http") "tcp" else "udp")
                             .put("tag", "dns-proxy")
                             .put("server", "1.1.1.1")
                             .put("detour", if (directDns || directTraffic) TAG_DIRECT else TAG_PROXY),
@@ -457,8 +702,7 @@ object SingBoxConfigBuilder {
                         JSONObject()
                             .put("network", "udp")
                             .put("port", 443)
-                            .put("action", "route")
-                            .put("outbound", TAG_BLOCK),
+                            .put("action", "reject"),
                     ),
             )
             .put("final", if (directTraffic) TAG_DIRECT else TAG_PROXY)
@@ -490,11 +734,11 @@ object SingBoxConfigBuilder {
             .put(
                 "outbounds",
                 JSONArray()
-                    .put(outbound)
-                    .put(JSONObject().put("type", "direct").put("tag", TAG_DIRECT))
-                    .put(JSONObject().put("type", "block").put("tag", TAG_BLOCK)),
+                    .also { if (!endpoint) it.put(outbound) }
+                    .put(JSONObject().put("type", "direct").put("tag", TAG_DIRECT)),
             )
             .put("route", route)
+        if (endpoint) config.put("endpoints", JSONArray().put(outbound))
         // Локальный API ядра — единственный честный источник метрик: он отдаёт
         // скорость (байт/с по туннелю) и задержку проверки узла. Слушает только
         // петлевой адрес; ключ обязателен, потому что петлевой адрес на Android
@@ -517,66 +761,6 @@ object SingBoxConfigBuilder {
         return config
     }
 
-    // --- Разбор ссылки ----------------------------------------------------
-
-    private class Link(
-        val userInfo: String,
-        val host: String,
-        val port: Int,
-        val query: Map<String, String>,
-    )
-
-    private fun parse(value: String): Link? {
-        val afterScheme = value.substringAfter("://", "")
-        if (afterScheme.isEmpty()) return null
-        val withoutFragment = afterScheme.substringBefore('#')
-        val queryString = withoutFragment.substringAfter('?', "")
-        val authority = withoutFragment.substringBefore('?')
-        val userInfo = if (authority.contains('@')) authority.substringBeforeLast('@') else ""
-        val hostPort = if (authority.contains('@')) authority.substringAfterLast('@') else authority
-        val host = hostOf(hostPort) ?: return null
-        val port = portOf(hostPort)
-        if (port !in 1..65535) return null
-        return Link(userInfo, host, port, queryOf(queryString))
-    }
-
-    private fun hostOf(hostPort: String): String? {
-        if (hostPort.isEmpty()) return null
-        if (hostPort.startsWith("[")) {
-            val end = hostPort.indexOf(']')
-            if (end <= 1) return null
-            return hostPort.substring(1, end)
-        }
-        val host = if (hostPort.contains(':')) hostPort.substringBeforeLast(':') else hostPort
-        return host.ifEmpty { null }
-    }
-
-    private fun portOf(hostPort: String): Int {
-        val raw = if (hostPort.startsWith("[")) {
-            val end = hostPort.indexOf(']')
-            if (end < 0) return 443
-            hostPort.substring(end + 1).removePrefix(":")
-        } else if (hostPort.contains(':')) {
-            hostPort.substringAfterLast(':')
-        } else {
-            ""
-        }
-        return raw.toIntOrNull() ?: 443
-    }
-
-    private fun queryOf(query: String): Map<String, String> {
-        if (query.isEmpty()) return emptyMap()
-        val result = LinkedHashMap<String, String>()
-        for (pair in query.split('&')) {
-            if (pair.isEmpty()) continue
-            val key = decode(pair.substringBefore('=')).lowercase()
-            if (key.isEmpty()) continue
-            val raw = if (pair.contains('=')) pair.substringAfter('=') else ""
-            result[key] = decode(raw)
-        }
-        return result
-    }
-
-    private fun decode(value: String): String = SubscriptionLinkParser.decodeComponent(value).trim()
+    private fun decode(value: String): String = ProxyShareLink.decode(value)
 }
 

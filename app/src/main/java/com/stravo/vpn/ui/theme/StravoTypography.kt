@@ -18,49 +18,55 @@ object StravoType {
     val ScreenTitle = TextStyle(
         fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Bold,
-        fontSize = 24.sp,
-        letterSpacing = 0.5.sp,
+        fontSize = 25.sp,
+        lineHeight = 30.sp,
+        letterSpacing = (-0.3).sp,
     )
 
     val SectionLabel = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
-        letterSpacing = 3.sp,
+        fontSize = 11.sp,
+        letterSpacing = 2.sp,
     )
 
     val StatusLabel = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        letterSpacing = 4.sp,
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 23.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.sp,
     )
 
     val Body = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
-        letterSpacing = 0.2.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.sp,
     )
 
     val BodyStrong = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp,
-        letterSpacing = 0.2.sp,
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
+        letterSpacing = 0.sp,
     )
 
     val Caption = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
-        letterSpacing = 0.3.sp,
+        lineHeight = 17.sp,
+        letterSpacing = 0.sp,
     )
 
     val Tiny = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
-        fontSize = 10.sp,
-        letterSpacing = 1.sp,
+        fontSize = 11.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.2.sp,
     )
 }

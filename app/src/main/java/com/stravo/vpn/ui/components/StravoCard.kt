@@ -17,6 +17,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -38,8 +44,10 @@ fun StravoCard(
 ) {
     val palette = LocalStravoPalette.current
     val shape = RoundedCornerShape(radius)
+    var keyboardFocused by remember { mutableStateOf(false) }
+    val hasFocus = focused || keyboardFocused
     val scale by animateFloatAsState(
-        targetValue = if (focused) StravoTokens.FocusScale else 1f,
+        targetValue = if (hasFocus) StravoTokens.FocusScale else 1f,
         animationSpec = tween(durationMillis = 140),
         label = "cardFocusScale",
     )
@@ -49,17 +57,15 @@ fun StravoCard(
         modifier = modifier
             .scale(scale)
             .clip(shape)
-            .background(palette.panel)
-            .border(
-                width = if (focused) StravoTokens.FocusBorder else 1.dp,
-                color = if (focused) palette.accent else palette.outline.copy(alpha = 0.30f),
-                shape = shape,
-            )
+            .pencilSurface(palette.panel.copy(alpha = 0.88f),
+                if (hasFocus) palette.accent else palette.outline, radius,
+                focused = hasFocus, dark = palette.isDark)
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(
+                    Modifier.onFocusChanged { keyboardFocused = it.isFocused }.clickable(
                         interactionSource = interaction,
                         indication = null,
+                        role = Role.Button,
                         onClick = onClick,
                     )
                 } else {
@@ -67,14 +73,6 @@ fun StravoCard(
                 },
             ),
     ) {
-        if (focused) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .padding(6.dp)
-                    .border(1.dp, palette.outline.copy(alpha = 0.55f), RoundedCornerShape(radius - 6.dp)),
-            )
-        }
         Column(modifier = Modifier.padding(padding), content = content)
     }
 }

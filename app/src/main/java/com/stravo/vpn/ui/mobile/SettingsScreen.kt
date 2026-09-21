@@ -14,15 +14,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.stravo.vpn.BuildConfig
 import com.stravo.vpn.R
-import com.stravo.vpn.core.StravoConfig
 import com.stravo.vpn.ui.components.StravoScreenHeader
+import com.stravo.vpn.ui.components.StravoCard
 import com.stravo.vpn.ui.components.StravoSettingRow
 import com.stravo.vpn.ui.components.StravoToggle
 import com.stravo.vpn.ui.state.StravoViewModel
+import com.stravo.vpn.ui.state.HomeEvent
+import com.stravo.vpn.ui.settings.NetworkCheckRow
+import com.stravo.vpn.ui.settings.NotificationSettingsRow
+import com.stravo.vpn.ui.settings.SelectedProtocolRow
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
@@ -38,7 +43,7 @@ fun appsModeLabel(mode: com.stravo.vpn.data.settings.VpnAppMode): String = when 
     com.stravo.vpn.data.settings.VpnAppMode.EXCEPT_SELECTED -> stringResource(id = R.string.apps_mode_except)
 }
 
-/** Настройки: протокол, переключатели, язык и сведения о сборке. */
+/** Настройки подключения, системные уведомления и диагностика. */
 @Composable
 fun SettingsScreen(
     viewModel: StravoViewModel,
@@ -48,14 +53,13 @@ fun SettingsScreen(
 ) {
     val palette = LocalStravoPalette.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val state by viewModel.home.collectAsStateWithLifecycle()
     // Вариант ядра применяется при следующем подключении, поэтому это локальное состояние.
     var variant by remember { mutableStateOf(viewModel.coreVariant()) }
     // Результат выгрузки журнала: имя файла в «Загрузках».
     var logStatus by remember { mutableStateOf<String?>(null) }
     var copyStatus by remember { mutableStateOf<String?>(null) }
-
-    val protocols = StravoConfig.PROTOCOLS
-    val languages = listOf("Русский", "English")
+    var diagnosticsExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -70,62 +74,17 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
+        com.stravo.vpn.ui.settings.ConnectionPreferences(viewModel)
+        com.stravo.vpn.ui.settings.VpnSystemSettingsRow()
+        com.stravo.vpn.ui.settings.BackupPreferences(viewModel)
+        com.stravo.vpn.ui.settings.AppUpdatePreferences(viewModel.appUpdates)
 
-        Column(modifier = Modifier.fillMaxWidth()) {
-            StravoSettingRow(
-                iconRes = R.drawable.ic_settings,
-                title = stringResource(id = R.string.settings_protocol),
-                subtitle = settings.protocol,
-                onClick = {
-                    val index = protocols.indexOf(settings.protocol)
-                    val next = protocols[(index + 1) % protocols.size]
-                    viewModel.updateSettings { it.copy(protocol = next) }
-                },
-            )
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
+            SelectedProtocolRow(state)
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
-            StravoSettingRow(
-                iconRes = R.drawable.ic_bell,
-                title = stringResource(id = R.string.settings_notifications),
-                trailing = {
-                    StravoToggle(
-                        checked = settings.notifications,
-                        onCheckedChange = { value -> viewModel.updateSettings { it.copy(notifications = value) } },
-                    )
-                },
-            )
+            NotificationSettingsRow()
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
-            StravoSettingRow(
-                iconRes = R.drawable.ic_quick_connect,
-                title = stringResource(id = R.string.settings_autoconnect),
-                trailing = {
-                    StravoToggle(
-                        checked = settings.autoConnect,
-                        onCheckedChange = { value -> viewModel.updateSettings { it.copy(autoConnect = value) } },
-                    )
-                },
-            )
-            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
-            StravoSettingRow(
-                iconRes = R.drawable.ic_power,
-                title = stringResource(id = R.string.settings_start_on_boot),
-                trailing = {
-                    StravoToggle(
-                        checked = settings.startOnBoot,
-                        onCheckedChange = { value -> viewModel.updateSettings { it.copy(startOnBoot = value) } },
-                    )
-                },
-            )
-            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
-            StravoSettingRow(
-                iconRes = R.drawable.ic_wifi,
-                title = stringResource(id = R.string.settings_network_check),
-                trailing = {
-                    StravoToggle(
-                        checked = settings.networkCheck,
-                        onCheckedChange = { value -> viewModel.updateSettings { it.copy(networkCheck = value) } },
-                    )
-                },
-            )
+            NetworkCheckRow(state, onCheck = { viewModel.onEvent(HomeEvent.ProbeClick) })
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
                 iconRes = R.drawable.ic_network,
@@ -135,22 +94,24 @@ fun SettingsScreen(
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             StravoSettingRow(
-                iconRes = R.drawable.ic_globe,
-                title = stringResource(id = R.string.settings_language),
-                subtitle = settings.language,
-                onClick = {
-                    val index = languages.indexOf(settings.language)
-                    val next = languages[(index + 1) % languages.size]
-                    viewModel.updateSettings { it.copy(language = next) }
-                },
-            )
-            PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
-            StravoSettingRow(
                 iconRes = R.drawable.ic_info,
                 title = stringResource(id = R.string.settings_about),
                 subtitle = "v" + BuildConfig.VERSION_NAME,
             )
             PencilDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+        }
+        Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
+        StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
+            StravoSettingRow(
+                iconRes = R.drawable.ic_network,
+                title = stringResource(R.string.diagnostics_title),
+                onClick = { diagnosticsExpanded = !diagnosticsExpanded },
+                trailing = {
+                    Text(if (diagnosticsExpanded) "−" else "+",
+                        style = StravoType.BodyStrong, color = palette.textSecondary)
+                },
+            )
+            if (diagnosticsExpanded) {
             // Диагностика ядра: варианты сборки конфига и прямой режим без узла.
             // Нужны, пока туннель поднимается, а трафик не идёт.
             StravoSettingRow(
@@ -192,6 +153,7 @@ fun SettingsScreen(
             )
         }
 
+        }
         Spacer(modifier = Modifier.height(StravoTokens.SpaceXl))
         Text(
             text = stringResource(id = R.string.settings_footer),

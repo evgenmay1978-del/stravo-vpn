@@ -27,7 +27,7 @@ class UnavailableVpnEngine(
 
     override fun observeState(): StateFlow<VpnConnectionSnapshot> = state.asStateFlow()
 
-    override suspend fun connect(profile: VpnProfile?, location: VpnLocation) {
+    override suspend fun connect(profile: VpnProfile?, location: VpnLocation, automatic: Boolean) {
         state.update { current ->
             current.copy(
                 state = ConnectionState.Error(reasonFor(profile)),

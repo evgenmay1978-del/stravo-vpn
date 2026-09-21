@@ -3,6 +3,7 @@ package com.stravo.vpn.ui.mobile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -39,6 +42,7 @@ import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
 import com.stravo.vpn.ui.theme.StravoType
 import com.stravo.vpn.ui.components.PencilDivider
+import com.stravo.vpn.ui.components.pencilSurface
 import androidx.compose.foundation.layout.height
 
 /** Выбор локации: фильтр, поиск и список стран из подписки. */
@@ -48,13 +52,15 @@ fun LocationsScreen(
     onEvent: (HomeEvent) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSubscriptions: (() -> Unit)? = null,
 ) {
     val palette = LocalStravoPalette.current
     var query by rememberSaveable { mutableStateOf("") }
-    var recommendedOnly by rememberSaveable { mutableStateOf(true) }
+    var recommendedOnly by rememberSaveable { mutableStateOf(false) }
+    var sortByPing by rememberSaveable { mutableStateOf(false) }
 
     val locations = state.locations
-    val visible = remember(query, recommendedOnly, locations, state.location.id) {
+    val visible = remember(query, recommendedOnly, locations, state.location.id, sortByPing, state.measuredNodePings) {
         locations.filter { location ->
             val matchesQuery = query.isBlank() ||
                 location.country.contains(query, ignoreCase = true) ||
@@ -63,7 +69,9 @@ fun LocationsScreen(
                 location.subtitle.contains(query, ignoreCase = true)
             val matchesFilter = !recommendedOnly || location.recommended || location.id == state.location.id
             matchesQuery && matchesFilter
-        }
+        }.sortedWith(compareBy<VpnLocation> { it.id != com.stravo.vpn.domain.model.LocationsCatalog.AUTO.id }
+            .thenBy { if (sortByPing) state.measuredNodePings[it.id] ?: Int.MAX_VALUE else 0 }
+            .thenBy { it.country + it.city })
     }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = StravoTokens.ScreenPaddingMobile)) {
@@ -72,6 +80,13 @@ fun LocationsScreen(
             onBack = onBack,
             modifier = Modifier.padding(top = StravoTokens.SpaceMd),
         )
+
+        if (onOpenSubscriptions != null) {
+            TextButton(onClick = onOpenSubscriptions) {
+                Text(state.selectedSource?.name ?: "Выбрать подписку", maxLines = 2,
+                    overflow = TextOverflow.Ellipsis)
+            }
+        }
 
         Row(
             modifier = Modifier
@@ -98,17 +113,29 @@ fun LocationsScreen(
             modifier = Modifier.padding(top = StravoTokens.SpaceMd),
         )
 
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(enabled = state.connection.isActive && !state.measuringLocations,
+                onClick = { onEvent(HomeEvent.MeasureLocations) }) {
+                Text(stringResource(if (state.measuringLocations) R.string.locations_measuring else R.string.locations_measure))
+            }
+            TextButton(onClick = { sortByPing = !sortByPing }) {
+                Text(stringResource(if (sortByPing) R.string.locations_sort_name else R.string.locations_sort_ping))
+            }
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(top = StravoTokens.SpaceSm),
+                .padding(top = StravoTokens.SpaceMd)
+                .clip(RoundedCornerShape(StravoTokens.CardRadiusMobile))
+                .pencilSurface(palette.panel.copy(alpha = 0.91f), palette.outline, StravoTokens.CardRadiusMobile),
         ) {
             items(items = visible, key = { it.id }) { location ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     LocationRow(
                         location = location,
                         selected = location.id == state.location.id,
+                        pingMs = state.measuredNodePings[location.id],
                         onClick = { onEvent(HomeEvent.LocationSelected(location.id)) },
                     )
                     PencilDivider(
@@ -122,7 +149,7 @@ fun LocationsScreen(
         }
 
         Text(
-            text = stringResource(id = R.string.locations_footer),
+            text = stringResource(id = if (state.connection.isActive) R.string.locations_ping_hint else R.string.locations_measure_connect),
             style = StravoType.Caption,
             color = palette.textSecondary,
             modifier = Modifier.padding(vertical = StravoTokens.SpaceMd),
@@ -131,25 +158,30 @@ fun LocationsScreen(
 }
 
 @Composable
-private fun LocationRow(
+internal fun LocationRow(
     location: VpnLocation,
     selected: Boolean,
+    pingMs: Int?,
     onClick: () -> Unit,
 ) {
     val palette = LocalStravoPalette.current
     val shape = RoundedCornerShape(StravoTokens.CardRadiusMobile)
+    var focused by remember { mutableStateOf(false) }
     Row(
     modifier = Modifier
         .fillMaxWidth()
         .clip(shape)
-        .clickable(role = Role.RadioButton, onClick = onClick)
-        .padding(vertical = StravoTokens.SpaceSm, horizontal = StravoTokens.SpaceSm),
+        .background(if (selected || focused) palette.accent.copy(alpha = 0.08f) else androidx.compose.ui.graphics.Color.Transparent)
+        .border(if (focused) 2.dp else 0.dp, if (focused) palette.accent else androidx.compose.ui.graphics.Color.Transparent, shape)
+        .onFocusChanged { focused = it.isFocused }
+        .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+        .padding(vertical = StravoTokens.SpaceMd, horizontal = StravoTokens.SpaceMd),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(StravoTokens.SpaceMd),
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(32.dp)
                 .clip(CircleShape)
                 .background(palette.panelSoft)
                 .border(1.dp, palette.outline.copy(alpha = 0.25f), CircleShape),
@@ -171,30 +203,39 @@ private fun LocationRow(
                 )
             }
         }
-        if (selected) {
+        Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = stringResource(id = R.string.locations_selected),
+                text = if (pingMs == null) stringResource(R.string.locations_ping_unknown)
+                    else stringResource(R.string.locations_ping_measured, pingMs),
                 style = StravoType.Tiny,
-                color = palette.accent,
-                modifier = Modifier.padding(end = StravoTokens.SpaceLg),
+                color = palette.textSecondary,
             )
+            if (selected) {
+                Text(
+                    text = stringResource(id = R.string.locations_selected),
+                    style = StravoType.Tiny,
+                    color = palette.accent,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun FilterChip(
+internal fun FilterChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
     val palette = LocalStravoPalette.current
-    val shape = CircleShape
+    val shape = RoundedCornerShape(10.dp)
+    var focused by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .clip(shape)
-            .background(if (selected) palette.medallion else palette.panel)
-            .border(1.dp, palette.outline.copy(alpha = 0.25f), shape)
+            .pencilSurface(if (selected) palette.medallion else palette.panel, palette.outline,
+                10.dp, focused = focused, dark = selected)
+            .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Tab, onClick = onClick)
             .padding(horizontal = StravoTokens.SpaceLg, vertical = StravoTokens.SpaceSm),
     ) {

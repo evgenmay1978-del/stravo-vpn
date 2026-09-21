@@ -6,6 +6,7 @@ import com.stravo.vpn.domain.model.FormFactor
 import com.stravo.vpn.domain.model.LocationsCatalog
 import com.stravo.vpn.domain.model.NetworkMode
 import com.stravo.vpn.domain.model.Subscription
+import com.stravo.vpn.domain.model.SubscriptionSource
 import com.stravo.vpn.domain.model.VpnLocation
 import com.stravo.vpn.domain.model.VpnProfile
 import com.stravo.vpn.domain.model.VpnStats
@@ -13,6 +14,7 @@ import com.stravo.vpn.domain.policy.CapabilityPolicy
 import com.stravo.vpn.domain.subscription.SubscriptionLocations
 import com.stravo.vpn.domain.subscription.SubscriptionNode
 import com.stravo.vpn.domain.subscription.Unrecognized
+import com.stravo.vpn.domain.subscription.SubscriptionService
 
 /** Состояние добавления подписки. */
 sealed interface SubscriptionImportState {
@@ -33,9 +35,16 @@ data class HomeUiState(
     val location: VpnLocation = LocationsCatalog.AUTO,
     val profile: VpnProfile? = null,
     val subscription: Subscription = Subscription.None,
+    val subscriptionPlans: Map<SubscriptionService, Subscription> = emptyMap(),
+    val subscriptionSources: List<SubscriptionSource> = emptyList(),
+    val selectedSourceId: String = "",
     val subscriptionNodes: List<SubscriptionNode> = emptyList(),
     val mode: NetworkMode = NetworkMode.NORMAL_VPN,
     val stats: VpnStats = VpnStats.Empty,
+    val measuredNodePings: Map<String, Int> = emptyMap(),
+    val measuringLocations: Boolean = false,
+    val restoringBackup: Boolean = false,
+    val subscriptionRefresh: SubscriptionRefreshState = SubscriptionRefreshState.IDLE,
     val notice: Notice? = null,
     val importState: SubscriptionImportState = SubscriptionImportState.Idle,
     /** Одна строка о нештатном прошлом запуске (сбой ядра/приложения). Показывается один раз. */
@@ -46,7 +55,7 @@ data class HomeUiState(
     val probing: Boolean = false,
     /**
      * Локация, которая реально поднята в туннеле. Может не совпадать с выбранной:
-     * смена локации на ходу не перезапускает ядро, и карточка не должна врать.
+     * при переключении ядро ещё закрывает старый TUN и открывает новый.
      */
     val connectedLocationId: String? = null,
 ) {
@@ -58,26 +67,36 @@ data class HomeUiState(
 
     val isTv: Boolean get() = formFactor.isTv
 
+    val selectedSource: SubscriptionSource? get() = subscriptionSources.firstOrNull {
+        it.id == selectedSourceId && it.enabled && CapabilityPolicy.permits(it.service, formFactor)
+    }
+    val selectedSubscription: Subscription get() = selectedSource?.let {
+        it.subscription.copy(planName = it.name)
+    } ?: Subscription.None
+
+    val availableNodes: List<SubscriptionNode> get() = subscriptionNodes.filter {
+        it.sourceId == selectedSourceId && selectedSource != null &&
+            CapabilityPolicy.permits(it.service, formFactor) && it.service ==
+            (if (mode == NetworkMode.FREE_INTERNET) SubscriptionService.CDN else SubscriptionService.ORDINARY)
+    }
+
     /**
      * Локации для выбора. Пока подписки нет — витрина каталога; после импорта
      * показываются реальные серверы подписки (только страна, город и протокол).
      */
-    val locations: List<VpnLocation> = if (subscriptionNodes.isEmpty()) {
-        LocationsCatalog.all
-    } else {
-        listOf(LocationsCatalog.AUTO) + SubscriptionLocations.from(subscriptionNodes)
-    }
+    val locations: List<VpnLocation> =
+        listOf(LocationsCatalog.AUTO) + SubscriptionLocations.from(availableNodes)
 
     fun nodeFor(locationId: String): SubscriptionNode? =
-        subscriptionNodes.firstOrNull { it.id == locationId }
+        availableNodes.firstOrNull { it.id == locationId }
 
     /**
-     * Автоматический сервер: у пункта «Авто» своего узла нет — берём первый из подписки.
-     * Без этого «Подключить» на авто-локации честно отвечало «нет ключа узла».
+     * Initial node supplies the config skeleton; the core's URL-test group chooses
+     * the actual reachable outbound when automatic=true.
      */
     fun nodeForLocation(): SubscriptionNode? =
         if (location.id == LocationsCatalog.AUTO.id) {
-            subscriptionNodes.firstOrNull()
+            availableNodes.firstOrNull()
         } else {
             nodeFor(location.id)
         }
@@ -103,17 +122,21 @@ enum class Notice {
     SUBSCRIPTION_REQUIRED,
 }
 
+enum class SubscriptionRefreshState { IDLE, LOADING, UPDATED, FAILED, NO_SOURCE }
+
 /** Все побочные эффекты идут событиями — Compose не дёргает сервисы напрямую. */
 sealed interface HomeEvent {
     data object PowerClick : HomeEvent
     data object QuickConnectClick : HomeEvent
     data object Retry : HomeEvent
     data object ProbeClick : HomeEvent
+    data object MeasureLocations : HomeEvent
     data class LocationSelected(val locationId: String) : HomeEvent
     data class ModeSelected(val mode: NetworkMode) : HomeEvent
     data class NoticeShown(val notice: Notice) : HomeEvent
     data object NoticeConsumed : HomeEvent
     data class SubscriptionSubmitted(val raw: String) : HomeEvent
+    data class LoginSubmitted(val login: String) : HomeEvent
     data object SubscriptionImportCleared : HomeEvent
     data object SubscriptionRemoved : HomeEvent
 }

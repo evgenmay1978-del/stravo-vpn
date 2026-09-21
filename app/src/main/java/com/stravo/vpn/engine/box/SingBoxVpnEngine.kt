@@ -25,7 +25,7 @@ class SingBoxVpnEngine(
 
     override fun observeState(): StateFlow<VpnConnectionSnapshot> = StravoVpnService.state
 
-    override suspend fun connect(profile: VpnProfile?, location: VpnLocation) {
+    override suspend fun connect(profile: VpnProfile?, location: VpnLocation, automatic: Boolean) {
         val nodeId = profile?.id
         if (nodeId.isNullOrBlank() || configProvider.configFor(nodeId) == null) {
             fail(NOTHING_TO_CONNECT, location.id)
@@ -41,6 +41,7 @@ class SingBoxVpnEngine(
         val intent = Intent(context, StravoVpnService::class.java)
             .setAction(StravoVpnService.ACTION_START)
             .putExtra(StravoVpnService.EXTRA_NODE_ID, nodeId)
+            .putExtra(StravoVpnService.EXTRA_AUTOMATIC, automatic)
             .putExtra(StravoVpnService.EXTRA_LOCATION_ID, location.id)
             // Подпись узла для журнала: «Германия · VLESS · TCP · Reality». Без хостов и ключей.
             .putExtra(StravoVpnService.EXTRA_LOCATION_LABEL, location.subtitle)
@@ -52,12 +53,13 @@ class SingBoxVpnEngine(
     }
 
     override suspend fun disconnect() {
-        StravoVpnService.publish(VpnConnectionSnapshot())
+        TunnelSession(context).stop()
         val intent = Intent(context, StravoVpnService::class.java).setAction(StravoVpnService.ACTION_STOP)
         try {
             context.startService(intent)
         } catch (error: Exception) {
             context.stopService(Intent(context, StravoVpnService::class.java))
+            StravoVpnService.publish(VpnConnectionSnapshot())
         }
     }
 
