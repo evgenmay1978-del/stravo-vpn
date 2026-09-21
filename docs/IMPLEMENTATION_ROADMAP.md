@@ -117,3 +117,8 @@ https://github.com/INCY-DEV/incy-platforms/blob/main/README.md,
 https://docs.incy.cc/en/share-links/,
 https://www.happ.su/main/dev-docs/routing,
 https://www.happ.su/main/dev-docs/app-management.
+
+beta.2 (10): source c590823, Actions35617613768 successful, опубликован prerelease;
+подпись и GitHub digest совпали, native libbox не менялся. Повторный явный выбор
+после failover теперь сравнивает actual node ID. Автотесты/серверные операции/VPN
+владельца не запускались. Физический UI и ordinary VLESS остаются неподтверждёнными.
