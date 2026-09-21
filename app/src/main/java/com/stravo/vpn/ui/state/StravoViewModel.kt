@@ -372,22 +372,31 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectSource(id: String) {
+        selectServer(id, if (_home.value.selectedSourceId == id) _home.value.location.id else LocationsCatalog.AUTO.id)
+    }
+
+    /** Commit the chosen subscription and server once, without a transient auto connection. */
+    fun selectServer(id: String, locationId: String) {
+        if (_home.value.restoringBackup) return
         val source = container.subscriptions.sources.value.firstOrNull {
             it.id == id && it.enabled && CapabilityPolicy.permits(it.service, deviceFormFactor)
         } ?: return
         val state = _home.value
+        val candidate = state.copy(selectedSourceId = id, subscriptionSources = container.subscriptions.sources.value,
+            subscriptionNodes = container.subscriptions.nodes.value,
+            mode = if (source.service == SubscriptionService.CDN) NetworkMode.FREE_INTERNET else NetworkMode.NORMAL_VPN)
+        val location = candidate.locations.firstOrNull { it.id == locationId } ?: return
         val running = container.vpnEngine.observeState().value.state.let { it.isActive || it.isBusy }
-        if (state.selectedSourceId == id) {
+        if (state.selectedSourceId == id && state.location.id == location.id) {
             val actualId = container.vpnEngine.observeState().value.locationId
             val actualSource = container.subscriptions.nodes.value.firstOrNull { it.id == actualId }?.sourceId
             if (running && actualSource != id) toggleConnection(forceConnect = true)
             return
         }
-        _home.update { it.copy(selectedSourceId = id, subscriptionSources = container.subscriptions.sources.value,
-            mode = if (source.service == SubscriptionService.CDN) NetworkMode.FREE_INTERNET else NetworkMode.NORMAL_VPN,
-            location = LocationsCatalog.AUTO, measuredNodePings = emptyMap()) }
+        _home.update { candidate.copy(location = location,
+            measuredNodePings = if (state.selectedSourceId == id) state.measuredNodePings else emptyMap()) }
         container.settings.update { it.copy(selectedSourceId = id, selectedMode = _home.value.mode,
-            selectedNodeId = LocationsCatalog.AUTO.id) }
+            selectedNodeId = location.id, autoSelect = location.id == LocationsCatalog.AUTO.id) }
         if (running) toggleConnection(forceConnect = true)
     }
 
@@ -490,13 +499,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             is HomeEvent.NoticeShown -> _home.update { it.copy(notice = event.notice) }
 
             is HomeEvent.LocationSelected -> {
-                val location = _home.value.locations.firstOrNull { it.id == event.locationId } ?: return
-                if (location.id == _home.value.location.id) return
-                val connection = container.vpnEngine.observeState().value.state
-                _home.update { it.copy(location = location) }
-                container.settings.update { it.copy(selectedNodeId = location.id,
-                    autoSelect = location.id == LocationsCatalog.AUTO.id) }
-                if (connection.isActive || connection.isBusy) toggleConnection(forceConnect = true)
+                selectServer(_home.value.selectedSourceId, event.locationId)
             }
 
             is HomeEvent.ModeSelected -> {

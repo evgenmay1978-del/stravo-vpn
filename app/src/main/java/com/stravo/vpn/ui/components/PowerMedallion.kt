@@ -17,7 +17,9 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +41,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.stravo.vpn.domain.model.ConnectionState
+import com.stravo.vpn.platform.DeviceType
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoColors
 import kotlin.math.cos
@@ -52,11 +56,24 @@ fun PowerMedallion(
     onClick: (() -> Unit)? = null,
     stateLabel: String? = null,
     contentLabel: String? = null,
+    smolderOnConnect: Boolean = false,
 ) {
     val palette = LocalStravoPalette.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     var focused by remember { mutableStateOf(false) }
+    var smolderTrigger by remember { mutableIntStateOf(0) }
+    val smolderEnabled = if (smolderOnConnect) {
+        val context = LocalContext.current
+        remember(context) { DeviceType.formFactorOf(context).isPhone }
+    } else false
+    if (smolderEnabled) {
+        LaunchedEffect(state) {
+            if (state is ConnectionState.Disconnected || state is ConnectionState.Error) {
+                smolderTrigger = 0
+            }
+        }
+    }
     val scale by animateFloatAsState(if (pressed) 0.975f else 1f, tween(140), label = "powerPress")
     val active = state is ConnectionState.Connected
     val failed = state is ConnectionState.Error || state is ConnectionState.Degraded
@@ -81,7 +98,13 @@ fun PowerMedallion(
             .onFocusChanged { focused = it.isFocused }
             .then(if (onClick != null) Modifier.clickable(
                 interactionSource = interaction, indication = null,
-                role = Role.Button, onClick = onClick,
+                role = Role.Button, onClick = {
+                    if (smolderEnabled) {
+                        if (!state.isActive && !state.isBusy) smolderTrigger += 1
+                        else if (state.isActive) smolderTrigger = 0
+                    }
+                    onClick()
+                },
             ) else Modifier),
     ) {
         DraftingRings(
@@ -92,6 +115,9 @@ fun PowerMedallion(
             painterResource(R.drawable.atlas_pencil_medallion), null,
             Modifier.matchParentSize(), contentScale = ContentScale.Fit,
         )
+        if (smolderEnabled) {
+            PowerSmolderRim(smolderTrigger, Modifier.matchParentSize())
+        }
         Canvas(Modifier.matchParentSize().clipToBounds()) {
             val r = this.size.minDimension * 0.39f
             val glyph = r * 0.38f

@@ -32,7 +32,6 @@ import com.stravo.vpn.domain.model.ConnectionState
 import com.stravo.vpn.ui.components.PencilButton
 import com.stravo.vpn.ui.components.PowerMedallion
 import com.stravo.vpn.ui.components.StravoCard
-import com.stravo.vpn.ui.navigation.Destination
 import com.stravo.vpn.ui.state.HomeUiState
 import com.stravo.vpn.ui.theme.LocalStravoPalette
 import com.stravo.vpn.ui.theme.StravoTokens
@@ -42,8 +41,8 @@ import com.stravo.vpn.ui.theme.StravoType
 @Composable
 fun TvHomeScreen(
     state: HomeUiState,
-    onNavigate: (Destination) -> Unit,
     onOpenConnectPhone: () -> Unit,
+    onOpenServers: () -> Unit,
     modifier: Modifier = Modifier,
     onEvent: (com.stravo.vpn.ui.state.HomeEvent) -> Unit = {},
 ) {
@@ -103,13 +102,13 @@ fun TvHomeScreen(
                 subtitle = listOf(state.location.country, state.location.subtitle)
                     .filter { it.isNotBlank() }
                     .joinToString(" · "),
-                onClick = { onNavigate(Destination.LOCATIONS) },
+                onClick = onOpenServers,
             )
             TvInfoCard(
                 iconRes = R.drawable.ic_profile,
-                title = stringResource(id = R.string.card_profile),
-                subtitle = state.subscription.planName,
-                onClick = { onNavigate(Destination.PROFILE) },
+                title = "Подписка",
+                subtitle = state.selectedSource?.name ?: "Добавить / логин",
+                onClick = onOpenServers,
             )
             PencilButton(
                 text = stringResource(id = R.string.cta_quick_connect),

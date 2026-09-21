@@ -11,7 +11,7 @@
 - Ordinary/CDN → независимые явно добавленные источники → `SubscriptionImporter`
   → `SubscriptionRepository` → `HomeUiState`. Не выводить второй URL из первого.
 - Карандашный референс владельца → общие PencilSurface/PencilIcon/бумажные ассеты
-  → все экраны. Меню и действия сохраняются.
+  → все экраны. Новое разрешение 21.09 → упростить меню/переключение.
 - Разработка → только приложение → GitHub `evgenmay1978-del/stravo-vpn`.
 - Сборка → GitHub Actions. Без локального Gradle и без новых автотестов.
 - Серверы/SSH/deploy/платежи/OTA → вне разрешённого объёма.
@@ -61,7 +61,23 @@
   https://docs.incy.cc/subscription-format/ и
   https://github.com/HappDev/happ_su/blob/main/dev-docs/app-management.md
 
-## Текущий результат
+## Текущий результат — 21.09.2026
+
+- beta.1 (9) → d133ec0 → Actions35577295410 successful → опубликованный prerelease
+  → SHA256 `366ce33e51b6ddf0c96197c3e0182fec1f5dc275064e4c7e76519f74e6dd91a7`
+  → прежний сертификат. WG/AWG и автообновление STRAVO включены.
+- Новый запрос → QuickServerPicker с главной phone/TV → локальный просмотр подписок
+  → selectServer(sourceId, nodeId) одним действием → reconnect только уже активного VPN.
+- LocationSelected → тот же обработчик → автоматическое возвращение на главную.
+- Маленький тлеющий ободок → PowerSmolderRim → опция только мобильного PowerMedallion
+  → 2.6 с → disabled animations учитываются → TV без эффекта.
+- beta.2 (10) → исходники изменены → сборка/подпись ещё не подтверждены.
+- Обычный VLESS → причина не доказана статическим чтением → нужен существующий
+  обезличенный журнал отказа + установленная версия; серверы/VPN не запрашивать.
+- CDN → владелец теперь подтверждает нормальную работу; транспорт не менять.
+- Авторизация → прежний Maestro login; отдельные источники CDN/ordinary сохраняются.
+
+## Исторический результат 1.0.7
 
 - 1.0.7 (8) → source/tag `631c761` → Actions `35531294493` successful
   → [опубликованный Latest](https://github.com/evgenmay1978-del/stravo-vpn/releases/tag/v1.0.7).

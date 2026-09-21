@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -51,6 +52,7 @@ fun LocationsScreen(
     onEvent: (HomeEvent) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSubscriptions: (() -> Unit)? = null,
 ) {
     val palette = LocalStravoPalette.current
     var query by rememberSaveable { mutableStateOf("") }
@@ -78,6 +80,13 @@ fun LocationsScreen(
             onBack = onBack,
             modifier = Modifier.padding(top = StravoTokens.SpaceMd),
         )
+
+        if (onOpenSubscriptions != null) {
+            TextButton(onClick = onOpenSubscriptions) {
+                Text(state.selectedSource?.name ?: "Выбрать подписку", maxLines = 2,
+                    overflow = TextOverflow.Ellipsis)
+            }
+        }
 
         Row(
             modifier = Modifier
@@ -149,7 +158,7 @@ fun LocationsScreen(
 }
 
 @Composable
-private fun LocationRow(
+internal fun LocationRow(
     location: VpnLocation,
     selected: Boolean,
     pingMs: Int?,
@@ -157,11 +166,14 @@ private fun LocationRow(
 ) {
     val palette = LocalStravoPalette.current
     val shape = RoundedCornerShape(StravoTokens.CardRadiusMobile)
+    var focused by remember { mutableStateOf(false) }
     Row(
     modifier = Modifier
         .fillMaxWidth()
         .clip(shape)
-        .background(if (selected) palette.accent.copy(alpha = 0.08f) else androidx.compose.ui.graphics.Color.Transparent)
+        .background(if (selected || focused) palette.accent.copy(alpha = 0.08f) else androidx.compose.ui.graphics.Color.Transparent)
+        .border(if (focused) 2.dp else 0.dp, if (focused) palette.accent else androidx.compose.ui.graphics.Color.Transparent, shape)
+        .onFocusChanged { focused = it.isFocused }
         .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
         .padding(vertical = StravoTokens.SpaceMd, horizontal = StravoTokens.SpaceMd),
         verticalAlignment = Alignment.CenterVertically,
@@ -210,18 +222,20 @@ private fun LocationRow(
 }
 
 @Composable
-private fun FilterChip(
+internal fun FilterChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
     val palette = LocalStravoPalette.current
     val shape = RoundedCornerShape(10.dp)
+    var focused by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .clip(shape)
             .pencilSurface(if (selected) palette.medallion else palette.panel, palette.outline,
-                10.dp, dark = selected)
+                10.dp, focused = focused, dark = selected)
+            .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Tab, onClick = onClick)
             .padding(horizontal = StravoTokens.SpaceLg, vertical = StravoTokens.SpaceSm),
     ) {

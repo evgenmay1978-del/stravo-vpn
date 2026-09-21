@@ -70,6 +70,7 @@ fun TvRoot(
     val navigator = rememberSaveable(saver = StravoNavigator.saver()) { StravoNavigator() }
     val state by viewModel.home.collectAsStateWithLifecycle()
     var showSubscriptions by rememberSaveable { mutableStateOf(false) }
+    var showServers by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
 
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
@@ -93,12 +94,17 @@ fun TvRoot(
                         when (navigator.current) {
                             Destination.HOME -> TvHomeScreen(
                                 state = state,
-                                onNavigate = { navigator.select(it) },
+                                onOpenServers = { showServers = true },
                                 onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
                                 onEvent = viewModel::onEvent,
                             )
                             Destination.LOCATIONS -> com.stravo.vpn.ui.mobile.LocationsScreen(
-                                state, viewModel::onEvent, onBack = { navigator.select(Destination.HOME) })
+                                state, onEvent = { event ->
+                                    viewModel.onEvent(event)
+                                    if (event is com.stravo.vpn.ui.state.HomeEvent.LocationSelected)
+                                        navigator.select(Destination.HOME)
+                                }, onBack = { navigator.select(Destination.HOME) },
+                                onOpenSubscriptions = { showServers = true })
                             Destination.PROFILE -> com.stravo.vpn.ui.mobile.ProfileScreen(
                                 state = state,
                                 onConnectTv = { navigator.select(Destination.CONNECT_TV) },
@@ -120,7 +126,7 @@ fun TvRoot(
                             )
                             Destination.SCANNER -> TvHomeScreen(
                                 state = state,
-                                onNavigate = { navigator.select(it) },
+                                onOpenServers = { showServers = true },
                                 onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
                                 onEvent = viewModel::onEvent,
                             )
@@ -130,6 +136,23 @@ fun TvRoot(
                 }
             }
         }
+    }
+    if (showServers) {
+        com.stravo.vpn.ui.mobile.QuickServerPicker(
+            state = state,
+            onSelect = { sourceId, nodeId ->
+                viewModel.selectServer(sourceId, nodeId)
+                showServers = false
+                navigator.select(Destination.HOME)
+            },
+            onManage = { showServers = false; showSubscriptions = true },
+            onAdd = {
+                showServers = false
+                viewModel.clearImportState()
+                navigator.select(Destination.ADD_SUBSCRIPTION)
+            },
+            onDismiss = { showServers = false },
+        )
     }
     if (showSubscriptions) {
         com.stravo.vpn.ui.mobile.SubscriptionManager(

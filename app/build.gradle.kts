@@ -14,8 +14,8 @@ android {
         applicationId = "com.stravo.vpn"
         minSdk = 23
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.1.0-beta.1"
+        versionCode = 10
+        versionName = "1.1.0-beta.2"
     }
 
     signingConfigs {

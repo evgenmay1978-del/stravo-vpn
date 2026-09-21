@@ -103,3 +103,17 @@ AWG2/3 .conf, awg/amneziawg base64url/credential URI, JSON-контейнер se
 Открытые форматы: сжатый vpn://, полные Xray/Clash JSON, прочие неподдержанные расширения.
 Вместо ритуальных отдельных spec/review/test-циклов — этот краткий план,
 разбор конкретных рисков и необходимая сборка; это прямое рабочее правило владельца.
+
+21.09 checkpoint: d133ec0 / Actions35577295410 успешно собраны, подписанный APK
+v1.1.0-beta.1 публичен как prerelease, digest совпал (полные данные в handoff).
+Новый приоритет владельца: меню без лишних переходов, ordinary VLESS, небольшой
+тлеющий участок вокруг кнопки только телефона. Login и рабочий CDN сохранить.
+План текущего изменения: быстрый source+server picker → единый selectServer →
+локальная анимация → необходимая сборка beta.2 в Actions, без автотестов.
+Проверка исходников REALITY/flow/uTLS не выявила доказанной причины ordinary-сбоя;
+запрошен сохранённый обезличенный журнал, серверы не запрашивались.
+Источники устройства конкурентов (не копия закрытого кода/ассетов):
+https://github.com/INCY-DEV/incy-platforms/blob/main/README.md,
+https://docs.incy.cc/en/share-links/,
+https://www.happ.su/main/dev-docs/routing,
+https://www.happ.su/main/dev-docs/app-management.

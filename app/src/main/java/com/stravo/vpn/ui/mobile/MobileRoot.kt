@@ -54,6 +54,7 @@ fun MobileRoot(
     val pairing by viewModel.pairing.collectAsStateWithLifecycle()
     var scanForSubscription by rememberSaveable { mutableStateOf(false) }
     var showSubscriptions by rememberSaveable { mutableStateOf(false) }
+    var showServers by rememberSaveable { mutableStateOf(false) }
     val palette = LocalStravoPalette.current
 
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
@@ -77,16 +78,19 @@ fun MobileRoot(
                     Destination.HOME -> HomeScreen(
                         state = state,
                         onEvent = viewModel::onEvent,
-                        onOpenLocations = { navigator.select(Destination.LOCATIONS) },
-                        onOpenProfile = { navigator.select(Destination.PROFILE) },
+                        onOpenLocations = { showServers = true },
                         onOpenSettings = { navigator.select(Destination.SETTINGS) },
-                        onOpenSubscriptions = { showSubscriptions = true },
+                        onOpenSubscriptions = { showServers = true },
                     )
 
                     Destination.LOCATIONS -> LocationsScreen(
                         state = state,
-                        onEvent = viewModel::onEvent,
+                        onEvent = { event ->
+                            viewModel.onEvent(event)
+                            if (event is HomeEvent.LocationSelected) navigator.select(Destination.HOME)
+                        },
                         onBack = { navigator.back() },
+                        onOpenSubscriptions = { showServers = true },
                     )
 
                     Destination.PROFILE -> ProfileScreen(
@@ -167,6 +171,23 @@ fun MobileRoot(
                 onSelect = { destination -> navigator.select(destination) },
             )
         }
+    }
+    if (showServers) {
+        QuickServerPicker(
+            state = state,
+            onSelect = { sourceId, nodeId ->
+                viewModel.selectServer(sourceId, nodeId)
+                showServers = false
+                navigator.select(Destination.HOME)
+            },
+            onManage = { showServers = false; showSubscriptions = true },
+            onAdd = {
+                showServers = false
+                viewModel.clearImportState()
+                navigator.push(Destination.ADD_SUBSCRIPTION)
+            },
+            onDismiss = { showServers = false },
+        )
     }
     if (showSubscriptions) {
         SubscriptionManager(

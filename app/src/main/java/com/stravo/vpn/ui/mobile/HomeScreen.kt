@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import com.stravo.vpn.R
 import com.stravo.vpn.domain.model.ConnectionState
 import com.stravo.vpn.domain.model.NetworkMode
-import com.stravo.vpn.domain.policy.CapabilityPolicy
 import com.stravo.vpn.telegram.BotLaunchResult
 import com.stravo.vpn.telegram.BotLinkLauncher
 import com.stravo.vpn.telegram.BotLinks
@@ -67,7 +66,6 @@ fun HomeScreen(
     state: HomeUiState,
     onEvent: (HomeEvent) -> Unit,
     onOpenLocations: () -> Unit,
-    onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSubscriptions: () -> Unit,
     modifier: Modifier = Modifier,
@@ -97,6 +95,7 @@ fun HomeScreen(
                 onClick = { onEvent(HomeEvent.PowerClick) },
                 stateLabel = statusLabel(state.connection),
                 contentLabel = stringResource(id = R.string.action_connect_toggle),
+                smolderOnConnect = true,
             )
         }
 
@@ -131,9 +130,10 @@ fun HomeScreen(
             )
             SummaryCard(
                 iconRes = R.drawable.ic_profile,
-                title = stringResource(id = R.string.card_profile),
-                subtitle = subscriptionTitle(state),
-                onClick = onOpenProfile,
+                title = "Подписка",
+                subtitle = subscriptionTitle(state) + if (state.selectedSource == null) "" else
+                    if (state.mode == NetworkMode.FREE_INTERNET) " · CDN" else " · VPN",
+                onClick = onOpenSubscriptions,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -141,44 +141,6 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
 
         SubscriptionDetails(state.selectedSubscription)
-        StravoCard(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onOpenSubscriptions,
-            padding = StravoTokens.SpaceMd,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_vpn),
-                    contentDescription = null,
-                    tint = palette.textPrimary,
-                    modifier = Modifier.size(24.dp),
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = StravoTokens.SpaceMd),
-                ) {
-                    Text(
-                        text = modeTitle(state),
-                        style = StravoType.BodyStrong,
-                        color = palette.textPrimary,
-                    )
-                    Text(
-                        text = modeSubtitle(state),
-                        style = StravoType.Caption,
-                        color = palette.textSecondary,
-                    )
-                }
-                if (CapabilityPolicy.availableModes(state.formFactor).size > 1) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_chevron),
-                        contentDescription = null,
-                        tint = palette.textSecondary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-        }
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceMd))
 
@@ -329,8 +291,7 @@ private fun SummaryCard(
  * Строка локации в карточке: «Страна · Город · Протокол».
  *
  * Пока туннель поднят, показывается узел, который в нём реально работает, а не
- * выбранный в списке: смена локации на ходу ядро не перезапускает, и раньше карточка
- * показывала новый узел как подключённый. Если выбор разошёлся с туннелем — сказано прямо.
+ * выбранный в списке, пока сервис переподключается. Если выбор разошёлся с туннелем — сказано прямо.
  */
 private fun locationSummary(state: HomeUiState): String {
     val tunnel = state.tunnelLocation
@@ -362,15 +323,3 @@ private fun statusSubtitle(connection: ConnectionState): String = when (connecti
     ConnectionState.Degraded -> stringResource(id = R.string.status_unverified_sub)
     else -> stringResource(id = R.string.tagline_sub)
 }
-
-@Composable
-private fun modeTitle(state: HomeUiState): String = when (state.mode) {
-    NetworkMode.NORMAL_VPN -> stringResource(id = R.string.card_mode)
-    NetworkMode.FREE_INTERNET -> stringResource(id = R.string.mode_free_internet)
-}
-
-@Composable
-private fun modeSubtitle(state: HomeUiState): String = stringResource(
-    if (state.availableNodes.isEmpty()) R.string.subscription_picker_empty_mode
-    else R.string.subscription_picker_open,
-)
