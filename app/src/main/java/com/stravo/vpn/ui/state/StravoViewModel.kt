@@ -69,6 +69,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
     val pairing: StateFlow<PairingState> = _pairing.asStateFlow()
 
     val settings: StateFlow<StravoSettings> = container.settings.settings
+    val appUpdates = container.appUpdates
     private val _vpnPermissionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val vpnPermissionRequests = _vpnPermissionRequests.asSharedFlow()
 
@@ -373,8 +374,13 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             it.id == id && it.enabled && CapabilityPolicy.permits(it.service, deviceFormFactor)
         } ?: return
         val state = _home.value
-        if (state.selectedSourceId == id) return
         val running = container.vpnEngine.observeState().value.state.let { it.isActive || it.isBusy }
+        if (state.selectedSourceId == id) {
+            val actualId = container.vpnEngine.observeState().value.locationId
+            val actualSource = container.subscriptions.nodes.value.firstOrNull { it.id == actualId }?.sourceId
+            if (running && actualSource != id) toggleConnection(forceConnect = true)
+            return
+        }
         _home.update { it.copy(selectedSourceId = id, subscriptionSources = container.subscriptions.sources.value,
             mode = if (source.service == SubscriptionService.CDN) NetworkMode.FREE_INTERNET else NetworkMode.NORMAL_VPN,
             location = LocationsCatalog.AUTO, measuredNodePings = emptyMap()) }

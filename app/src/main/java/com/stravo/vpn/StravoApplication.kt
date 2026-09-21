@@ -12,5 +12,6 @@ class StravoApplication : Application() {
         super.onCreate()
         container = AppContainer(this)
         com.stravo.vpn.data.subscription.SubscriptionRefreshJob.schedule(this)
+        com.stravo.vpn.data.update.AppUpdateJob.schedule(this)
     }
 }

@@ -77,6 +77,7 @@ fun SettingsScreen(
         com.stravo.vpn.ui.settings.ConnectionPreferences(viewModel)
         com.stravo.vpn.ui.settings.VpnSystemSettingsRow()
         com.stravo.vpn.ui.settings.BackupPreferences(viewModel)
+        com.stravo.vpn.ui.settings.AppUpdatePreferences(viewModel.appUpdates)
 
         StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
             SelectedProtocolRow(state)

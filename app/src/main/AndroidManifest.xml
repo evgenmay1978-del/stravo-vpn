@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Список приложений нужен только для раздельного туннеля. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
@@ -70,6 +71,14 @@
         </receiver>
         <service android:name=".data.subscription.SubscriptionRefreshJob"
             android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".data.update.AppUpdateJob"
+            android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
+        </provider>
 
         <activity
             android:name=".MainActivity"

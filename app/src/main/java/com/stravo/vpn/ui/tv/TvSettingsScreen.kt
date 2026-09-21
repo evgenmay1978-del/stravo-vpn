@@ -50,6 +50,7 @@ fun TvSettingsScreen(
         com.stravo.vpn.ui.settings.ConnectionPreferences(viewModel)
         com.stravo.vpn.ui.settings.VpnSystemSettingsRow()
         com.stravo.vpn.ui.settings.BackupPreferences(viewModel)
+        com.stravo.vpn.ui.settings.AppUpdatePreferences(viewModel.appUpdates)
         NotificationSettingsRow()
         NetworkCheckRow(state, onCheck = { viewModel.onEvent(HomeEvent.ProbeClick) })
         StravoSettingRow(iconRes = R.drawable.ic_share, title = "Скопировать журнал",

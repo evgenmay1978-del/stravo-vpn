@@ -16,6 +16,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import com.stravo.vpn.ui.state.SubscriptionImportState
 import androidx.lifecycle.ViewModelProvider
 import com.stravo.vpn.platform.DeviceType
@@ -43,8 +53,15 @@ class MainActivity : ComponentActivity() {
             }
             val formFactor = remember { DeviceType.formFactorOf(this) }
             StravoTheme(formFactor = formFactor) {
-                StravoAppRoot(viewModel = stravoViewModel, formFactor = formFactor)
                 val state by stravoViewModel.home.collectAsStateWithLifecycle()
+                Box(Modifier.fillMaxSize()) {
+                    StravoAppRoot(viewModel = stravoViewModel, formFactor = formFactor)
+                    if (externalImport == null && !state.restoringBackup) {
+                        com.stravo.vpn.ui.settings.AppUpdateNotice(stravoViewModel.appUpdates,
+                            Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing)
+                                .widthIn(max = 520.dp).padding(16.dp))
+                    }
+                }
                 externalImport?.let { raw ->
                     val busy = state.importState is SubscriptionImportState.Loading
                     val done = state.importState is SubscriptionImportState.Done
