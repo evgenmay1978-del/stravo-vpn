@@ -2,6 +2,7 @@ package com.stravo.vpn.data.subscription
 
 import com.stravo.vpn.engine.box.SingBoxConfigBuilder
 import com.stravo.vpn.domain.subscription.WireGuardProfile
+import com.stravo.vpn.domain.subscription.AmneziaParameters
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -50,6 +51,17 @@ object PanelSubscription {
         val trimmed = body.trim()
         if (trimmed.startsWith("[")) return xrayLinks(parseArray(trimmed) ?: return emptyList())
         val config = parseObject(trimmed) ?: return emptyList()
+        if (config.optString("type").lowercase() in setOf("amneziawg", "awg", "wireguard")) {
+            if (config.optInt("version", 1) != 1) throw UnsupportedConfig("Неизвестная версия контейнера WireGuard/AmneziaWG")
+            val servers = config.getJSONArray("servers")
+            require(servers.length() in 1..500)
+            return (0 until servers.length()).flatMap { index ->
+                val server = servers.getJSONObject(index)
+                val payload = server.getString("config")
+                val body = if (WireGuardProfile.looksLikeConf(payload)) payload else AmneziaParameters.decodeConf(payload)
+                WireGuardProfile.toLinks(body, cleanName(server.optString("name")) ?: "AmneziaWG")
+            }
+        }
         // Clash/mihomo: список прокси. Xray: один конфиг с outbounds.
         if (config.has("proxies")) {
             if (listOf("rules", "proxy-groups", "rule-providers", "proxy-providers", "dns").any { nonempty(config, it) }) {

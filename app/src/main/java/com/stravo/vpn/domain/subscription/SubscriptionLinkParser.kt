@@ -22,7 +22,7 @@ import java.security.MessageDigest
  */
 object SubscriptionLinkParser {
 
-    private const val MAX_LINK_LENGTH = 8192
+    private const val MAX_LINK_LENGTH = WireGuardProfile.MAX_LINK_LENGTH
 
     /** Схемы клиентов-обёрток: сами по себе они контейнер, а не адрес подписки. */
     private val wrapperSchemes: Set<String> = setOf(
@@ -70,24 +70,34 @@ object SubscriptionLinkParser {
 
     /** Разбирает строку целиком; если это не ссылка — возвращает null. */
     fun parseNode(raw: String, protocol: VpnProtocol): ParsedLink.Node? {
-        val value = raw.trim()
+        val input = raw.trim()
+        if (input.length > MAX_LINK_LENGTH || schemeOf(input) !in protocol.schemes) return null
+        val wireguard = WireGuardProfile.isLink(input)
+        val value = if (wireguard) {
+            runCatching { WireGuardProfile.normalizeLink(input) }.getOrNull() ?: return null
+        } else input
         val parsed = ProxyShareLink.parse(value) ?: return null
-        if (parsed.scheme !in protocol.schemes) return null
-        if (protocol.id == "wireguard" && runCatching { WireGuardProfile.endpoint(value, "proxy") }.isFailure) return null
+        val endpoint = if (wireguard) {
+            runCatching { WireGuardProfile.endpoint(value, "proxy") }.getOrNull() ?: return null
+        } else null
+        val actualProtocol = if (endpoint != null &&
+            (parsed.scheme in AmneziaParameters.schemes || AmneziaParameters.isEndpoint(endpoint))) {
+            ProtocolCatalog.AMNEZIAWG
+        } else protocol
         val credential = runCatching { ProxyShareLink.decode(parsed.userInfo) }.getOrNull() ?: return null
         if (protocol.id in setOf("vless", "vmess") && !ProxyShareLink.isUuid(credential)) return null
         if (protocol.id == "tuic" && (!credential.contains(':') || !ProxyShareLink.isUuid(credential.substringBefore(':')))) return null
         if (protocol.id in setOf("trojan", "hysteria2", "anytls", "shadowsocks", "http") && credential.isEmpty()) return null
         val params = parsed.query
-        val transport = resolveTransport(protocol, params)
-        val security = if (parsed.scheme == "https") VpnSecurity.TLS else resolveSecurity(protocol, params)
-        val name = parsed.name ?: defaultName(protocol, transport, security)
+        val transport = resolveTransport(actualProtocol, params)
+        val security = if (parsed.scheme == "https") VpnSecurity.TLS else resolveSecurity(actualProtocol, params)
+        val name = parsed.name ?: defaultName(actualProtocol, transport, security)
 
         val node = SubscriptionNode(
             id = fingerprint(value),
             name = name,
-            protocolId = protocol.id,
-            protocolLabel = protocol.displayName,
+            protocolId = actualProtocol.id,
+            protocolLabel = actualProtocol.displayName,
             transport = transport,
             security = security,
         )

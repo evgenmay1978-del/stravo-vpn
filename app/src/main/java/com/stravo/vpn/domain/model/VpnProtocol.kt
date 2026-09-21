@@ -125,6 +125,14 @@ object ProtocolCatalog {
         transports = listOf(VpnTransport.UDP),
     )
 
+    val AMNEZIAWG = VpnProtocol(
+        id = "amneziawg",
+        displayName = "AmneziaWG",
+        schemes = listOf("amneziawg", "awg"),
+        defaultTransport = VpnTransport.UDP,
+        transports = listOf(VpnTransport.UDP),
+    )
+
     val ANYTLS = VpnProtocol(
         id = "anytls",
         displayName = "AnyTLS",
@@ -160,7 +168,7 @@ object ProtocolCatalog {
         transports = listOf(VpnTransport.TCP),
     )
 
-    /** Служебный протокол сервиса: запасной канал, когда остальные недоступны. */
+    /** Legacy-схема: распознаётся для честного Unsupported; рабочий транспорт не реализован. */
     val WEBRTC = VpnProtocol(
         id = "webrtc",
         displayName = "WebRTC",
@@ -170,8 +178,9 @@ object ProtocolCatalog {
         defaultSecurity = VpnSecurity.TLS,
     )
 
-    // WireGuard is built as an endpoint. AWG/full Xray configs are not advertised as protocols.
-    val all: List<VpnProtocol> = listOf(VLESS, ANYTLS, HYSTERIA2, TROJAN, SHADOWSOCKS, VMESS, SOCKS5, HTTP, TUIC, WIREGUARD, WEBRTC)
+    // WireGuard and AmneziaWG use endpoints. Legacy WebRTC is recognized but not implemented.
+    private val supported: List<VpnProtocol> = listOf(VLESS, ANYTLS, HYSTERIA2, TROJAN, SHADOWSOCKS, VMESS, SOCKS5, HTTP, TUIC, WIREGUARD, AMNEZIAWG)
+    val all: List<VpnProtocol> = supported + WEBRTC
 
     /** Схемы, которые приложение вообще умеет читать из подписки. */
     val knownSchemes: List<String> = all.flatMap { it.schemes }
@@ -190,24 +199,14 @@ object ProtocolCatalog {
     /** Подписи для экрана настроек: «Авто», протоколы и отдельная строка для VLESS + XHTTP. */
     val settingsLabels: List<String> = buildList {
         add("Авто (рекомендуется)")
-        add(VLESS.displayName)
+        addAll(supported.map { it.displayName })
         add(VLESS.displayName + " + " + VpnTransport.XHTTP.displayName)
-        add(HYSTERIA2.displayName)
-        add(ANYTLS.displayName)
-        add(WEBRTC.displayName)
     }
 
     /**
      * Короткие подписи для полосы протоколов на TV: там мало места,
      * длинные строки вроде «VLESS + XHTTP» не помещаются в чип.
      */
-    val stripLabels: List<String> = listOf(
-        "Авто",
-        VLESS.displayName,
-        VpnTransport.XHTTP.displayName,
-        HYSTERIA2.displayName,
-        ANYTLS.displayName,
-        WEBRTC.displayName,
-    )
+    val stripLabels: List<String> = listOf("Авто") + supported.map { it.displayName } + VpnTransport.XHTTP.displayName
 }
 

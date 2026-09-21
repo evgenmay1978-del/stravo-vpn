@@ -59,7 +59,7 @@ internal class ProxyShareLink(
             val port = if (portText == null) when (scheme) {
                 "http" -> 80
                 "socks", "socks5" -> 1080
-                "wg", "wireguard" -> return null // Endpoint port is required by the share-link contract.
+                "wg", "wireguard", "awg", "amneziawg" -> return null // Endpoint port is required by the share-link contract.
                 else -> 443
             } else portText.toIntOrNull() ?: return null
             if (port !in 1..65535) return null

@@ -2,6 +2,7 @@ package com.stravo.vpn.engine.box
 
 import com.stravo.vpn.domain.model.ProtocolCatalog
 import com.stravo.vpn.domain.model.VpnTransport
+import com.stravo.vpn.domain.subscription.AmneziaParameters
 import com.stravo.vpn.domain.subscription.ProxyShareLink
 import com.stravo.vpn.domain.subscription.WireGuardProfile
 import com.stravo.vpn.domain.subscription.ProxyShareLink as Link
@@ -26,7 +27,7 @@ sealed interface CoreConfig {
  *
  * Поддерживаются VLESS (TCP, XHTTP, WebSocket, HTTP Upgrade, gRPC, QUIC), AnyTLS,
  * Hysteria2, Trojan, Shadowsocks, VMess, SOCKS5, HTTP CONNECT и TUIC v5.
- * WireGuard использует endpoints; AWG/full Xray не конвертируются.
+ * WireGuard и AmneziaWG используют endpoints; full Xray не конвертируется.
  * Если транспорта нет
  * в сборке ядра, возвращается честный [CoreConfig.Unsupported], а не тихий отказ.
  *
@@ -128,8 +129,8 @@ object SingBoxConfigBuilder {
             value.trimStart().startsWith('{') || value.trimStart().startsWith('[') ->
                 throw UnsupportedOption("Полный JSON-конфиг")
             scheme.isEmpty() -> return null
-            scheme in setOf("wg", "wireguard") -> return null
-            scheme in setOf("awg", "amneziawg", "vpn") -> throw UnsupportedOption("AmneziaWG")
+            WireGuardProfile.isLink(value) -> return null
+            scheme == "vpn" -> throw UnsupportedOption("Сжатый контейнер Amnezia vpn://; используйте .conf или awg://")
             scheme !in setOf("vless", "vmess", "trojan", "hysteria2", "hy2", "anytls", "ss", "socks", "socks5", "http", "https", "tuic") ->
                 throw UnsupportedOption("Протокол")
         }
@@ -184,7 +185,8 @@ object SingBoxConfigBuilder {
         if (outbound.optString("type") == "wireguard") {
             val peers = outbound.optJSONArray("peers") ?: JSONArray()
             val preshared = (0 until peers.length()).any { !peers.optJSONObject(it)?.optString("pre_shared_key").isNullOrBlank() }
-            return@runCatching "WireGuard endpoint · peers " + peers.length() +
+            val protocol = if (AmneziaParameters.isEndpoint(outbound)) "AmneziaWG" else "WireGuard"
+            return@runCatching "$protocol endpoint · peers " + peers.length() +
                 " · приватный ключ " + (if (outbound.optString("private_key").isNotBlank()) "есть" else "нет") +
                 " · preshared " + (if (preshared) "есть" else "нет")
         }

@@ -5,10 +5,27 @@ import org.json.JSONObject
 
 /** Offline WireGuard conversion. Returned links/JSON contain keys; never log them. */
 object WireGuardProfile {
+    internal const val MAX_LINK_LENGTH = 65536
     /** Fixed, secret-free explanation, suitable for PanelSubscription.Conversion.Unsupported. */
     class Unsupported(val reason: String) : Exception(reason)
 
-    fun isLink(value: String): Boolean = value.trim().substringBefore("://").lowercase() in setOf("wg", "wireguard")
+    fun isLink(value: String): Boolean = value.trim().substringBefore("://").lowercase() in
+        setOf("wg", "wireguard", "awg", "amneziawg")
+
+    /** Decode the INCY base64 .conf form once. Credential URIs never enter the decoder. */
+    internal fun normalizeLink(raw: String): String {
+        val value = raw.trim()
+        require(value.length <= MAX_LINK_LENGTH && isLink(value) && value.none { it.isWhitespace() || it.isISOControl() })
+        if (value.substringBefore("://").lowercase() !in AmneziaParameters.schemes) return value
+        val body = value.substringAfter("://")
+        val content = body.substringBefore('#')
+        if ('@' in content.substringBefore('?')) return value
+        require('?' !in content)
+        val name = body.substringAfter('#', "").takeIf { it.isNotEmpty() }?.let { ProxyShareLink.decode(it) } ?: "AmneziaWG"
+        val links = toLinks(AmneziaParameters.decodeConf(content), name)
+        require(links.size == 1)
+        return ("amneziawg://" + links.single().substringAfter("://")).also { require(it.length <= MAX_LINK_LENGTH) }
+    }
 
     fun looksLikeConf(body: String): Boolean = body.lineSequence().any {
         it.substringBefore('#').substringBefore(';').trim().removePrefix("\uFEFF").equals("[Interface]", ignoreCase = true)
@@ -21,12 +38,19 @@ object WireGuardProfile {
     fun toLinks(body: String, name: String = "WireGuard"): List<String> {
         require(body.length <= 262144)
         val profiles = mutableListOf<Pair<MutableMap<String, String>, MutableList<MutableMap<String, String>>>>()
+        val deviceFields = linkedMapOf<String, String>()
+        var hasDevice = false
         var fields: MutableMap<String, String>? = null
         for (raw in body.removePrefix("\uFEFF").lineSequence()) {
             val line = raw.substringBefore('#').substringBefore(';').trim()
             if (line.isEmpty()) continue
             if (line.startsWith('[')) {
                 when (line.lowercase()) {
+                    "[device]" -> {
+                        require(!hasDevice)
+                        hasDevice = true
+                        fields = deviceFields
+                    }
                     "[interface]" -> {
                         val iface = linkedMapOf<String, String>()
                         profiles.add(iface to mutableListOf())
@@ -44,18 +68,28 @@ object WireGuardProfile {
             }
             require(line.contains('='))
             val key = normalized(line.substringBefore('=').trim())
-            rejectAmnezia(key)
             val target = fields ?: throw IllegalArgumentException()
             val value = line.substringAfter('=').trim()
-            require(value.isNotEmpty())
+            require(value.isNotEmpty() || key in setOf("i1", "i2", "i3", "i4", "i5"))
             if (target.containsKey(key)) {
                 if (key !in setOf("address", "allowedips", "dns")) throw IllegalArgumentException()
                 target[key] = target.getValue(key) + "," + value
             } else target[key] = value
         }
         require(profiles.isNotEmpty())
+        if (hasDevice) {
+            // A separate [Device] can precede/follow [Interface]; never guess its scope in a bundle.
+            if (profiles.size != 1) throw Unsupported("AmneziaWG: отдельная секция Device требует один Interface")
+            checkFields(deviceFields, AmneziaParameters.keys)
+            val iface = profiles.single().first
+            for ((key, value) in deviceFields) {
+                require(!iface.containsKey(key) || iface[key] == value)
+                iface[key] = value
+            }
+        }
         return profiles.mapIndexed { index, (iface, peers) ->
-            checkFields(iface, setOf("privatekey", "address", "mtu", "listenport", "dns", "reserved", "table", "saveconfig"))
+            checkFields(iface, setOf("privatekey", "address", "mtu", "listenport", "dns", "reserved", "table", "saveconfig") + AmneziaParameters.keys)
+            val amnezia = AmneziaParameters.options(iface)
             if (iface["table"]?.let { it != "auto" } == true || iface["saveconfig"]?.lowercase()?.let { it != "false" } == true) {
                 throw Unsupported("WireGuard Table/SaveConfig нельзя применить в Android VPN")
             }
@@ -85,38 +119,49 @@ object WireGuardProfile {
             if (peers.size == 1) {
                 params["allowedips"] = strings(first.getJSONArray("allowed_ips")).joinToString(",")
                 first.optString("pre_shared_key").takeIf { it.isNotEmpty() }?.let { params["presharedkey"] = it }
-                params["keepalive"] = first.getInt("persistent_keepalive_interval").toString()
+                params["keepalive"] = first.get("persistent_keepalive_interval").toString()
                 first.optJSONArray("reserved")?.let { bytes -> params["reserved"] = (0 until bytes.length()).joinToString(",") { bytes.getInt(it).toString() } }
             } else params["peers"] = jsonPeers.toString()
             val host = first.getString("address")
             val authority = (if (':' in host) "[$host]" else host) + ":" + first.getInt("port")
-            val label = if (profiles.size == 1) name else "$name ${index + 1}"
-            val result = "wireguard://" + encode(key(iface["privatekey"])) + "@" + authority + "?" +
+            for (field in amnezia.keys()) params[field] = amnezia.get(field).toString()
+            val isAmnezia = amnezia.length() > 0 || (0 until jsonPeers.length()).any {
+                jsonPeers.getJSONObject(it).optString("persistent_keepalive_interval").contains('-')
+            }
+            val profileName = if (isAmnezia && name == "WireGuard") "AmneziaWG" else name
+            val label = if (profiles.size == 1) profileName else "$profileName ${index + 1}"
+            val scheme = if (isAmnezia) "amneziawg" else "wireguard"
+            val result = "$scheme://" + encode(key(iface["privatekey"])) + "@" + authority + "?" +
                 params.entries.joinToString("&") { encode(it.key) + "=" + encode(it.value) } + "#" + encode(label)
-            require(result.length <= 8192)
-            endpoint(result, "proxy") // Offline validation of the normalized format, no network/core call.
+            require(result.length <= MAX_LINK_LENGTH)
+            // Validate credentials directly: never feed a generated URI back into the .conf decoder.
+            endpoint(ProxyShareLink.parse(result) ?: throw IllegalArgumentException(), "proxy")
             result
         }
     }
 
     /** DNS remains outside the endpoint schema; the parent can apply it to a grouped config. */
     fun dnsFor(link: String): List<String> {
-        val parsed = ProxyShareLink.parse(link) ?: throw IllegalArgumentException()
+        val parsed = ProxyShareLink.parse(normalizeLink(link)) ?: throw IllegalArgumentException()
         require(isLink(link))
         return parsed.query["dns"]?.let(::dnsAddresses).orEmpty()
     }
 
     internal fun endpoint(link: String, tag: String): JSONObject {
         require(tag.isNotBlank() && isLink(link))
-        val parsed = ProxyShareLink.parse(link) ?: throw IllegalArgumentException()
+        val parsed = ProxyShareLink.parse(normalizeLink(link)) ?: throw IllegalArgumentException()
+        return endpoint(parsed, tag)
+    }
+
+    private fun endpoint(parsed: ProxyShareLink, tag: String): JSONObject {
         val params = linkedMapOf<String, String>()
         for ((rawKey, value) in parsed.query) {
             val name = normalized(rawKey)
-            rejectAmnezia(name)
             require(!params.containsKey(name) || params[name] == value)
             params[name] = value
         }
-        checkFields(params, setOf("publickey", "address", "mtu", "reserved", "allowinsecure", "presharedkey", "psk", "allowedips", "keepalive", "persistentkeepalive", "persistentkeepaliveinterval", "listenport", "peers", "dns"))
+        checkFields(params, setOf("publickey", "address", "mtu", "reserved", "allowinsecure", "presharedkey", "psk", "allowedips", "keepalive", "persistentkeepalive", "persistentkeepaliveinterval", "listenport", "peers", "dns") + AmneziaParameters.keys)
+        val amnezia = AmneziaParameters.options(params)
         val peers = if (params.containsKey("peers")) {
             val input = JSONArray(params.getValue("peers"))
             require(input.length() in 1..64)
@@ -155,6 +200,7 @@ object WireGuardProfile {
             .put("mtu", mtu).put("peers", peers)
         params["listenport"]?.let { endpoint.put("listen_port", integer(it, 0..65535)) }
         params["dns"]?.let(::dnsAddresses)
+        for (field in amnezia.keys()) endpoint.put(field, amnezia.get(field))
         return endpoint
     }
 
@@ -162,7 +208,7 @@ object WireGuardProfile {
         val peer = JSONObject().put("address", host).put("port", port)
             .put("public_key", key(values["publickey"]))
             .put("allowed_ips", JSONArray(prefixes(values["allowedips"] ?: "0.0.0.0/0,::/0", required = true)))
-            .put("persistent_keepalive_interval", integer(alias(values, "keepalive", "persistentkeepalive", "persistentkeepaliveinterval") ?: "0", 0..65535))
+            .put("persistent_keepalive_interval", AmneziaParameters.range(alias(values, "keepalive", "persistentkeepalive", "persistentkeepaliveinterval") ?: "0", 65535))
         alias(values, "presharedkey", "psk")?.let { peer.put("pre_shared_key", key(it)) }
         values["reserved"]?.let { raw ->
             val bytes = raw.split(',').map { integer(it.trim(), 0..255) }
@@ -240,18 +286,11 @@ object WireGuardProfile {
 
     private fun checkFields(values: Map<String, String>, allowed: Set<String>) {
         for (name in values.keys) {
-            rejectAmnezia(name)
             if (name !in allowed) throw Unsupported("Дополнительные параметры или команды WireGuard .conf не поддерживаются")
         }
     }
 
-    private fun rejectAmnezia(name: String) {
-        if (name.startsWith("awg") || name.startsWith("amnezia") || Regex("jc|jmin|jmax|[sh][1-4]|i[1-5]").matches(name)) {
-            throw Unsupported("AmneziaWG не поддерживается: обфускация не будет отброшена")
-        }
-    }
-
-    private fun normalized(value: String): String = value.lowercase().replace("_", "").replace("-", "")
+    private fun normalized(value: String): String = AmneziaParameters.normalized(value)
     private fun strings(array: JSONArray): List<String> = (0 until array.length()).map { array.getString(it) }
     private fun encode(value: String): String = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 }

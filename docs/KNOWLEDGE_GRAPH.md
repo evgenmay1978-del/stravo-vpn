@@ -22,6 +22,10 @@
 - Network preferences → validation → NetworkPolicy → fresh core config → переподключение.
 - User connect → source-scoped group → URL-test/selector → health probe → честный UI.
 - Backup → password-encrypted file → user-confirmed restore → stop VPN → reload; без auto-start.
+- Автообновление STRAVO → публичные GitHub Releases → SHA256/пакет/версия/сертификат
+  → системное подтверждение Android. Никаких изменений Maestro OTA/серверов.
+- Проверенный APK d475063 → Go build-info → with_awg + AWG3 поля присутствуют
+  → AWG можно подключить в клиентском импорте без новой сборки ядра.
 
 ## Предыдущий визуальный релиз
 
