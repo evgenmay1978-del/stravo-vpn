@@ -130,6 +130,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
         val validated = try { backup.validate(payload, password) } finally { password.fill('\u0000') }
             ?: return@withLock false
         _home.update { it.copy(restoringBackup = true) }
+        container.restoringBackup = true
         try {
             container.vpnEngine.disconnect()
             val stopped = withTimeoutOrNull(15_000) {
@@ -157,6 +158,7 @@ class StravoViewModel(application: Application) : AndroidViewModel(application) 
             }
         } finally {
             validated.close()
+            container.restoringBackup = false
             _home.update { it.copy(restoringBackup = false) }
         }
     }

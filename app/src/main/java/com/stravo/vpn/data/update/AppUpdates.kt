@@ -233,6 +233,10 @@ class AppUpdates(context: Context) {
                 error("Invalid cached APK")
             }
             withContext(Dispatchers.Main) {
+                if ((app as com.stravo.vpn.StravoApplication).container.restoringBackup) {
+                    mutableState.update { it.copy(message = "Дождитесь завершения восстановления резервной копии") }
+                    return@withContext
+                }
                 synchronized(this@AppUpdates) {
                     require(release.allowed(preferences.value))
                     if (Build.VERSION.SDK_INT >= 26 && !app.packageManager.canRequestPackageInstalls()) {

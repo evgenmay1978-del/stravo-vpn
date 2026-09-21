@@ -103,6 +103,14 @@ class StravoVpnService : VpnService(), PlatformInterface {
             }
             return START_NOT_STICKY
         }
+        if ((application as StravoApplication).container.restoringBackup) {
+            coreWorker.execute {
+                stopTunnel(clearState = false)
+                if (latestStartId == startId) setState(ConnectionState.Disconnected, null, null)
+                stopSelfResult(startId)
+            }
+            return START_NOT_STICKY
+        }
         val session = TunnelSession(this)
         val resume = intent == null || intent.action == ACTION_RESUME || intent.action == "android.net.VpnService"
         val systemRequest = intent?.action == "android.net.VpnService" ||
