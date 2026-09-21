@@ -12,6 +12,10 @@ data class Subscription(
     val announcement: String? = null,
     val usedBytes: Long? = null,
     val totalBytes: Long? = null,
+    val updateIntervalHours: Int? = null,
+    val supportUrl: String? = null,
+    val homepageUrl: String? = null,
+    val announcementUrl: String? = null,
 ) {
     companion object {
         val None: Subscription = Subscription(planName = "Нет активной подписки", activeUntil = null, isActive = false)

@@ -1,5 +1,7 @@
 package com.stravo.vpn.data.subscription
 
+import com.stravo.vpn.engine.box.SingBoxConfigBuilder
+import com.stravo.vpn.domain.subscription.WireGuardProfile
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -13,21 +15,61 @@ import org.json.JSONObject
  */
 object PanelSubscription {
 
+    /** Reasons are fixed, safe UI text; Links contain secrets and must only enter SecretStore. */
+    sealed interface Conversion {
+        class Links(val links: List<String>) : Conversion
+        data class Unsupported(val reason: String) : Conversion
+        data object Broken : Conversion
+    }
+
+    private class UnsupportedConfig(val reason: String) : Exception()
+
+    /** Importer can expose Unsupported.reason instead of flattening full configs into one node. */
+    fun convert(body: String): Conversion = try {
+        val links = decodeLinks(body)
+        if (links.isEmpty()) Conversion.Broken else Conversion.Links(links)
+    } catch (error: UnsupportedConfig) {
+        Conversion.Unsupported(error.reason)
+    } catch (error: WireGuardProfile.Unsupported) {
+        Conversion.Unsupported(error.reason)
+    } catch (_: Exception) {
+        Conversion.Broken
+    }
+
     /** Похоже ли тело подписки на JSON-конфиг панели. */
     fun looksLikeJson(body: String): Boolean {
         val trimmed = body.trim()
         return trimmed.startsWith("[") || trimmed.startsWith("{")
     }
 
-    /** Ссылки узлов из JSON-конфига. Пустой список — формат не распознан. */
-    fun toLinks(body: String): List<String> {
+    /** Compatibility API. Rejected configurations yield NO nodes; use convert for the reason. */
+    fun toLinks(body: String): List<String> = (convert(body) as? Conversion.Links)?.links.orEmpty()
+
+    private fun decodeLinks(body: String): List<String> {
+        if (WireGuardProfile.looksLikeConf(body)) return WireGuardProfile.toLinks(body)
         val trimmed = body.trim()
         if (trimmed.startsWith("[")) return xrayLinks(parseArray(trimmed) ?: return emptyList())
         val config = parseObject(trimmed) ?: return emptyList()
         // Clash/mihomo: список прокси. Xray: один конфиг с outbounds.
-        if (config.has("proxies")) return clashLinks(config)
+        if (config.has("proxies")) {
+            if (listOf("rules", "proxy-groups", "rule-providers", "proxy-providers", "dns").any { nonempty(config, it) }) {
+                throw UnsupportedConfig("Полный Clash-конфиг с правилами или группами не поддерживается")
+            }
+            return clashLinks(config)
+        }
         if (config.has("outbounds")) return xrayLinks(JSONArray().put(config))
+        if (config.has("endpoints") || config.has("private_key") || config.has("PrivateKey")) {
+            throw UnsupportedConfig("Полный JSON endpoints не импортируется: используйте WireGuard .conf или share-ссылку")
+        }
         return emptyList()
+    }
+
+    private fun nonempty(json: JSONObject, key: String): Boolean = when (val value = json.opt(key)) {
+        null, JSONObject.NULL -> false
+        is JSONObject -> value.length() > 0
+        is JSONArray -> value.length() > 0
+        is String -> value.isNotBlank()
+        else -> true
     }
 
     private fun parseArray(text: String): JSONArray? = try {
@@ -48,16 +90,63 @@ object PanelSubscription {
         val links = ArrayList<String>()
         for (index in 0 until configs.length()) {
             val config = configs.optJSONObject(index) ?: continue
+            if (listOf("routing", "route", "dns", "fakedns", "reverse", "observatory", "burstObservatory", "endpoints", "services").any { nonempty(config, it) }) {
+                throw UnsupportedConfig("Полный конфиг с DNS, маршрутизацией или цепочками не поддерживается")
+            }
             val remarks = cleanName(config.optString("remarks"))
             val outbounds = config.optJSONArray("outbounds") ?: continue
-            for (position in 0 until outbounds.length()) {
-                val outbound = outbounds.optJSONObject(position) ?: continue
-                val link = xrayLink(outbound, remarks) ?: continue
-                if (!links.contains(link)) links.add(link)
-                break
+            val candidates = (0 until outbounds.length()).mapNotNull { outbounds.optJSONObject(it) }
+                .filter { it.optString("protocol") !in setOf("freedom", "blackhole", "dns") }
+            if (candidates.size != 1 || candidates.single() !== outbounds.optJSONObject(0)) {
+                throw UnsupportedConfig("Конфиг с несколькими outbound нельзя заменить одним узлом")
             }
+            val outbound = candidates.single()
+            rejectAdvancedOutbound(outbound)
+            val link = xrayLink(outbound, remarks)
+                ?: throw UnsupportedConfig("Протокол или структура Xray-конфига не поддерживается")
+            if (SingBoxConfigBuilder.outboundFor(link) == null) {
+                throw UnsupportedConfig("Параметры узла не поддерживаются или некорректны")
+            }
+            if (!links.contains(link)) links.add(link)
         }
         return links
+    }
+
+    private fun rejectAdvancedOutbound(outbound: JSONObject) {
+        val stream = outbound.optJSONObject("streamSettings")
+        if (nonempty(outbound, "proxySettings") || nonempty(outbound, "sendThrough") ||
+            outbound.optJSONObject("mux")?.optBoolean("enabled") == true ||
+            stream?.let { nonempty(it, "sockopt") || nonempty(it, "finalmask") || nonempty(it, "address") || nonempty(it, "port") } == true) {
+            throw UnsupportedConfig("Цепочки, mux и дополнительные сетевые параметры Xray не поддерживаются")
+        }
+        val settings = outbound.optJSONObject("settings") ?: return
+        for (key in listOf("vnext", "servers")) {
+            val servers = settings.optJSONArray(key) ?: continue
+            if (servers.length() != 1 || (servers.optJSONObject(0)?.optJSONArray("users")?.length() ?: 1) != 1) {
+                throw UnsupportedConfig("Несколько серверов или пользователей в одном outbound не поддерживаются")
+            }
+            val server = servers.getJSONObject(0)
+            require(listOf("address", "port", "password", "method").none { server.has(it) && server.isNull(it) })
+            server.optJSONArray("users")?.optJSONObject(0)?.let { user ->
+                require(listOf("id", "user", "pass", "encryption", "flow", "security", "alterId")
+                    .none { user.has(it) && user.isNull(it) })
+            }
+        }
+        val tls = stream?.optJSONObject("tlsSettings")
+        if (tls != null && listOf("certificates", "pinnedPeerCertificateChainSha256", "verifyPeerCertByName", "echConfigList").any { nonempty(tls, it) }) {
+            throw UnsupportedConfig("Дополнительная проверка TLS-сертификата не поддерживается")
+        }
+        val reality = stream?.optJSONObject("realitySettings")
+        if (reality != null && nonempty(reality, "mldsa65Verify")) {
+            throw UnsupportedConfig("REALITY ML-DSA verify не поддерживается этим конвертером")
+        }
+        for (key in listOf("wsSettings", "httpUpgradeSettings")) {
+            val transport = stream?.optJSONObject(key) ?: continue
+            rejectExtraHeaders(transport.optJSONObject("headers"))
+            if (transport.optBoolean("useBrowserForwarding")) {
+                throw UnsupportedConfig("Browser forwarding не поддерживается")
+            }
+        }
     }
 
     private fun xrayLink(outbound: JSONObject, name: String?): String? {
@@ -65,29 +154,43 @@ object PanelSubscription {
         val settings = outbound.optJSONObject("settings") ?: return null
         val stream = outbound.optJSONObject("streamSettings")
         return when (protocol) {
-            "vless" -> {
+            "vless", "vmess" -> {
                 val server = settings.optJSONArray("vnext")?.optJSONObject(0) ?: return null
                 val address = server.optString("address").takeIf { it.isNotBlank() } ?: return null
                 val user = server.optJSONArray("users")?.optJSONObject(0) ?: return null
                 val id = user.optString("id").takeIf { it.isNotBlank() } ?: return null
                 val params = xrayStreamParams(stream)
-                user.optString("flow").takeIf { it.isNotBlank() }?.let { params["flow"] = it }
-                user.optString("encryption").takeIf { it.isNotBlank() }?.let { params["encryption"] = it }
-                buildLink("vless", id + "@" + authority(address, server.optInt("port", 443)), params, name)
+                if (protocol == "vless") {
+                    user.optString("flow").takeIf { it.isNotBlank() }?.let { params["flow"] = it }
+                    user.optString("encryption").takeIf { it.isNotBlank() }?.let { params["encryption"] = it }
+                } else {
+                    user.optString("security").takeIf { it.isNotBlank() }?.let { params["scy"] = it }
+                    user.optString("alterId").takeIf { it.isNotBlank() }?.let { params["aid"] = it }
+                }
+                buildLink(protocol, percentEncode(id) + "@" + authority(address, portOf(server)), params, name)
             }
 
             "trojan" -> {
                 val server = settings.optJSONArray("servers")?.optJSONObject(0) ?: return null
                 val address = server.optString("address").takeIf { it.isNotBlank() } ?: return null
                 val password = server.optString("password").takeIf { it.isNotBlank() } ?: return null
-                buildLink("trojan", password + "@" + authority(address, server.optInt("port", 443)), xrayStreamParams(stream), name)
+                buildLink("trojan", percentEncode(password) + "@" + authority(address, portOf(server)), xrayStreamParams(stream), name)
+            }
+
+            "socks", "http" -> {
+                val server = settings.optJSONArray("servers")?.optJSONObject(0) ?: return null
+                val address = server.optString("address").takeIf { it.isNotBlank() } ?: return null
+                val user = server.optJSONArray("users")?.optJSONObject(0)
+                val credentials = if (user != null) percentEncode(user.optString("user")) + ":" + percentEncode(user.optString("pass")) + "@" else ""
+                val scheme = if (protocol == "socks") "socks5" else if (stream?.optString("security") == "tls") "https" else "http"
+                buildLink(scheme, credentials + authority(address, portOf(server, if (protocol == "socks") 1080 else if (scheme == "https") 443 else 80)), xrayStreamParams(stream), name)
             }
 
             "shadowsocks" -> {
                 val server = settings.optJSONArray("servers")?.optJSONObject(0) ?: return null
                 val address = server.optString("address").takeIf { it.isNotBlank() } ?: return null
                 val method = server.optString("method").takeIf { it.isNotBlank() } ?: return null
-                ssLink(method, server.optString("password"), address, server.optInt("port", 8388), name)
+                ssLink(method, server.optString("password"), address, portOf(server, 8388), name)
             }
 
             else -> null
@@ -107,7 +210,10 @@ object PanelSubscription {
         val fingerprint = reality?.optString("fingerprint")?.takeIf { it.isNotBlank() }
             ?: tls?.optString("fingerprint")?.takeIf { it.isNotBlank() }
         if (fingerprint != null) params["fp"] = fingerprint
-        reality?.optString("publicKey")?.takeIf { it.isNotBlank() }?.let { params["pbk"] = it }
+        // Xray renamed publicKey to password; the current field wins when both are supplied.
+        (reality?.optString("password")?.takeIf { it.isNotBlank() && it != NULL_TEXT }
+            ?: reality?.optString("publicKey")?.takeIf { it.isNotBlank() && it != NULL_TEXT })
+            ?.let { params["pbk"] = it }
         reality?.optString("shortId")?.takeIf { it.isNotBlank() }?.let { params["sid"] = it }
         reality?.optString("spiderX")?.takeIf { it.isNotBlank() }?.let { params["spx"] = it }
         if (tls?.optBoolean("allowInsecure") == true) params["allowinsecure"] = "1"
@@ -118,9 +224,15 @@ object PanelSubscription {
         }
 
         when (stream.optString("network").lowercase()) {
+            "tcp", "raw" -> {
+                val tcp = stream.optJSONObject("rawSettings") ?: stream.optJSONObject("tcpSettings")
+                tcp?.optJSONObject("header")?.optString("type")?.takeIf { it.isNotBlank() }
+                    ?.let { params["headerType"] = it }
+            }
             "ws" -> {
                 val ws = stream.optJSONObject("wsSettings")
                 ws?.optString("path")?.takeIf { it.isNotBlank() }?.let { params["path"] = it }
+                ws?.optString("host")?.takeIf { it.isNotBlank() }?.let { params["host"] = it }
                 ws?.optJSONObject("headers")?.optString("Host")?.takeIf { it.isNotBlank() }?.let { params["host"] = it }
             }
 
@@ -128,13 +240,26 @@ object PanelSubscription {
                 val upgrade = stream.optJSONObject("httpUpgradeSettings")
                 upgrade?.optString("path")?.takeIf { it.isNotBlank() }?.let { params["path"] = it }
                 upgrade?.optString("host")?.takeIf { it.isNotBlank() }?.let { params["host"] = it }
+                upgrade?.optJSONObject("headers")?.optString("Host")?.takeIf { it.isNotBlank() }?.let { params["host"] = it }
             }
 
-            "grpc" -> stream.optJSONObject("grpcSettings")?.optString("serviceName")
-                ?.takeIf { it.isNotBlank() }?.let { params["serviceName"] = it }
+            "http", "h2" -> {
+                val http = stream.optJSONObject("httpSettings")
+                http?.optString("path")?.takeIf { it.isNotBlank() }?.let { params["path"] = it }
+                http?.optJSONArray("host")?.let { hosts ->
+                    params["host"] = (0 until hosts.length()).joinToString(",") { hosts.getString(it) }
+                }
+            }
+
+            "grpc" -> {
+                val grpc = stream.optJSONObject("grpcSettings")
+                grpc?.optString("serviceName")?.takeIf { it.isNotBlank() }?.let { params["serviceName"] = it }
+                if (grpc?.optBoolean("multiMode") == true) params["mode"] = "multi"
+                grpc?.optString("authority")?.takeIf { it.isNotBlank() }?.let { params["authority"] = it }
+            }
 
             "xhttp", "splithttp" -> {
-                val xhttp = stream.optJSONObject("xhttpSettings")
+                val xhttp = stream.optJSONObject("xhttpSettings") ?: stream.optJSONObject("splithttpSettings")
                 // XHTTP за CDN держится на тонких параметрах: режим packet-up, метод
                 // отправки (панель ставит GET, потому что CDN пропускает GET/HEAD/
                 // OPTIONS), размещение session и seq в query. Панель кладёт их в
@@ -163,7 +288,15 @@ object PanelSubscription {
         val links = ArrayList<String>()
         for (index in 0 until proxies.length()) {
             val proxy = proxies.optJSONObject(index) ?: continue
-            val link = clashLink(proxy) ?: continue
+            require(listOf("server", "port", "uuid", "username", "password", "cipher", "method")
+                .none { proxy.has(it) && proxy.isNull(it) })
+            if (listOf("dialer-proxy", "plugin", "smux", "certificate", "fingerprint").any { nonempty(proxy, it) }) {
+                throw UnsupportedConfig("Цепочки, плагины и дополнительные параметры Clash не поддерживаются")
+            }
+            val link = clashLink(proxy) ?: throw UnsupportedConfig("Протокол Clash не поддерживается")
+            if (SingBoxConfigBuilder.outboundFor(link) == null) {
+                throw UnsupportedConfig("Параметры узла не поддерживаются или некорректны")
+            }
             if (!links.contains(link)) links.add(link)
         }
         return links
@@ -172,24 +305,30 @@ object PanelSubscription {
     private fun clashLink(proxy: JSONObject): String? {
         val type = proxy.optString("type").lowercase()
         val address = proxy.optString("server").takeIf { it.isNotBlank() } ?: return null
-        val port = proxy.optInt("port", 443)
+        val port = portOf(proxy)
         val name = cleanName(proxy.optString("name"))
         return when (type) {
-            "vless" -> {
+            "vless", "vmess" -> {
                 val uuid = proxy.optString("uuid").takeIf { it.isNotBlank() } ?: return null
                 val params = clashParams(proxy)
-                proxy.optString("flow").takeIf { it.isNotBlank() }?.let { params["flow"] = it }
-                buildLink("vless", uuid + "@" + authority(address, port), params, name)
+                if (type == "vless") {
+                    proxy.optString("flow").takeIf { it.isNotBlank() }?.let { params["flow"] = it }
+                    proxy.optString("encryption").takeIf { it.isNotBlank() }?.let { params["encryption"] = it }
+                } else {
+                    proxy.optString("cipher").takeIf { it.isNotBlank() }?.let { params["scy"] = it }
+                    proxy.optString("alterId").takeIf { it.isNotBlank() }?.let { params["aid"] = it }
+                }
+                buildLink(type, percentEncode(uuid) + "@" + authority(address, port), params, name)
             }
 
             "trojan" -> {
                 val password = proxy.optString("password").takeIf { it.isNotBlank() } ?: return null
-                buildLink("trojan", password + "@" + authority(address, port), clashParams(proxy), name)
+                buildLink("trojan", percentEncode(password) + "@" + authority(address, port), clashParams(proxy), name)
             }
 
             "anytls" -> {
                 val password = proxy.optString("password").takeIf { it.isNotBlank() } ?: return null
-                buildLink("anytls", password + "@" + authority(address, port), clashParams(proxy), name)
+                buildLink("anytls", percentEncode(password) + "@" + authority(address, port), clashParams(proxy), name)
             }
 
             "hysteria2", "hy2" -> {
@@ -197,7 +336,24 @@ object PanelSubscription {
                 val params = clashParams(proxy)
                 proxy.optString("obfs").takeIf { it.isNotBlank() }?.let { params["obfs"] = it }
                 proxy.optString("obfs-password").takeIf { it.isNotBlank() }?.let { params["obfs-password"] = it }
-                buildLink("hysteria2", password + "@" + authority(address, port), params, name)
+                buildLink("hysteria2", percentEncode(password) + "@" + authority(address, port), params, name)
+            }
+
+            "tuic" -> {
+                val uuid = proxy.optString("uuid").takeIf { it.isNotBlank() } ?: return null
+                val params = clashParams(proxy)
+                for ((source, target) in mapOf(
+                    "congestion-controller" to "congestion_control", "udp-relay-mode" to "udp_relay_mode",
+                    "reduce-rtt" to "zero_rtt_handshake", "disable-sni" to "disable_sni",
+                )) proxy.optString(source).takeIf { it.isNotBlank() }?.let { params[target] = it }
+                buildLink("tuic", percentEncode(uuid) + ":" + percentEncode(proxy.optString("password")) + "@" + authority(address, port), params, name)
+            }
+
+            "socks5", "http" -> {
+                val username = proxy.optString("username")
+                val credentials = if (username.isNotEmpty()) percentEncode(username) + ":" + percentEncode(proxy.optString("password")) + "@" else ""
+                val scheme = if (type == "http" && proxy.optBoolean("tls")) "https" else type
+                buildLink(scheme, credentials + authority(address, port), clashParams(proxy), name)
             }
 
             "ss" -> {
@@ -225,10 +381,17 @@ object PanelSubscription {
         reality?.optString("public-key")?.takeIf { it.isNotBlank() }?.let { params["pbk"] = it }
         reality?.optString("short-id")?.takeIf { it.isNotBlank() }?.let { params["sid"] = it }
         if (proxy.optBoolean("skip-cert-verify")) params["allowinsecure"] = "1"
+        proxy.optJSONArray("alpn")?.let { alpn ->
+            params["alpn"] = (0 until alpn.length()).joinToString(",") { alpn.getString(it) }
+        }
 
         when (network.lowercase()) {
             "ws" -> {
                 val ws = proxy.optJSONObject("ws-opts")
+                rejectExtraHeaders(ws?.optJSONObject("headers"))
+                if (ws?.has("max-early-data") == true || ws?.has("early-data-header-name") == true) {
+                    throw UnsupportedConfig("WebSocket early data в JSON не поддерживается этим конвертером")
+                }
                 ws?.optString("path")?.takeIf { it.isNotBlank() }?.let { params["path"] = it }
                 ws?.optJSONObject("headers")?.optString("Host")?.takeIf { it.isNotBlank() }?.let { params["host"] = it }
             }
@@ -241,11 +404,34 @@ object PanelSubscription {
                 upgrade?.optString("path")?.takeIf { it.isNotBlank() }?.let { params["path"] = it }
                 upgrade?.optString("host")?.takeIf { it.isNotBlank() }?.let { params["host"] = it }
             }
+
+            "http", "h2" -> {
+                val http = proxy.optJSONObject("h2-opts") ?: proxy.optJSONObject("http-opts")
+                http?.optString("path")?.takeIf { it.isNotBlank() }?.let { params["path"] = it }
+                http?.optJSONArray("host")?.let { hosts ->
+                    params["host"] = (0 until hosts.length()).joinToString(",") { hosts.getString(it) }
+                }
+            }
+
+            "xhttp", "splithttp" -> throw UnsupportedConfig("Clash XHTTP: требуется исходная share-ссылка или JSON Xray")
         }
         return params
     }
 
     // --- Сборка строки ----------------------------------------------------
+
+    private fun rejectExtraHeaders(headers: JSONObject?) {
+        if (headers != null && headers.keys().asSequence().any { it != "Host" }) {
+            throw UnsupportedConfig("Дополнительные заголовки транспорта не поддерживаются этим конвертером")
+        }
+    }
+
+    private fun portOf(json: JSONObject, fallback: Int = 443): Int {
+        if (!json.has("port")) return fallback
+        val port = json.opt("port")?.toString()?.toIntOrNull() ?: throw IllegalArgumentException()
+        require(port in 1..65535)
+        return port
+    }
 
     private fun ssLink(method: String, password: String, address: String, port: Int, name: String?): String =
         "ss://" + method + ":" + percentEncode(password) + "@" + authority(address, port) + fragment(name)

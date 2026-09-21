@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_export">Сохранить резервную копию</string>
+    <string name="backup_export_hint">Подписки, ключи и настройки в файле под паролем</string>
+    <string name="backup_restore">Восстановить из файла</string>
+    <string name="backup_restore_hint">Заменить локальные профили и настройки</string>
+    <string name="backup_password">Пароль резервной копии</string>
+    <string name="backup_confirm_password">Повторите пароль</string>
+    <string name="backup_password_hint">Придумайте длинный уникальный пароль: от 12 до 256 символов. Без него копию невозможно восстановить. Пароль не сохраняется в приложении.</string>
+    <string name="backup_password_invalid">Введите от 12 до 256 символов. При сохранении оба пароля должны совпадать.</string>
+    <string name="backup_replace_warning">Восстановление заменит все локальные профили, ключи подписок и настройки. VPN будет остановлен. Автоподключение и запуск при загрузке выключатся; новое соединение нужно включить вручную. На TV доступен только обычный VPN.</string>
+    <string name="backup_replace_confirm">Заменить и восстановить</string>
+    <string name="backup_cancel">Отмена</string>
+    <string name="backup_busy">Обработка защищённой копии… Это может занять некоторое время.</string>
+    <string name="backup_exported">Зашифрованная копия сохранена. Храните пароль отдельно от файла.</string>
+    <string name="backup_restored">Профили и настройки восстановлены. VPN выключен — подключитесь вручную.</string>
+    <string name="backup_restore_error">Не удалось восстановить копию. Проверьте пароль, файл и свободное место.</string>
+    <string name="backup_export_error">Не удалось сохранить копию. Проверьте доступ к файлу и свободное место.</string>
+    <string name="backup_picker_error">Выбор файлов недоступен. Установите или включите системный файловый менеджер.</string>
+</resources>

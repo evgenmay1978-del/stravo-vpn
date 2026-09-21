@@ -51,6 +51,18 @@ internal fun NotificationSettingsRow() {
     )
 }
 
+@Composable
+internal fun VpnSystemSettingsRow() {
+    val context = LocalContext.current
+    StravoSettingRow(iconRes = R.drawable.ic_vpn,
+        title = "Постоянный VPN и блокировка без VPN",
+        subtitle = "Системная защита Android. Сначала подключитесь обычной кнопкой VPN.",
+        onClick = {
+            if (runCatching { context.startActivity(Intent("android.settings.VPN_SETTINGS")) }.isFailure)
+                runCatching { context.startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS)) }
+        })
+}
+
 private fun openNotificationSettings(context: Context): Boolean {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         val notifications = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

@@ -74,6 +74,9 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(StravoTokens.SpaceLg))
+        com.stravo.vpn.ui.settings.ConnectionPreferences(viewModel)
+        com.stravo.vpn.ui.settings.VpnSystemSettingsRow()
+        com.stravo.vpn.ui.settings.BackupPreferences(viewModel)
 
         StravoCard(modifier = Modifier.fillMaxWidth(), padding = 0.dp) {
             SelectedProtocolRow(state)

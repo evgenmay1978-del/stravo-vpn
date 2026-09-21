@@ -69,6 +69,7 @@ fun TvRoot(
 ) {
     val navigator = rememberSaveable(saver = StravoNavigator.saver()) { StravoNavigator() }
     val state by viewModel.home.collectAsStateWithLifecycle()
+    var showSubscriptions by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
 
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
@@ -96,8 +97,15 @@ fun TvRoot(
                                 onOpenConnectPhone = { navigator.select(Destination.CONNECT_TV) },
                                 onEvent = viewModel::onEvent,
                             )
-                            Destination.LOCATIONS -> TvLocationsScreen(state, viewModel::onEvent)
-                            Destination.PROFILE -> TvProfileScreen(state)
+                            Destination.LOCATIONS -> com.stravo.vpn.ui.mobile.LocationsScreen(
+                                state, viewModel::onEvent, onBack = { navigator.select(Destination.HOME) })
+                            Destination.PROFILE -> com.stravo.vpn.ui.mobile.ProfileScreen(
+                                state = state,
+                                onConnectTv = { navigator.select(Destination.CONNECT_TV) },
+                                onAddSubscription = { navigator.select(Destination.ADD_SUBSCRIPTION) },
+                                onRemoveSubscription = { viewModel.removeSubscription() },
+                                onManageSubscriptions = { showSubscriptions = true },
+                                onBack = { navigator.select(Destination.HOME) })
                             Destination.CONNECT_TV, Destination.ADD_SUBSCRIPTION -> AddSubscriptionScreen(
                                 state = state,
                                 onEvent = viewModel::onEvent,
@@ -122,6 +130,13 @@ fun TvRoot(
                 }
             }
         }
+    }
+    if (showSubscriptions) {
+        com.stravo.vpn.ui.mobile.SubscriptionManager(
+            state = state, viewModel = viewModel,
+            onSelect = { viewModel.selectSource(it); showSubscriptions = false },
+            onAdd = { showSubscriptions = false; navigator.select(Destination.ADD_SUBSCRIPTION) },
+            onDismiss = { showSubscriptions = false })
     }
 }
 

@@ -310,7 +310,7 @@ private fun importMessage(state: SubscriptionImportState): String? = when (state
 
 /** Ошибка объясняет, ЧТО именно не распознано, а не только «не похоже на ссылку». */
 @Composable
-private fun importErrorText(state: SubscriptionImportState.Failed): String = when (state.error) {
+internal fun importErrorText(state: SubscriptionImportState.Failed): String = when (state.error) {
     ImportError.EMPTY -> stringResource(id = R.string.add_sub_error_empty)
     ImportError.NETWORK -> stringResource(id = R.string.add_sub_error_network)
     ImportError.EMPTY_PAYLOAD -> stringResource(id = R.string.add_sub_error_empty_payload)
@@ -321,6 +321,7 @@ private fun importErrorText(state: SubscriptionImportState.Failed): String = whe
     ImportError.LOGIN_REJECTED -> stringResource(R.string.subscription_login_error)
     ImportError.DEVICE_LIMIT -> stringResource(R.string.subscription_device_limit)
     ImportError.SUBSCRIPTION_EXPIRED -> stringResource(R.string.subscription_expired)
+    ImportError.UNSUPPORTED_CONFIG -> state.token ?: "Конфигурация пока не поддерживается этим ядром"
     ImportError.UNKNOWN_LINK -> when (state.reason) {
         Unrecognized.UNKNOWN_SCHEME ->
             stringResource(id = R.string.add_sub_error_unknown_scheme, state.token.orEmpty())

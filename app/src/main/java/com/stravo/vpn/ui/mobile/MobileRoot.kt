@@ -169,11 +169,11 @@ fun MobileRoot(
         }
     }
     if (showSubscriptions) {
-        SubscriptionPicker(
+        SubscriptionManager(
             state = state,
-            onRefresh = viewModel::refreshSubscriptions,
-            onSelect = { mode ->
-                viewModel.onEvent(HomeEvent.ModeSelected(mode))
+            viewModel = viewModel,
+            onSelect = { sourceId ->
+                viewModel.selectSource(sourceId)
                 showSubscriptions = false
             },
             onAdd = {

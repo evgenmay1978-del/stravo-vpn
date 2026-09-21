@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="status_checking">Проверка соединения</string>
+    <string name="status_checking_sub">Туннель запущен. Проверяем доступ через сервер</string>
+    <string name="status_unverified">Доступ не подтверждён</string>
+    <string name="status_unverified_sub">Туннель включён, но контрольный запрос через VPN не прошёл. Доступность конкретных сайтов может отличаться</string>
+    <string name="locations_measure">Проверить серверы</string>
+    <string name="locations_measuring">Измеряем…</string>
+    <string name="locations_sort_ping">По задержке</string>
+    <string name="locations_sort_name">По названию</string>
+    <string name="locations_measure_connect">Для проверки подключите VPN выбранной подписки</string>
+    <string name="action_disconnect_service">Отключить</string>
+</resources>

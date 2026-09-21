@@ -26,6 +26,7 @@ import com.stravo.vpn.pairing.PairingRepository
 
 /** Ручная DI-обвязка: один контейнер на приложение, без магии. */
 class AppContainer(context: Context) {
+    val subscriptionMutex = kotlinx.coroutines.sync.Mutex()
 
     private val appContext: Context = context.applicationContext
 

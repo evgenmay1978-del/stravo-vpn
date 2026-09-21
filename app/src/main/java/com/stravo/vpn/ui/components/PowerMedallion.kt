@@ -59,9 +59,9 @@ fun PowerMedallion(
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (pressed) 0.975f else 1f, tween(140), label = "powerPress")
     val active = state is ConnectionState.Connected
-    val failed = state is ConnectionState.Error
+    val failed = state is ConnectionState.Error || state is ConnectionState.Degraded
     // На неподвижных экранах нет бесконечного перерисовывания.
-    val glow = if (state is ConnectionState.Connecting) {
+    val glow = if (state is ConnectionState.Connecting || state is ConnectionState.Checking) {
         val transition = rememberInfiniteTransition(label = "connecting")
         val pulse by transition.animateFloat(
             0.4f, 0.95f,

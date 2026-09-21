@@ -6,8 +6,8 @@
 
     <string name="status_disconnected">ГОТОВО К ПОДКЛЮЧЕНИЮ</string>
     <string name="status_connecting">ПОДКЛЮЧЕНИЕ…</string>
-    <string name="status_connected">ЗАЩИЩЕНО</string>
-    <string name="status_connected_sub">СОЕДИНЕНИЕ АКТИВНО</string>
+    <string name="status_connected">VPN ВКЛЮЧЁН</string>
+    <string name="status_connected_sub">СЕРВЕР ОТВЕЧАЕТ ЧЕРЕЗ VPN</string>
     <string name="status_error">НУЖНО ВНИМАНИЕ</string>
 
     <string name="action_back">Назад</string>

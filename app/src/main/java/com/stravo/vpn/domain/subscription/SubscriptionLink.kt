@@ -17,6 +17,7 @@ data class SubscriptionNode(
     val transport: VpnTransport,
     val security: VpnSecurity,
     val service: SubscriptionService = SubscriptionService.UNKNOWN,
+    val sourceId: String = "",
 ) {
     val transportLabel: String get() = transport.displayName
     val securityLabel: String? get() = security.displayName.takeIf { security != VpnSecurity.NONE }

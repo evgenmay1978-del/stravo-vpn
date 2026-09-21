@@ -349,6 +349,8 @@ private fun statusLabel(connection: ConnectionState): String = when (connection)
     ConnectionState.Disconnected -> stringResource(id = R.string.status_disconnected)
     ConnectionState.Connecting -> stringResource(id = R.string.status_connecting)
     ConnectionState.Connected -> stringResource(id = R.string.status_connected)
+    ConnectionState.Checking -> stringResource(id = R.string.status_checking)
+    ConnectionState.Degraded -> stringResource(id = R.string.status_unverified)
     is ConnectionState.Error -> stringResource(id = R.string.status_error)
 }
 
@@ -356,6 +358,8 @@ private fun statusLabel(connection: ConnectionState): String = when (connection)
 private fun statusSubtitle(connection: ConnectionState): String = when (connection) {
     is ConnectionState.Error -> connection.reason
     ConnectionState.Connected -> stringResource(id = R.string.status_connected_sub)
+    ConnectionState.Checking -> stringResource(id = R.string.status_checking_sub)
+    ConnectionState.Degraded -> stringResource(id = R.string.status_unverified_sub)
     else -> stringResource(id = R.string.tagline_sub)
 }
 

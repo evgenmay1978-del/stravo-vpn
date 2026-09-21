@@ -47,8 +47,15 @@ fun TvSettingsScreen(
             modifier = Modifier.padding(bottom = StravoTokens.SpaceSm),
         )
         SelectedProtocolRow(state)
+        com.stravo.vpn.ui.settings.ConnectionPreferences(viewModel)
+        com.stravo.vpn.ui.settings.VpnSystemSettingsRow()
+        com.stravo.vpn.ui.settings.BackupPreferences(viewModel)
         NotificationSettingsRow()
         NetworkCheckRow(state, onCheck = { viewModel.onEvent(HomeEvent.ProbeClick) })
+        StravoSettingRow(iconRes = R.drawable.ic_share, title = "Скопировать журнал",
+            onClick = { viewModel.copyCoreLog() })
+        StravoSettingRow(iconRes = R.drawable.ic_download, title = "Сохранить журнал",
+            onClick = { viewModel.saveCoreLog() })
         StravoSettingRow(
             iconRes = R.drawable.ic_network,
             title = stringResource(id = R.string.settings_apps),

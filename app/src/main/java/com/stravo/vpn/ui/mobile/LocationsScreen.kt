@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,10 +54,11 @@ fun LocationsScreen(
 ) {
     val palette = LocalStravoPalette.current
     var query by rememberSaveable { mutableStateOf("") }
-    var recommendedOnly by rememberSaveable { mutableStateOf(true) }
+    var recommendedOnly by rememberSaveable { mutableStateOf(false) }
+    var sortByPing by rememberSaveable { mutableStateOf(false) }
 
     val locations = state.locations
-    val visible = remember(query, recommendedOnly, locations, state.location.id) {
+    val visible = remember(query, recommendedOnly, locations, state.location.id, sortByPing, state.measuredNodePings) {
         locations.filter { location ->
             val matchesQuery = query.isBlank() ||
                 location.country.contains(query, ignoreCase = true) ||
@@ -65,7 +67,9 @@ fun LocationsScreen(
                 location.subtitle.contains(query, ignoreCase = true)
             val matchesFilter = !recommendedOnly || location.recommended || location.id == state.location.id
             matchesQuery && matchesFilter
-        }
+        }.sortedWith(compareBy<VpnLocation> { it.id != com.stravo.vpn.domain.model.LocationsCatalog.AUTO.id }
+            .thenBy { if (sortByPing) state.measuredNodePings[it.id] ?: Int.MAX_VALUE else 0 }
+            .thenBy { it.country + it.city })
     }
 
     Column(modifier = modifier.fillMaxSize().padding(horizontal = StravoTokens.ScreenPaddingMobile)) {
@@ -100,6 +104,15 @@ fun LocationsScreen(
             modifier = Modifier.padding(top = StravoTokens.SpaceMd),
         )
 
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(enabled = state.connection.isActive && !state.measuringLocations,
+                onClick = { onEvent(HomeEvent.MeasureLocations) }) {
+                Text(stringResource(if (state.measuringLocations) R.string.locations_measuring else R.string.locations_measure))
+            }
+            TextButton(onClick = { sortByPing = !sortByPing }) {
+                Text(stringResource(if (sortByPing) R.string.locations_sort_name else R.string.locations_sort_ping))
+            }
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -127,7 +140,7 @@ fun LocationsScreen(
         }
 
         Text(
-            text = stringResource(id = R.string.locations_ping_hint),
+            text = stringResource(id = if (state.connection.isActive) R.string.locations_ping_hint else R.string.locations_measure_connect),
             style = StravoType.Caption,
             color = palette.textSecondary,
             modifier = Modifier.padding(vertical = StravoTokens.SpaceMd),

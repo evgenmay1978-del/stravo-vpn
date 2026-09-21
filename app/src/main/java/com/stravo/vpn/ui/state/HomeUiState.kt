@@ -6,6 +6,7 @@ import com.stravo.vpn.domain.model.FormFactor
 import com.stravo.vpn.domain.model.LocationsCatalog
 import com.stravo.vpn.domain.model.NetworkMode
 import com.stravo.vpn.domain.model.Subscription
+import com.stravo.vpn.domain.model.SubscriptionSource
 import com.stravo.vpn.domain.model.VpnLocation
 import com.stravo.vpn.domain.model.VpnProfile
 import com.stravo.vpn.domain.model.VpnStats
@@ -35,10 +36,14 @@ data class HomeUiState(
     val profile: VpnProfile? = null,
     val subscription: Subscription = Subscription.None,
     val subscriptionPlans: Map<SubscriptionService, Subscription> = emptyMap(),
+    val subscriptionSources: List<SubscriptionSource> = emptyList(),
+    val selectedSourceId: String = "",
     val subscriptionNodes: List<SubscriptionNode> = emptyList(),
     val mode: NetworkMode = NetworkMode.NORMAL_VPN,
     val stats: VpnStats = VpnStats.Empty,
     val measuredNodePings: Map<String, Int> = emptyMap(),
+    val measuringLocations: Boolean = false,
+    val restoringBackup: Boolean = false,
     val subscriptionRefresh: SubscriptionRefreshState = SubscriptionRefreshState.IDLE,
     val notice: Notice? = null,
     val importState: SubscriptionImportState = SubscriptionImportState.Idle,
@@ -62,12 +67,16 @@ data class HomeUiState(
 
     val isTv: Boolean get() = formFactor.isTv
 
-    val selectedSubscription: Subscription get() = subscriptionPlans[
-        if (!isTv && mode == NetworkMode.FREE_INTERNET) SubscriptionService.CDN else SubscriptionService.ORDINARY
-    ] ?: Subscription.None
+    val selectedSource: SubscriptionSource? get() = subscriptionSources.firstOrNull {
+        it.id == selectedSourceId && it.enabled && CapabilityPolicy.permits(it.service, formFactor)
+    }
+    val selectedSubscription: Subscription get() = selectedSource?.let {
+        it.subscription.copy(planName = it.name)
+    } ?: Subscription.None
 
     val availableNodes: List<SubscriptionNode> get() = subscriptionNodes.filter {
-        CapabilityPolicy.permits(it.service, formFactor) && it.service ==
+        it.sourceId == selectedSourceId && selectedSource != null &&
+            CapabilityPolicy.permits(it.service, formFactor) && it.service ==
             (if (mode == NetworkMode.FREE_INTERNET) SubscriptionService.CDN else SubscriptionService.ORDINARY)
     }
 
@@ -75,18 +84,15 @@ data class HomeUiState(
      * Локации для выбора. Пока подписки нет — витрина каталога; после импорта
      * показываются реальные серверы подписки (только страна, город и протокол).
      */
-    val locations: List<VpnLocation> = if (subscriptionNodes.isEmpty()) {
-        LocationsCatalog.all
-    } else {
+    val locations: List<VpnLocation> =
         listOf(LocationsCatalog.AUTO) + SubscriptionLocations.from(availableNodes)
-    }
 
     fun nodeFor(locationId: String): SubscriptionNode? =
         availableNodes.firstOrNull { it.id == locationId }
 
     /**
-     * Автоматический сервер: у пункта «Авто» своего узла нет — берём первый из подписки.
-     * Без этого «Подключить» на авто-локации честно отвечало «нет ключа узла».
+     * Initial node supplies the config skeleton; the core's URL-test group chooses
+     * the actual reachable outbound when automatic=true.
      */
     fun nodeForLocation(): SubscriptionNode? =
         if (location.id == LocationsCatalog.AUTO.id) {
@@ -124,6 +130,7 @@ sealed interface HomeEvent {
     data object QuickConnectClick : HomeEvent
     data object Retry : HomeEvent
     data object ProbeClick : HomeEvent
+    data object MeasureLocations : HomeEvent
     data class LocationSelected(val locationId: String) : HomeEvent
     data class ModeSelected(val mode: NetworkMode) : HomeEvent
     data class NoticeShown(val notice: Notice) : HomeEvent

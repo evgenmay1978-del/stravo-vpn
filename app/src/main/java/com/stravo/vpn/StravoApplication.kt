@@ -11,5 +11,6 @@ class StravoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        com.stravo.vpn.data.subscription.SubscriptionRefreshJob.schedule(this)
     }
 }

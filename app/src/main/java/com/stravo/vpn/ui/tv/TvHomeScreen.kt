@@ -176,5 +176,7 @@ internal fun connectionLabel(connection: ConnectionState): String = when (connec
     ConnectionState.Disconnected -> stringResource(id = R.string.status_disconnected)
     ConnectionState.Connecting -> stringResource(id = R.string.status_connecting)
     ConnectionState.Connected -> stringResource(id = R.string.status_connected)
+    ConnectionState.Checking -> stringResource(id = R.string.status_checking)
+    ConnectionState.Degraded -> stringResource(id = R.string.status_unverified)
     is ConnectionState.Error -> stringResource(id = R.string.status_error)
 }
